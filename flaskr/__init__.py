@@ -8,7 +8,7 @@ def create_app(test_config=None):
     app.config.from_mapping(
         SECRET_KEY='dev',
         FIREBASE_KEY_PATH=os.path.join(app.instance_path, 'key.json'),
-        BASE_FILES_PATH=os.path.join(app.static_folder, 'base-files'),
+        BASE_FILES_PATH=os.path.join(app.static_folder, 'base-files\\'),
     )
 
     if test_config is None:
