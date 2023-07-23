@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>
+            2D Game Engine - Development Workspace
+        </title>
+        <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <link rel="stylesheet" href="/static/js/libs/codemirror-5.65.13/lib/codemirror.css"/>
+        <link rel="stylesheet" href="/static/js/libs/codemirror-5.65.13/theme/dracula.css"/>
+        <link rel="stylesheet" href="/static/style/editor.css"/>
+        <script src="/static/js/libs/codemirror-5.65.13/lib/codemirror.js"></script>
+        <script src="/static/js/libs/codemirror-5.65.13/mode/lua/lua.js"></script>
+        <script src="/static/js/libs/sql-wasm.js" defer></script>
+        <script type="module" src="/static/js/editor/main.js"></script>
+    </head>
+    <body>
+
+        <div class="page-wrapper">
+
+            <div class="workspace">
+                <aside class="explorer">
+                    <div class="metadata" name="Game Manager" data-table-id="2" data-type="game">
+                        <span>Game Manager</span>
+                    </div>
+                    <ul class="item-list" data-table-id="0">
+                        <!-- FOLDERS AND ITEMS GO HERE -->
+                    </ul>
+                </aside>
+                <main class="editor">
+                    <section class="tab-section">
+                        <ul class="tab-list">
+                            <!-- TABS GO HERE -->
+                        </ul>
+                        <div class="tab-filler" id="tabSelected" data-type="none"></div>
+                    </section>
+                    <section class="material-section" data-mode="none">
+                        <form id="lua-script" class="codemirror-wrapper">
+                            <!-- CODEMIRROR GOES HERE -->
+                        </form>
+                        <canvas id="preview">
+                            <!--PREVIEW GOES HERE-->
+                        </canvas>
+                        <form id="sprite-config" class="config">
+                            <div class="json-field">
+                                <label>FPS</label>
+                                <input type="number" name="fps"/>
+                            </div>
+                            <div name="origin" class="json-object">
+                                <label>Origin</label>
+                                <div class="json-field">
+                                    <label>X:</label>
+                                    <input type="number" name="x"/>
+                                </div>
+                                <div class="json-field">
+                                    <label>Y:</label>
+                                    <input type="number" name="y"/>
+                                </div>
+                            </div>
+                            <ol name="animations" class="json-array">
+                                <label>Animations</label>
+                                <div class="li-template">
+                                    <div class="json-object">
+                                        <div class="json-field">
+                                            <input type="text" name="name" placeholder="Name" autocomplete="off" value="new animation"/>
+                                        </div>                                 
+                                        <ol name="frames" class="json-array">
+                                            <label>Frames</label>
+                                            <div class="li-template">
+                                                <div class="json-object">
+                                                    <div name="area" class="json-object">
+                                                        <label>Area</label>
+                                                        <div class="json-field">
+                                                            <label>X1:</label>
+                                                            <input type="number" name="x1" value="0"/>
+                                                        </div>
+                                                        <div class="json-field">
+                                                            <label>Y1:</label>
+                                                            <input type="number" name="y1" value="0"/>
+                                                        </div>
+                                                        <div class="json-field">
+                                                            <label>X2:</label>
+                                                            <input type="number" name="x2" value="0"/>
+                                                        </div>
+                                                        <div class="json-field">
+                                                            <label>Y2:</label>
+                                                            <input type="number" name="y2" value="0"/>
+                                                        </div>
+                                                    </div>
+                                                    <div name="offset" class="json-object">
+                                                        <label>Offset</label>
+                                                        <div class="json-field">
+                                                            <label>X:</label>
+                                                            <input type="number" name="x" value="0"/>
+                                                        </div>
+                                                        <div class="json-field">
+                                                            <label>Y:</label>
+                                                            <input type="number" name="y" value="0"/>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="minus-button"></div>
+                                            </div>
+                                            <!-- LIST ITEMS GO HERE-->
+                                            <div class="plus-button"></div>
+                                        </ol>
+                                    </div>
+                                    <div class="minus-button"></div>
+                                </div>
+                                <!-- LIST ITEMS GO HERE-->
+                                <div class="plus-button"></div>
+                            </ol>
+                        </form>
+                        <form id="object-config" class="config">
+                            <div class="json-field sprite-reference">
+                                <label>Sprite ID</label>
+                                <input type="number" name="sprite-id"/>
+                            </div>
+                            <div name="origin-offset" class="json-object">
+                                <label>Origin Offset</label>
+                                <div class="json-field">
+                                    <label>X:</label>
+                                    <input type="number" name="x"/>
+                                </div>
+                                <div class="json-field">
+                                    <label>Y:</label>
+                                    <input type="number" name="y"/>
+                                </div>
+                            </div>
+                            <ol name="collision-boxes" class="json-array">
+                                <label>Collision Boxes</label>
+                                <div class="li-template">
+                                    <div class="json-object">
+                                        <div class="json-field">
+                                            <label>X1:</label>
+                                            <input type="number" name="x1" value="10"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Y1:</label>
+                                            <input type="number" name="y1" value="10"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>X2:</label>
+                                            <input type="number" name="x2" value="10"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Y2:</label>
+                                            <input type="number" name="y2" value="10"/>
+                                        </div>
+                                    </div>
+                                    <div class="minus-button"></div>
+                                </div>
+                                <!-- LIST ITEMS GO HERE-->
+                                <div class="plus-button"></div>
+                            </ol>
+                        </form>
+                        <form id="scene-config" class="config">
+                            <div class="json-field">
+                                <label>Width</label>
+                                <input type="number" name="width"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Height</label>
+                                <input type="number" name="height"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Background Color</label>
+                                <input type="color" name="background-color"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Outside Color</label>
+                                <input type="color" name="outside-color"/>
+                            </div>
+                            <div name="camera-position" class="json-object">
+                                <label>Camera Position</label>
+                                <div class="json-field">
+                                    <label>X:</label>
+                                    <input type="number" name="x"/>
+                                </div>
+                                <div class="json-field">
+                                    <label>Y:</label>
+                                    <input type="number" name="y"/>
+                                </div>
+                            </div>
+                            <ol name="object-instances" class="json-array">
+                                <label>Object Instances</label>
+                                <div class="li-template">
+                                    <div class="json-field object-instance">
+                                        <input type="number" value="0"/>
+                                    </div>
+                                    <div class="minus-button"></div>
+                                </div>
+                                <!-- LIST ITEMS GO HERE-->
+                                <div class="plus-button"></div>
+                            </ol>
+                            <ol name="layers" class="json-array">
+                                <label>Layers</label>
+                                <div class="li-template">
+                                    <div class="json-object">
+                                        <div class="json-field">
+                                            <input type="text" name="name" placeholder="Name" autocomplete="off" value="new layer"/>
+                                        </div>
+                                        <ol name="instances" class="json-array">
+                                            <label>Instances</label>
+                                            <div class="li-template">
+                                                <div class="json-field instance-index">
+                                                    <input type="number" value="0"/>
+                                                </div>
+                                                <div class="minus-button"></div>
+                                            </div>
+                                            <!-- LIST ITEMS GO HERE-->
+                                            <div class="plus-button"></div>
+                                        </ol>
+                                    </div>
+                                    <div class="minus-button"></div>
+                                </div>
+                                <!-- LIST ITEMS GO HERE-->
+                                <div class="plus-button"></div>
+                            </ol>
+                        </form>
+                        <form id="game-config" class="config">
+                            <div class="json-field scene-reference">
+                                <label>Initial Scene ID</label>
+                                <input type="number" name="initial-scene"/>
+                            </div>
+                        </form>
+                        <form id="project-config" class="config">
+                            <div class="json-field">
+                                <label>Browser Title</label>
+                                <input type="text" name="browser-title" autocomplete="off"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Folder Name</label>
+                                <input type="text" name="folder-name" autocomplete="off"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Output Name</label>
+                                <input type="text" name="output-name" autocomplete="off"/>
+                            </div>
+                            <div class="json-field">
+                                <label>FPS</label>
+                                <input type="number" name="fps"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Canvas Width</label>
+                                <input type="number" name="canvas-width"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Canvas Height</label>
+                                <input type="number" name="canvas-height"/>
+                            </div>
+                            <ol name="version" class="json-array">
+                                <label>Version</label>
+                                <li>
+                                    <div class="json-field version-number">
+                                        <input type="number" name="0"/>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="json-field version-number">
+                                        <input type="number" name="1"/>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="json-field version-number">
+                                        <input type="number" name="2"/>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="json-field version-number">
+                                        <input type="number" name="3"/>
+                                    </div>
+                                </li>
+                            </ol>
+                            <div class="json-field" id="game-icon">
+                                <label id="game-icon-label" for="game-icon-input">Game Icon<img/></label>
+                                <input type="file" accept=".ico" id="game-icon-input"/>
+                            </div>
+                        </form>
+                        <div id="toConfig-button" class="material-button"></div>
+                        <div id="toScript-button" class="material-button"></div>
+                    </section>
+                </main>
+            </div>
+
+            <header>
+                <h1 class="logo">2D Game Engine</h1>
+                <nav class="menu-bar">
+                    <ul class="project-menu">
+                        <li class="menu-button">
+                            <span>Project</span>
+                            <ul class="action-menu">
+                                <li name="load-project">Load Project</li>
+                                <li name="save-project">Save Project</li>
+                                <li class="metadata" name="Project Configurations" data-table-id="1" data-type="project">
+                                    Project Configurations
+                                </li>
+                                <li name="exit-editor">Exit to Home Page</li>
+                            </ul>
+                        </li>
+                        <li class="menu-button">
+                            <span>Game</span>
+                            <ul class="action-menu">
+                                <li name="test-game">Test Game</li>
+                                <li name="export-game">Export Game</li>
+                            </ul>
+                        </li>
+                        <li class="menu-button">
+                            <span>Edit</span>
+                            <ul class="action-menu">
+                                <li name="undo">Undo</li>
+                                <li name="redo">Redo</li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <div id="projectNameWarpper">
+                        <span id="projectName">new project</span>
+                    </div>
+                    <nav class="account-menu">
+                        <div class="menu-button" id="preDrive">
+                            <span>use Google Drive</span>
+                        </div>
+                    </nav>
+                </nav>
+            </header>
+
+            <div class="pop-up">
+                <form class="window">
+                    <p></p>
+                    <div class="window-inputs">
+                        <section>
+                            <label for="name">Name: </label>
+                            <input id="name" type="text" autocomplete="off" disabled/>
+                        </section>
+                        <section>
+                            <label for="color">Color: </label>
+                            <input id="color" type="color" value="#70e65c" disabled/>
+                        </section>
+                        <section>
+                            <label for="type">Type: </label>
+                            <select id="type" disabled>
+                                <!--OPTIONS GO HERE-->
+                            </select>
+                        </section>
+                        <section>
+                            <label for="data">Asset File: </label>
+                            <input id="data" type="file" accept=".png, .ogg, .ttf" disabled/>
+                        </section>
+                    </div>
+                    <div class="window-buttons">
+                        <section>
+                            <button type="button" id="confirm">
+                                Confirm
+                            </button>
+                        </section>
+                        <section>
+                            <button type="button" id="cancal">
+                                Cancal
+                            </button>
+                        </section>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+
+        <ul class="action-menu">
+            <li name="new-folder" data-table="folder item-list">New Folder</li>
+            <li name="new-entity" data-table="folder item-list">New Entity</li>
+            <li name="new-asset" data-table="folder item-list">New Asset</li>
+
+            <li name="recolor-folder" data-table="folder">Re-Color Folder</li>
+
+            <li name="rename-folder" data-table="folder">Rename Folder</li>
+            <li name="rename-entity" data-table="entity">Rename Entity</li>
+            <li name="rename-asset" data-table="asset">Rename Asset</li>
+            
+            <li name="delete-folder" data-table="folder">Delete Folder</li>
+            <li name="delete-entity" data-table="entity">Delete Entity</li>
+            <li name="delete-asset" data-table="asset">Delete Asset</li>
+        </ul>
+
+        <input type="file" id="project-load" accept=".sqlite" />
+        <a id="project-save" href="" download=""></a>
+
+    </body>
+</html>

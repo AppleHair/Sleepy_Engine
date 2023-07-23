@@ -1,0 +1,815 @@
+
+body {
+    position: absolute;
+    inset: 0;
+    margin: 0; 
+    padding: 0;
+    background-color:rgb(6, 0, 31);
+    font-family: "Arial", sans-serif;
+    display: flex;
+    overflow: hidden;
+}
+
+body > a, body > input {
+    display: none;
+}
+
+.action-menu {
+    position: absolute;
+    list-style-type: none;
+    background-color: rgb(40, 55, 57);
+    border: 0.1rem solid rgb(59, 88, 64);
+    border-radius: 0 8px 8px 8px;
+    color: white;
+    font-size: 1rem;
+    margin: 0; 
+    padding: 0;
+    min-width: max-content;
+    display: none;
+}
+
+.menu-button#menuSelected .action-menu, .action-menu#menuSelected {
+    display: block;
+}
+
+.action-menu > li {
+    padding: 0.25rem 1rem;
+}
+
+.action-menu > li:hover{
+    background-color: hsla(0, 0%, 100%, 0.1);
+}
+
+.page-wrapper {
+    position: relative;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.page-wrapper > .pop-up {
+    position: absolute;
+    inset: 0;
+    margin: 0; 
+    padding: 0;
+    background-color:hsla(255, 100%, 8%, 0.3);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.pop-up > .window {
+    position: absolute;
+    background-color: rgb(40, 55, 57);
+    border: 0.15rem solid rgb(59, 88, 64);
+    border-radius: 8px;
+    color: white;
+    font-size: 1.5rem;
+    margin: 0;
+    max-width: 30ch;
+    padding: 1.5rem;
+    display: flex;
+    flex-flow: column wrap;
+    align-items: center;
+}
+
+.pop-up > .window > p {
+    text-align: center;
+    max-width: 100%;
+}
+
+.pop-up > .window > .window-inputs {
+    display: flex;
+    flex-flow: row wrap;
+    margin: 1.5rem 0;
+    gap: 1rem;
+}
+
+.pop-up > .window > .window-buttons {
+    display: grid;
+    grid-template-columns: 50% 50%;
+}
+
+.pop-up > .window section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pop-up > .window > .window-inputs > section {
+    display: none;
+}
+
+.pop-up > .window button {
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    box-sizing: inherit;
+    user-select: none;
+    cursor: pointer;
+    background-color: rgb(40, 42, 57);
+    padding: 0.5rem;
+    font-weight: bold;
+    border: 0.15rem solid rgb(59, 88, 64);
+    border-radius: 8px;
+    margin: 0 1rem;
+}
+
+.pop-up > .window button:hover {
+    border: 0.15rem solid rgb(86, 114, 91);
+}
+
+header {
+    display: flex;
+    flex-direction: row;
+    width: 100vw;
+    min-width: min-content;
+}
+
+.logo {
+    padding: 0px 1rem;
+    margin: 0;
+    border: 0px solid rgb(59, 88, 64);
+    border-bottom-width: 0.1rem;
+    border-right-width: 0.1rem;
+    font-size: 1rem;
+    font-weight: bold;
+    background-color: rgb(40, 55, 57);
+    color: white;
+    display: flex;
+    min-width: min-content;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    user-select: none;
+    cursor: default;
+}
+
+.menu-bar {
+    flex-grow: 1;
+    padding: 0px 1rem;
+    margin: 0;
+    border: 0px solid rgb(59, 88, 64);
+    border-bottom-width: 0.1rem;
+    min-width: max-content;
+    font-size: 1rem;
+    font-weight: bold;
+    background-color: rgb(40, 42, 57);
+    color: rgb(255, 255, 255);
+    display: flex;
+}
+
+.menu-bar .project-menu {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    display: flex;
+    flex-direction: row;
+}
+
+.menu-bar #projectNameWarpper {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-bar #projectNameWarpper > #projectName {
+    font-weight: normal;
+    color:rgba(255, 255, 255, 0.492); 
+}
+
+.menu-bar .account-menu {
+    margin-left: auto;
+    display: flex;
+    flex-direction: row;
+}
+
+.action-menu > li, .menu-button, .explorer > .metadata, .folder > .switch, .asset, .entity, .tab > span, .tab > .x {
+    user-select: none;
+    cursor: pointer;
+}
+
+.menu-button:hover, .menu-button#menuSelected, .explorer > .metadata:hover, .folder > .switch:hover, .asset:hover, .entity:hover, .tab:hover {
+    background-color: hsla(0, 0%, 100%, 0.15);
+    color: rgb(152, 255, 166);
+}
+
+.project-menu .menu-button, .account-menu .menu-button {
+    min-width: max-content;
+    padding: 0px 0.5rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.menu-button span {
+    padding: 0.5rem 0px;
+}
+
+.menu-button > .action-menu {
+    left: 0;
+    top: 100%;
+    font-weight: normal;
+    border-radius: 0 0 8px 8px;
+}
+
+#preDrive:not(#preDrive:hover) {
+    color: rgb(148, 251, 255);
+}
+
+#preDrive::after {
+    content: '';
+    margin-left: 0.5rem;
+    background-image: url('https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_24dp.png');
+    background-repeat: no-repeat;
+    background-size: 100%;
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.workspace {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: row;
+    width: 100vw;
+    min-width: 100%;
+    --explorer-border: 0.1rem;
+    --header-height: unset;
+    height: calc(100svh - var(--header-height));
+}
+
+.explorer {
+    --explorer-border: inherit;
+    border: 0px solid rgb(59, 88, 64);
+    border-right-width: var(--explorer-border);
+    width: 25ch;
+    max-width: 75%;
+    height: 100%;
+    resize: horizontal;
+    overflow: hidden;
+    background-color: rgb(21, 25, 41);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.explorer * {
+    min-width: max-content;
+}
+
+.explorer #itemSelected {
+    color: rgb(152, 255, 166);
+}
+
+.explorer > .metadata {
+    display: flex;
+    justify-content: center;
+    border: inherit;
+    border-right-width: 0px;
+    border-bottom-width: 0.1rem;
+}
+
+.explorer > .metadata > span {
+    margin: 0.2rem 0px;
+}
+
+.explorer > .item-list {
+    flex-grow: 1;
+    list-style-type: none;
+    margin: 0;
+    padding-left: 1rem;
+    padding-top: 0.5rem;
+    padding-bottom: 10rem;
+}
+
+.folder {
+    --folder-color: unset;
+}
+
+.folder > .switch {
+    --folder-color: inherit;
+}
+
+.folder > .switch > span {
+    --folder-color: inherit;
+}
+
+.folder > .switch > span::before {
+    --folder-color: inherit;
+    content: "";
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+    -webkit-mask-image: url('/static/img/folder-icon.png');
+    mask-image: url('/static/img/folder-icon.png');
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100%;
+    mask-size: 100%;
+    background-color: var(--folder-color);
+}
+
+.folder > .switch::before {
+    content: "";
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: middle;
+    background-image: url('/static/img/folder-arrow.png');
+    background-repeat: no-repeat;
+    background-size: 100%;
+    background-position: 0px -1rem;
+}
+
+.folder[data-folder-state="close"] > .switch::before {
+    background-position: 0px 0px;
+}
+
+.folder > .folder-content {
+    display: flex;
+    flex-direction: row;
+}
+
+.folder[data-folder-state="close"] > .folder-content {
+    display: none;
+}
+
+.folder > .folder-content::before {
+    content: "";
+    display: block;
+    width: 1rem;
+    -webkit-mask-image: url('/static/img/folder-line.png');
+    mask-image: url('/static/img/folder-line.png');
+    -webkit-mask-size: 100%;
+    mask-size: 100%;
+    background-repeat: repeat-y;
+    background-color: hsla(0, 0%, 100%, 0.25);
+}
+
+.folder > .folder-content > ul {
+    content: "";
+    display: block;
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    flex-grow: 1;
+}
+
+.item-list .asset > span::before, .item-list .entity > span::before, .explorer > .metadata > span::before {
+    content: "";
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+    background-repeat: no-repeat;
+    background-size: 100%;
+}
+
+.explorer .asset[data-type] > span::before {
+    background-image: url('/static/img/asset-icons.png');
+}
+
+.explorer .entity[data-type] > span::before, .explorer > .metadata > span::before {
+    background-image: url('/static/img/entity-icons.png');
+}
+
+.explorer .asset[data-type="sprite"] > span::before, .explorer .entity[data-type="object"] > span::before {
+    background-position: 0px 0px;
+}
+
+.explorer .asset[data-type="font"] > span::before, .explorer .entity[data-type="scene"] > span::before {
+    background-position: 0px -1rem;
+}
+
+.explorer .asset[data-type="audio"] > span::before, .explorer > .metadata > span::before {
+    background-position: 0px -2rem;
+}
+
+.editor {
+    --explorer-border: inherit;
+    --explorer-width: unset;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    width: calc(calc(100% - var(--explorer-width)) - var(--explorer-border));
+    --tabs-height: 2rem;
+}
+
+.editor .tab-section {
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    flex-shrink: 0;
+    height: var(--tabs-height);
+}
+
+.tab-section .tab-list {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    display: flex;
+    flex-direction: row;
+}
+
+.tab-list .tab {
+    min-width: max-content;
+    padding: 0px 0.5rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color:rgba(255, 255, 255, 0.5);
+    background-color: rgb(21, 25, 41);
+    border: 0px solid rgb(59, 88, 64);
+    border-bottom-width: 0.1rem;
+    border-right-width: 0.1rem;
+}
+
+.tab-list .tab#tabSelected {
+    background-color: rgb(40, 42, 57);
+    border-bottom-width: 0px;
+    color:white;
+}
+
+.tab-section .tab-filler {
+    content: '';
+    flex-grow: 1;
+    border: 0px solid rgb(59, 88, 64);
+    border-bottom-width: 0.1rem;
+}
+
+.tab-section .tab-filler#tabSelected {
+    border-bottom-width: 0px;
+}
+
+.tab span {
+    padding: 0.5rem 0px;
+}
+
+.tab span::before {
+    content: "";
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: middle;
+    margin: 0px 0.5rem;
+    background-repeat: no-repeat;
+    background-size: 100%;
+}
+
+.tab[data-table="asset"][data-type] span::before {
+    background-image: url('/static/img/asset-icons.png');
+}
+
+.tab[data-table="entity"][data-type] span::before, .tab[data-table="metadata"] span::before {
+    background-image: url('/static/img/entity-icons.png');
+}
+
+.tab[data-table="asset"][data-type="sprite"] span::before, .tab[data-table="entity"][data-type="object"] span::before {
+    background-position: 0px 0px;
+}
+
+.tab[data-table="asset"][data-type="font"] span::before, .tab[data-table="entity"][data-type="scene"] span::before {
+    background-position: 0px -1rem;
+}
+
+.tab[data-table="asset"][data-type="audio"] span::before, .tab[data-table="metadata"] span::before {
+    background-position: 0px -2rem;
+}
+
+.tab .x {
+    content: "";
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: middle;
+    margin-left: 0.5rem;
+    -webkit-mask-image: url('/static/img/x-icon.png');
+    mask-image: url('/static/img/x-icon.png');
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100%;
+    mask-size: 100%;
+    background-color: hsla(0, 0%, 100%, 0);
+}
+
+.tab:hover .x, .tab#tabSelected .x {
+    background-color: hsla(0, 0%, 100%, 0.5);
+}
+
+.tab:hover .x:hover, .tab#tabSelected .x:hover {
+    background-color: hsla(0, 0%, 100%, 1);
+}
+
+.editor > .material-section {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: row;
+    overflow: clip;
+    position: relative;
+    height: calc(100% - var(--tabs-height));
+}
+
+.material-section > .codemirror-wrapper {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+.codemirror-wrapper > .CodeMirror {
+    font-size: 1rem;
+    height: 100%;
+    font-family: "Consolas", monospace;
+}
+
+.CodeMirror > .CodeMirror-vscrollbar {
+    display: none !important;
+}
+
+.CodeMirror-linenumber {
+    text-align: center;
+    width: 5ch;
+}
+
+.material-section > .config {
+    flex-shrink: 0;
+    --config-width: 20ch;
+    display: flex;
+    background-color: rgb(40, 42, 57);
+    flex-flow: row-reverse wrap;
+    padding: 1rem;
+    margin: 0;
+    resize: horizontal;
+    direction: rtl;
+    max-width: calc(100% - 2rem);
+    min-width: var(--config-width);
+    width: var(--config-width);
+    overflow: hidden auto;
+    color: white;
+    align-content: flex-start;
+    justify-content: space-evenly;
+}
+
+.config input {
+    text-align: center;
+    margin: 0.3rem 0;
+}
+
+.config input[type="text"] {
+    max-width: 15ch;
+}
+.config input[type="number"] {
+    max-width: 5ch;
+}
+
+.config input[type="color"] {
+    height: 2rem;
+}
+
+.config > ol {
+    list-style-type: none;
+    margin: 1rem 0;
+    padding: 0;
+}
+
+.config label {
+    width: 100%;
+    text-align: center;
+    padding: 0.3rem 0;
+}
+
+.config > .json-field > label, .config .json-object > label, .config .json-array > label {
+    border-bottom: 0.1rem solid white;
+    background-color: rgb(84, 87, 109);
+}
+
+.config .json-field {
+    display: inline-block;
+    margin: 0 0.3rem;
+}
+
+#game-icon-input {
+    display: none;
+}
+
+#game-icon-label {
+    border-bottom-width: 0px;
+}
+
+#game-icon-label:hover {
+    cursor: pointer;
+}
+
+#game-icon-label > img {
+    max-width: 100%;
+}
+
+.config > .json-field, .config .json-object {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: center;
+}
+
+.config .json-array {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    list-style-type: decimal;
+    padding-left: 2ch;
+    --li-margin: 0.5rem;
+}
+
+.config .json-array[name="version"] {
+    list-style-type: none;
+}
+
+.config .json-array > li {
+    display: list-item;
+    border: 0.1rem solid white;
+    margin: 0 var(--li-margin);
+    margin-top: var(--li-margin);
+}
+
+.config .json-array > .plus-button, .config .json-array .minus-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.config .json-array > .plus-button {
+    width: calc(100% - calc(var(--li-margin) * 2));
+    margin: 0 var(--li-margin);
+    margin-bottom: var(--li-margin);
+}
+
+.config .json-array .minus-button {
+    width: 100%;
+}
+
+.config .json-array .minus-button:hover, .config .json-array > .plus-button:hover {
+    cursor: pointer;
+}
+
+.config .json-array > .plus-button:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.config .json-array .minus-button:hover {
+    background-color: rgba(255, 0, 0, 0.563);
+}
+
+.config .json-array > .plus-button::before, .config .json-array .minus-button::before {
+    content: "";
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100%;
+    mask-size: 100%;
+}
+
+.config .json-array > .plus-button::before {
+    -webkit-mask-image: url('/static/img/plus-icon.png');
+    mask-image: url('/static/img/plus-icon.png');
+    background-color: rgba(255, 255, 255, 0.7);
+}
+
+.config .json-array .minus-button::before {
+    -webkit-mask-image: url('/static/img/minus-icon.png');
+    mask-image: url('/static/img/minus-icon.png');
+    background-color: rgba(255, 0, 0, 0.7);
+}
+
+.config .json-array > .plus-button:hover::before, .config .json-array .minus-button:hover::before {
+    background-color: rgb(40, 42, 57);
+}
+
+.config .json-array > .li-template {
+    display: none;
+}
+
+.config * {
+    direction: ltr;
+    height: min-content;
+}
+
+.config > .json-field, .config > .json-object, .config > .json-array  {
+    --config-width: inherit;
+    box-sizing: border-box;
+    width: var(--config-width);
+    outline: white;
+    border-width: 0;
+    outline-width: 0.1rem;
+    outline-style: solid;
+    border-radius: 8px;
+    margin: 1rem 0;
+    flex-shrink: 0;
+}
+
+.material-button {
+    position: absolute;
+    top: 0px;
+    display: block;
+    background-color: rgb(40, 42, 57);
+    border: 0px solid rgb(59, 88, 64);
+    border-bottom-width: 0.1rem;
+    padding: 0.5rem;
+}
+
+.material-button:hover {
+    cursor: pointer;
+}
+
+#toConfig-button.material-button {
+    right: 0px;
+    border-left-width: 0.1rem;
+}
+
+#toScript-button.material-button {
+    left: 0px;
+    border-right-width: 0.1rem;
+}
+
+.material-button::before {
+    content: "";
+    display: block;
+    width: 2rem;
+    height: 2rem;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100%;
+    mask-size: 100%;
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+#toConfig-button.material-button::before {
+    mask-image: url('/static/img/config-icon.png');
+    -webkit-mask-image: url('/static/img/config-icon.png');
+}
+
+#toScript-button.material-button::before {
+    mask-image: url('/static/img/script-icon.png');
+    -webkit-mask-image: url('/static/img/script-icon.png');
+}
+
+.material-button:hover::before {
+    background-color: rgba(255, 255, 255, 0.8);
+}
+
+.material-section > * {
+    display: none !important;
+}
+
+.material-section[data-mode="script"] > #lua-script.codemirror-wrapper {
+    display: block !important;
+}
+
+.material-section[data-mode="sprite"] > #sprite-config.config {
+    display: flex !important;
+}
+.material-section[data-mode="object"] > #object-config.config {
+    display: flex !important;
+}
+.material-section[data-mode="scene"] > #scene-config.config {
+    display: flex !important;
+}
+
+.material-section:not([data-mode="game"], [data-mode="project"], [data-mode="script"]) > #preview  {
+    display: block !important;
+    flex-grow: 1;
+    min-width: 0px;
+    min-height: 0px;
+}
+
+.material-section[data-mode="loading"] > #preview  {
+    background-color: rgb(40, 42, 57);
+}
+
+.material-section[data-mode="game"] > #game-config.config {
+    display: flex !important;
+    resize: none;
+    flex-grow: 1;
+}
+.material-section[data-mode="project"] > #project-config.config {
+    display: flex !important;
+    resize: none;
+    flex-grow: 1;
+}
+
+.material-section:is([data-mode="game"], [data-mode="object"], [data-mode="scene"]) > #toScript-button.material-button {
+    display: block !important;
+}
+
+.material-section[data-mode="script"] > #toConfig-button.material-button {
+    display: block !important;
+}

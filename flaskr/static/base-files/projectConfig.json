@@ -1,0 +1,9 @@
+{
+    "fps": 60,
+    "canvas-width": 960,
+    "canvas-height": 540,
+    "browser-title": "2D Web Game",
+    "version": [1,0,0,0],
+    "folder-name": "2dgamehtml5",
+    "output-name": "index"
+}

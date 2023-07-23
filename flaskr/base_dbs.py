@@ -1,0 +1,51 @@
+import sqlite3, os
+
+current_app = None
+
+# for importing binarys of base files
+def import_basefile(filename):
+    if current_app == None:
+        return
+    with open(current_app.config['BASE_FILES_PATH']+filename, "rb") as file:
+        data = file.read()
+    return data
+
+def give_app(app):
+    current_app = app
+
+# creates the 'new project' file template in 
+# the static folder with the other base files
+def create_project_template_db():
+    if current_app == None:
+        return
+    db = sqlite3.connect(os.path.join(current_app.config['BASE_FILES_PATH'], 'new-project.sqlite'))
+    cur = db.cursor()
+    cur.executescript(current_app.open_resource('new-project.sql').read().decode('utf8'))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("projectConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameIcon.ico"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameEntConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameEntScript.lua"),))
+
+    db.commit()
+    cur.close()
+    db.close()
+
+# creates the item types database file in 
+# the static folder with the other base files
+def create_type_db():
+    if current_app == None:
+        return
+    db = sqlite3.connect(os.path.join(current_app.config['BASE_FILES_PATH'], 'type.sqlite'))
+    cur = db.cursor()
+    cur.executescript(current_app.open_resource('type.sql').read().decode('utf8'))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("objectEntScript.lua"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("objectEntConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("sceneEntScript.lua"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("sceneEntConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("spriteConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("audioConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("fontConfig.json"),))
+
+    db.commit()
+    cur.close()
+    db.close()

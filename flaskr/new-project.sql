@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS folder;
+CREATE TABLE folder( name text, color text, container integer);
+DROP TABLE IF EXISTS asset;
+CREATE TABLE asset( name text, type integer, container integer, config integer, data integer);
+DROP TABLE IF EXISTS entity;
+CREATE TABLE entity( name text, type integer, container integer, config integer, script integer);
+DROP TABLE IF EXISTS metadata;
+CREATE TABLE metadata( name text, config integer, data integer);
+DROP TABLE IF EXISTS blobs;
+CREATE TABLE blobs( data blob);
+INSERT INTO folder VALUES ('sprites', '#f05bd9', 0);
+INSERT INTO folder VALUES ('fonts', '#f0655b', 0);
+INSERT INTO folder VALUES ('audio', '#5ce6dd', 0);
+INSERT INTO folder VALUES ('objects', '#70e65c', 0);
+INSERT INTO folder VALUES ('scenes', '#ede85c', 0);
+INSERT INTO metadata VALUES ('project', 1, 2);
+INSERT INTO metadata VALUES ('game-manager', 3, 4);
