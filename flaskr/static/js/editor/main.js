@@ -14,6 +14,27 @@ import documentInteractionSetup, * as DOM from "./DOMcontrol-wrap.js";
 // We import the SQL Control module
 import initSQLite, * as SQLITE from "./SQLcontrol.js";
 
+//
+import initEngine, * as wasmEngine from "./engine-code/game_engine.js";
+
+
+
+//////////////////////////////////
+//          For Wasm            //
+
+
+globalThis.getEntityName = function(rowid) {
+    return SQLITE.getRow(project, "entity", rowid).name;
+};
+
+globalThis.getAssetName = function(rowid) {
+    return SQLITE.getRow(project, "asset", rowid).name;
+};
+
+globalThis.getMetadataName = function(rowid) {
+    return SQLITE.getRow(project, "metadata", rowid).name;
+};
+
 
 
 ///////////////////////////////////////////////////
@@ -342,6 +363,12 @@ initSQLite().then((loaded) => {
                 a.click();
                 // We revoke the URL after the download.
                 URL.revokeObjectURL(a.href);
+            },
+            //
+            'test-game': () => {
+                initEngine().then(() => {
+                    wasmEngine.get_name(2);
+                });
             },
             // This function lets the user
             // undo recent changes he made
