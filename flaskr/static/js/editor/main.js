@@ -23,23 +23,56 @@ import initEngine, * as wasmEngine from "./engine-code/game_engine.js";
 //          For Wasm            //
 
 
-globalThis.getEntityName = function(rowid) {
-    return SQLITE.getRow(project, "entity", rowid).name;
+//
+function getBlob(rowid, asText = false) {
+    const blob = SQLITE.getRow(project, "blobs", rowid).data;
+    return ((asText) ? textDeoder.decode(blob) : blob);
+}
+
+
+globalThis.getGameIcon = function() {
+    return getBlob(SQLITE.getRow(project, "metadata", 1).data);
 };
 
-globalThis.getAssetName = function(rowid) {
-    return SQLITE.getRow(project, "asset", rowid).name;
+globalThis.getGameScript = function() {
+    return getBlob(SQLITE.getRow(project, "metadata", 2).data, true);
 };
 
-globalThis.getMetadataName = function(rowid) {
-    return SQLITE.getRow(project, "metadata", rowid).name;
+globalThis.getAssetData = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "asset", rowid).data);
+};
+
+globalThis.getEntityScript = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "entity", rowid).script, true);
+};
+
+
+globalThis.getProjectConfig = function() {
+    return getBlob(SQLITE.getRow(project, "metadata", 1).config, true);
+};
+
+globalThis.getGameConfig = function() {
+    return getBlob(SQLITE.getRow(project, "metadata", 2).config, true);
+};
+
+globalThis.getAssetConfig = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
+};
+
+globalThis.getEntityConfig = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "entity", rowid).config, true);
 };
 
 
 
-///////////////////////////////////////////////////
-//           Repeatedly used functions           //
+/////////////////////////////////////////
+//           Repeatedly Used           //
 
+
+//
+const textEncoder = new TextEncoder();
+//
+const textDeoder = new TextDecoder();
 
 // This function loads data from
 // the project file into the document
@@ -367,7 +400,7 @@ initSQLite().then((loaded) => {
             //
             'test-game': () => {
                 initEngine().then(() => {
-                    wasmEngine.get_name(2);
+                    wasmEngine.run_game();
                 });
             },
             // This function lets the user
@@ -613,7 +646,7 @@ initSQLite().then((loaded) => {
                 //
                 const blobid = SQLITE.getRow(project, table, rowid)['config'];
                 //
-                const text = new TextDecoder().decode(SQLITE.getRow(project, "blobs", blobid)['data']);
+                const text = textDeoder.decode(SQLITE.getRow(project, "blobs", blobid)['data']);
                 //
                 return {JSON: JSON.parse(text), blobID: blobid};
             },
@@ -626,7 +659,7 @@ initSQLite().then((loaded) => {
                     blobid = SQLITE.getRow(project, table, rowid)['data'];
                 }
                 //
-                const text = new TextDecoder().decode(SQLITE.getRow(project, "blobs", blobid)['data']);
+                const text = textDeoder.decode(SQLITE.getRow(project, "blobs", blobid)['data']);
                 //
                 return {text: text, rowid: blobid};
             }
@@ -643,14 +676,14 @@ initSQLite().then((loaded) => {
                 //
                 const blobid = configInfo.blob;
                 //
-                const blob = new TextEncoder().encode(JSON.stringify(configInfo.JSON));
+                const blob = textEncoder.encode(JSON.stringify(configInfo.JSON));
                 //
                 SQLITE.updateRowValue(project, "blobs", blobid, "data", blob);
             },
 
             //
             'script': (text, blobid) => {
-                SQLITE.updateRowValue(project, "blobs", blobid, "data", new TextEncoder().encode(text));
+                SQLITE.updateRowValue(project, "blobs", blobid, "data", textEncoder.encode(text));
             }
         }
     );

@@ -82,10 +82,9 @@ function getStringFromWasm0(ptr, len) {
     return cachedTextDecoder.decode(getUint8Memory0().subarray(ptr, ptr + len));
 }
 /**
-* @param {number} num
 */
-export function get_name(num) {
-    wasm.get_name(num);
+export function run_game() {
+    wasm.run_game();
 }
 
 async function __wbg_load(module, imports) {
@@ -122,8 +121,8 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
-    imports.wbg.__wbg_getEntityName_6aa210a2e69ba220 = function(arg0, arg1) {
-        const ret = getEntityName(arg1 >>> 0);
+    imports.wbg.__wbg_getGameScript_97322da4b5bbd1d0 = function(arg0) {
+        const ret = getGameScript();
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;
