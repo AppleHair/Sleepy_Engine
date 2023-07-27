@@ -5,6 +5,9 @@
 // MDN web docs - Document Object Model:
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
 
+// 
+// (more info in the "Script handling" section below)
+import { wasm, wasmLoadPromise } from "../../libs/codemirror-5.65.13/mode/rhai-playground/wasm_loader.js";
 
 //
 const materialsection = document.querySelector(".editor > .material-section");
@@ -79,14 +82,14 @@ function switchMaterial() {
     if (prvMode == 'script') {
         //
         scriptBlob = 0;
-        luaScript.setValue('');
+        rhaiScript.setValue('');
         //
-        luaScript.refresh();
+        rhaiScript.refresh();
         //
         switchMode(curTab.hasAttribute("data-in-script") ? "script" : curTab.dataset['type'], 
         curTab.dataset['table'], curTab.dataset['tableId']);
         //
-        luaScript.refresh();
+        rhaiScript.refresh();
         return;
     }
     //
@@ -126,12 +129,12 @@ function switchMode(mode, table, rowid) {
     if (mode == 'script' && table !== undefined && rowid !== undefined) {
         //
         const scriptInfo = onSwitchOf['script'](table, rowid);
-        luaScript.setValue(scriptInfo.text);
+        rhaiScript.setValue(scriptInfo.text);
         scriptBlob = scriptInfo.rowid;
         //
         materialsection.dataset['mode'] = mode;
         //
-        luaScript.refresh();
+        rhaiScript.refresh();
         return;
     }
     //
@@ -169,9 +172,9 @@ function resetMaterial(mode) {
     configInfo.form = '';
     configInfo.blob = 0;
     //
-    luaScript.setValue('');
+    rhaiScript.setValue('');
     //
-    luaScript.refresh();
+    rhaiScript.refresh();
 }
 
 
@@ -468,15 +471,24 @@ function addItemToConfigArray(jsonArray, index, update = true) {
 //          Script handling          //
 
 
-//
-const scriptForm = document.getElementById("lua-script");
+// This part uses some codemirror addons
+// and a special mode for rhai, which is
+// used in the rhai playground demo.
+// https://rhai.rs/playground/stable/
+// The mode it defined in webassembly
+// using rust, so it's a bit tricky to import.
 
+
+//
+const scriptForm = document.getElementById("rhai-script");
+
+//
 let scriptBlob = 0;
 
 // 
-const luaScript = CodeMirror(scriptForm, {
+const rhaiScript = CodeMirror(scriptForm, {
     value: "",
-    mode: "text/x-lua",
+    mode: null,
     theme: "dracula",
     tabSize: 2,
     indentUnit: 2,
@@ -484,16 +496,40 @@ const luaScript = CodeMirror(scriptForm, {
 	smartIndent: true,
 	lineNumbers: true,
 	matchBrackets: true,
+    highlightSelectionMatches: true,
+    autoCloseBrackets: {
+        pairs: `()[]{}''""`,
+        closeBefore: `)]}'":;,`,
+        triples: "",
+        explode: "()[]{}",
+    },
     scrollbarStyle: "native"
 });
 
 //
 function scriptSetup() {
-    luaScript.on("change", () => {
+    rhaiScript.on("change", () => {
         //
-        onChangeTo['script'](luaScript.getValue(), scriptBlob);
+        onChangeTo['script'](rhaiScript.getValue(), scriptBlob);
+        
     });
 }
+
+//
+wasmLoadPromise.then(() => {
+    //
+    wasm.init_codemirror_pass(CodeMirror.Pass);
+
+    //
+    CodeMirror.defineMode("rhai", (cfg, mode) => {
+        return new wasm.RhaiMode(cfg.indentUnit);
+    });
+
+    //
+    rhaiScript.setOption("mode", "rhai");
+});
+
+//
 
 export { switchMaterial, resetMaterial };
 export default materialSetup;

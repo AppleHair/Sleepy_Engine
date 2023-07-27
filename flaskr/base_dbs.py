@@ -11,6 +11,7 @@ def import_basefile(filename):
     return data
 
 def give_app(app):
+    global current_app 
     current_app = app
 
 # creates the 'new project' file template in 
@@ -24,7 +25,7 @@ def create_project_template_db():
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("projectConfig.json"),))
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameIcon.ico"),))
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameEntConfig.json"),))
-    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameEntScript.lua"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameEntScript.rhai"),))
 
     db.commit()
     cur.close()
@@ -38,9 +39,9 @@ def create_type_db():
     db = sqlite3.connect(os.path.join(current_app.config['BASE_FILES_PATH'], 'type.sqlite'))
     cur = db.cursor()
     cur.executescript(current_app.open_resource('type.sql').read().decode('utf8'))
-    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("objectEntScript.lua"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("objectEntScript.rhai"),))
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("objectEntConfig.json"),))
-    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("sceneEntScript.lua"),))
+    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("sceneEntScript.rhai"),))
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("sceneEntConfig.json"),))
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("spriteConfig.json"),))
     cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("audioConfig.json"),))

@@ -1,24 +1,23 @@
 
-    -- Object Entity Template Script --
+    // Object Entity Template Script //
 
---[[
+/*
     You can add local variables to
     this entity in the scripts body.
-]]
+*/
 
--- variables go here
+// variables go here
 
---[[
+/*
     This function runs when an instance of this
     object is created. Use it to preform initial
     operations on your variables.
-]]--
-function onCreate()
-    -- code goes here
-end
+*/
+fn create() {
+  // code goes here
+}
 
-
---[[
+/*
     This function runs every game frame.
     Use it to define this object's behavior.
 
@@ -28,7 +27,7 @@ end
         Use it to measure the time which
         elapses through out this object's
         presence in the game.
-]]--
-function onUpdate(elapsed)
-    -- code goes here
-end
+*/
+fn update(elapsed) {
+  // code goes here
+}

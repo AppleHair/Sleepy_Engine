@@ -10,7 +10,9 @@
         <link rel="stylesheet" href="/static/js/libs/codemirror-5.65.13/theme/dracula.css"/>
         <link rel="stylesheet" href="/static/style/editor.css"/>
         <script src="/static/js/libs/codemirror-5.65.13/lib/codemirror.js"></script>
-        <script src="/static/js/libs/codemirror-5.65.13/mode/lua/lua.js"></script>
+        <script src="/static/js/libs/codemirror-5.65.13/addon/edit/closebrackets.js"></script>
+        <script src="/static/js/libs/codemirror-5.65.13/addon/edit/matchbrackets.js"></script>
+        <script src="/static/js/libs/codemirror-5.65.13/addon/search/match-highlighter.js"></script>
         <script src="/static/js/libs/sql-wasm.js" defer></script>
         <script type="module" src="/static/js/editor/main.js"></script>
     </head>
@@ -35,7 +37,7 @@
                         <div class="tab-filler" id="tabSelected" data-type="none"></div>
                     </section>
                     <section class="material-section" data-mode="none">
-                        <form id="lua-script" class="codemirror-wrapper">
+                        <form id="rhai-script" class="codemirror-wrapper">
                             <!-- CODEMIRROR GOES HERE -->
                         </form>
                         <canvas id="preview">

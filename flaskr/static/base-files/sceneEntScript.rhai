@@ -1,24 +1,24 @@
 
-    -- Scene Entity Template Script --
+    // Scene Entity Template Script //
 
---[[
+/*
     You can add local variables to
     this entity in the scripts body.
-]]
+*/
 
--- variables go here
+// variables go here
 
---[[
+/*
     This function runs every time this scene
     appears. Use it to preform initial
     operations on your variables.
-]]--
-function onCreate()
-    -- code goes here
-end
+*/
+fn create() {
+  // code goes here
+}
 
 
---[[
+/*
     This function runs every game frame.
     Use it to define this scene's behavior.
 
@@ -28,7 +28,7 @@ end
         Use it to measure the time which
         elapses through out this scene's
         presence in the game.
-]]--
-function onUpdate(elapsed)
-    -- code goes here
-end
+*/
+fn update(elapsed) {
+  // code goes here
+}

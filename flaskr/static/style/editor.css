@@ -540,6 +540,9 @@ header {
     width: 5ch;
 }
 
+ /* for the match-highlighter codemirror addon */
+.cm-matchhighlight {background-color: rgba(255, 255, 255, 0.2);}
+
 .material-section > .config {
     flex-shrink: 0;
     --config-width: 20ch;
@@ -770,7 +773,7 @@ header {
     display: none !important;
 }
 
-.material-section[data-mode="script"] > #lua-script.codemirror-wrapper {
+.material-section[data-mode="script"] > #rhai-script.codemirror-wrapper {
     display: block !important;
 }
 
