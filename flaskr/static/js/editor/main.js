@@ -63,7 +63,29 @@ globalThis.getEntityConfig = function(rowid) {
     return getBlob(SQLITE.getRow(project, "entity", rowid).config, true);
 };
 
+globalThis.getEntityID = function(name) {
+    let stmt = project.prepare(`SELECT rowid FROM entity WHERE name=?;`, [name]);
+    stmt.step();
+    let res = stmt.get();
+    stmt.free();
+    return res[0];
+};
 
+globalThis.getAssetID = function(name) {
+    let stmt = project.prepare(`SELECT rowid FROM asset WHERE name=?;`, [name]);
+    stmt.step();
+    let res = stmt.get();
+    stmt.free();
+    return res[0];
+};
+
+globalThis.getEntityName = function(rowid) {
+    return SQLITE.getRow(project, "entity", rowid).name;
+};
+
+globalThis.getAssetName = function(rowid) {
+    return SQLITE.getRow(project, "asset", rowid).name;
+};
 
 /////////////////////////////////////////
 //           Repeatedly Used           //
@@ -400,7 +422,7 @@ initSQLite().then((loaded) => {
             //
             'test-game': () => {
                 initEngine().then(() => {
-                    wasmEngine.run_game();
+                    wasmEngine.handle_game();
                 });
             },
             // This function lets the user

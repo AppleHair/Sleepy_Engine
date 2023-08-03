@@ -1,22 +1,32 @@
+
+mod webapp;
+mod game;
+
+use std::panic;
+
+use crate::webapp::alert;
+use crate::game::{run_game, EntityRow};
+
 use wasm_bindgen::prelude::*;
+use console_error_panic_hook;
 
 #[wasm_bindgen]
-extern {
-    // data/script getters
-    pub fn getGameIcon() -> Box<[u8]>;
-    pub fn getGameScript() -> String;
-    pub fn getAssetData(rowid: u32) -> Box<[u8]>;
-    pub fn getEntityScript(rowid: u32) -> String;
-    // config getters
-    pub fn getProjectConfig() -> String;
-    pub fn getGameConfig() -> String;
-    pub fn getAssetConfig(rowid: u32) -> String;
-    pub fn getEntityConfig(rowid: u32) -> String;
-    // web functions
-    pub fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-pub fn run_game() {
-    alert(&getGameScript());
+pub fn handle_game() {
+    //
+    panic::set_hook(Box::new(console_error_panic_hook::hook));
+    //
+    let error = run_game().err();
+    //
+    if error.is_some() {
+        //
+        let info = error.unwrap();
+        //
+        let s = match info.0 {
+            EntityRow::Manager => String::from("\non the script of 'State Manager'"),
+            EntityRow::Object(id) => format!("\non the script of the '{}' object", webapp::getEntityName(id)),
+            EntityRow::Scene(id) => format!("\non the script of the '{}' scene", webapp::getEntityName(id)),
+        };
+        //
+        alert(&format!("{a}{b}", a = info.1.to_string(), b = s));
+    }
 }

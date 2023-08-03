@@ -226,7 +226,8 @@ function getJSONScope(element) {
 function configSetup() {
     //
     materialsection.addEventListener("input", (event) => {
-        if (event.target.matches(".li-template input, #game-icon-input, :not(.json-field) > input")) {
+        //
+        if (event.target.matches(".li-template input, #game-icon-input, #rhai-script *")) {
             return;
         }
         //
