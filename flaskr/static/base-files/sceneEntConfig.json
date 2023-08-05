@@ -7,6 +7,9 @@
     "camera-position": {"x": 0, "y": 0},
     "layers":
     [
-        {"name": "layer 1", "instances": []}
+        {
+            "name": "layer 1",
+            "instances": []
+        }
     ]
 }
