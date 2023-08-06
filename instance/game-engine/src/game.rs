@@ -7,7 +7,8 @@ use std::rc::Rc;
 
 use rhai::{Engine, Scope, AST, Map, packages::Package, packages::StandardPackage, EvalAltResult, Dynamic};
 
-mod scene;
+mod entity;
+mod rhai_convert;
 
 //
 #[derive(Clone)]
@@ -86,7 +87,7 @@ impl EntityInstance {
             //
             EntityRow::Scene(_) => {
                 //
-                inst.scope.push("Scene", scene::create_scene(&engine, &inst.definition.config));
+                inst.scope.push("Scene", entity::create_scene(&engine, &inst.definition.config));
             },
             //
             _ => {},
@@ -124,32 +125,50 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
 
     // Register API features to the 'Engine'
     engine.on_print(|text| { webapp::log(text); })
-          .register_type_with_name::<scene::Camera>("Camera")
-          .register_get_set("x", scene::Camera::get_x, scene::Camera::set_x)
-          .register_set("x", scene::Camera::set_x_rhai_int)
-          .register_set("x", scene::Camera::set_x_rhai_float)
-          .register_get_set("y", scene::Camera::get_y, scene::Camera::set_y)
-          .register_set("y", scene::Camera::set_y_rhai_int)
-          .register_set("y", scene::Camera::set_y_rhai_float)
-          .register_get_set("zoom", scene::Camera::get_zoom, scene::Camera::set_zoom)
-          .register_set("zoom", scene::Camera::set_zoom_rhai_int)
-          .register_set("zoom", scene::Camera::set_zoom_rhai_float)
-          .register_fn("to_string", scene::Camera::to_string)
-          .register_type_with_name::<scene::Layer>("Layer")
-          .register_get("name", scene::Layer::get_name)
-          .register_fn("to_string", scene::Layer::to_string)
-          .register_type_with_name::<scene::Scene>("Scene")
-          .register_get_set("width", scene::Scene::get_width, scene::Scene::set_width)
-          .register_set("width", scene::Scene::set_width_rhai_int)
-          .register_set("width", scene::Scene::set_width_rhai_float)
-          .register_get_set("height", scene::Scene::get_height, scene::Scene::set_height)
-          .register_set("height", scene::Scene::set_height_rhai_int)
-          .register_set("height", scene::Scene::set_height_rhai_float)
-          .register_get_set("in_color", scene::Scene::get_inside_color, scene::Scene::set_inside_color)
-          .register_get_set("out_color", scene::Scene::get_outside_color, scene::Scene::set_outside_color)
-          .register_get_set("camera", scene::Scene::get_camera, scene::Scene::set_camera)
-          .register_get("layers", scene::Scene::get_layers)
-          .register_fn("to_string", scene::Scene::to_string);
+          .register_type_with_name::<entity::PositionPoint>("Position")
+          .register_get_set("x", entity::PositionPoint::get_x, entity::PositionPoint::set_x)
+          .register_set("x", entity::PositionPoint::set_x_rhai_int)
+          .register_set("x", entity::PositionPoint::set_x_rhai_float)
+          .register_get_set("y", entity::PositionPoint::get_y, entity::PositionPoint::set_y)
+          .register_set("y", entity::PositionPoint::set_y_rhai_int)
+          .register_set("y", entity::PositionPoint::set_y_rhai_float)
+          .register_fn("to_string", entity::PositionPoint::to_string)
+          .register_type_with_name::<entity::CollisionBox>("CollisionBox")
+          .register_get("point1", entity::CollisionBox::get_point1)
+          .register_get("point2", entity::CollisionBox::get_point2)
+          .register_fn("to_string", entity::CollisionBox::to_string)
+          .register_type_with_name::<entity::Object>("Object")
+          .register_get_set("position", entity::Object::get_position, entity::Object::set_position)
+          .register_get("origin_offset", entity::Object::get_origin_offset)
+          .register_get("collision_boxes", entity::Object::get_collision_boxes)
+          .register_fn("to_string", entity::Object::to_string)
+          .register_type_with_name::<entity::Camera>("Camera")
+          .register_get_set("position", entity::Camera::get_position, entity::Camera::set_position)
+          .register_get_set("zoom", entity::Camera::get_zoom, entity::Camera::set_zoom)
+          .register_set("zoom", entity::Camera::set_zoom_rhai_int)
+          .register_set("zoom", entity::Camera::set_zoom_rhai_float)
+          .register_fn("to_string", entity::Camera::to_string)
+          .register_type_with_name::<entity::ObjectInstanceInfo>("ObjectInstanceInfo")
+          .register_get("index", entity::ObjectInstanceInfo::get_index)
+          .register_get("init_x", entity::ObjectInstanceInfo::get_init_x)
+          .register_get("init_y", entity::ObjectInstanceInfo::get_init_y)
+          .register_fn("to_string", entity::ObjectInstanceInfo::to_string)
+          .register_type_with_name::<entity::Layer>("Layer")
+          .register_get("name", entity::Layer::get_name)
+          .register_get("instances", entity::Layer::get_instances)
+          .register_fn("to_string", entity::Layer::to_string)
+          .register_type_with_name::<entity::Scene>("Scene")
+          .register_get_set("width", entity::Scene::get_width, entity::Scene::set_width)
+          .register_set("width", entity::Scene::set_width_rhai_int)
+          .register_set("width", entity::Scene::set_width_rhai_float)
+          .register_get_set("height", entity::Scene::get_height, entity::Scene::set_height)
+          .register_set("height", entity::Scene::set_height_rhai_int)
+          .register_set("height", entity::Scene::set_height_rhai_float)
+          .register_get_set("in_color", entity::Scene::get_inside_color, entity::Scene::set_inside_color)
+          .register_get_set("out_color", entity::Scene::get_outside_color, entity::Scene::set_outside_color)
+          .register_get_set("camera", entity::Scene::get_camera, entity::Scene::set_camera)
+          .register_get("layers", entity::Scene::get_layers)
+          .register_fn("to_string", entity::Scene::to_string);
 
     // Register the Standard Package
     let package = StandardPackage::new();
@@ -260,7 +279,7 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
     // Register API closures, which need to 
     // capture the game-loop's environment
     let api_cur_scene = Rc::clone(&cur_scene);
-    engine.register_fn("get_cur_scene", move || -> Result<scene::Scene, Box<EvalAltResult>> {
+    engine.register_fn("get_cur_scene", move || -> Result<entity::Scene, Box<EvalAltResult>> {
         //
         let cur_scene_borrow = api_cur_scene.try_borrow();
         //
@@ -269,7 +288,7 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
             return Err("Can't use the 'get_cur_scene' function inside a scene script! Use the Scene object instead.".into());
         }
         //
-        Ok(cur_scene_borrow.unwrap().scope.get_value::<scene::Scene>("Scene")
+        Ok(cur_scene_borrow.unwrap().scope.get_value::<entity::Scene>("Scene")
         .expect("The Scene object should have been created in this scene's scope by the time it was created"))
     });
 
