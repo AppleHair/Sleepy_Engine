@@ -187,8 +187,19 @@
                             <ol name="object-instances" class="json-array">
                                 <label>Object Instances</label>
                                 <div class="li-template">
-                                    <div class="json-field object-instance">
-                                        <input type="number" value="0"/>
+                                    <div class="json-object object-instance">
+                                        <div class="json-field object-instance">
+                                            <label>ID: </label>
+                                            <input type="number" name="id" value="0"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>X: </label>
+                                            <input type="number" name="x" value="0"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Y: </label>
+                                            <input type="number" name="y" value="0"/>
+                                        </div>
                                     </div>
                                     <div class="minus-button"></div>
                                 </div>
@@ -205,19 +216,8 @@
                                         <ol name="instances" class="json-array">
                                             <label>Instances</label>
                                             <div class="li-template">
-                                                <div class="json-object instance-index">
-                                                    <div class="json-field instance-index">
-                                                        <label>Index: </label>
-                                                        <input type="number" name="index" value="0"/>
-                                                    </div>
-                                                    <div class="json-field">
-                                                        <label>X: </label>
-                                                        <input type="number" name="x" value="0"/>
-                                                    </div>
-                                                    <div class="json-field">
-                                                        <label>Y: </label>
-                                                        <input type="number" name="y" value="0"/>
-                                                    </div>
+                                                <div class="json-field instance-index">
+                                                    <input type="number" value="0"/>
                                                 </div>
                                                 <div class="minus-button"></div>
                                             </div>

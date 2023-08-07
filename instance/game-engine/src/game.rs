@@ -74,7 +74,7 @@ struct EntityInstance {
 //
 impl EntityInstance {
     //
-    fn new(engine: &Engine, def: Rc<EntityDefinition>) -> Result<Self, (EntityRow, Box<EvalAltResult>)> {
+    fn new(engine: &Engine, def: Rc<EntityDefinition>, obj_idx: Option<(usize, f64, f64)>) -> Result<Self, (EntityRow, Box<EvalAltResult>)> {
         //
         let mut inst = Self {
             //
@@ -83,14 +83,23 @@ impl EntityInstance {
             scope: Scope::new(),
         };
         //
-        match inst.definition.reference {
+        match (inst.definition.reference.to_owned(), obj_idx) {
             //
-            EntityRow::Scene(_) => {
+            (EntityRow::Scene(_), None) => {
                 //
                 inst.scope.push("Scene", entity::create_scene(&engine, &inst.definition.config));
             },
             //
-            _ => {},
+            (EntityRow::Object(_), Some((idx, init_x, init_y))) => {
+                //
+                inst.scope.push_constant("INDEX", idx as rhai::INT);
+                //
+                inst.scope.push("Object", entity::create_object(&engine, &inst.definition.config, init_x, init_y));
+            }
+            //
+            (EntityRow::Manager, None) => {},
+            //
+            _ => { return Err((inst.definition.reference.to_owned(), "Couldn't find the right resources for the entity.".into()))},
         }
         //
         let err = engine.run_ast_with_scope(&mut inst.scope, &inst.definition.script).err();
@@ -119,7 +128,7 @@ impl EntityInstance {
 }
 
 //
-fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(Engine, EntityInstance, Rc<RefCell<EntityInstance>>, u32), (EntityRow, Box<EvalAltResult>)> {
+fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(Engine, EntityInstance, Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>), (EntityRow, Box<EvalAltResult>)> {
     // Create an 'Engine'
     let mut engine = Engine::new_raw();
 
@@ -148,11 +157,6 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
           .register_set("zoom", entity::Camera::set_zoom_rhai_int)
           .register_set("zoom", entity::Camera::set_zoom_rhai_float)
           .register_fn("to_string", entity::Camera::to_string)
-          .register_type_with_name::<entity::ObjectInstanceInfo>("ObjectInstanceInfo")
-          .register_get("index", entity::ObjectInstanceInfo::get_index)
-          .register_get("init_x", entity::ObjectInstanceInfo::get_init_x)
-          .register_get("init_y", entity::ObjectInstanceInfo::get_init_y)
-          .register_fn("to_string", entity::ObjectInstanceInfo::to_string)
           .register_type_with_name::<entity::Layer>("Layer")
           .register_get("name", entity::Layer::get_name)
           .register_get("instances", entity::Layer::get_instances)
@@ -192,7 +196,7 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
         Rc::clone(
             entity_defs.get(&0)
             .expect("entity_defs.get(&0) should have had the state manager's definition by now")
-        )
+        ), None
     )?;
 
     // Take the 'State' object map from 
@@ -271,10 +275,50 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
                 Rc::clone(
                     entity_defs.get(&cur_scene_id)
                     .expect("entity_defs.get(&scene_id) should have had the scene's definition by now")
-                )
+                ), None
             )?
         )
     );
+
+    //
+    let object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>> = Rc::new(RefCell::new(Vec::new()));
+    //
+    let mut i = 0_usize;
+    //
+    for inst_info in cur_scene.borrow().definition.config["object-instances"].clone().into_typed_array::<Map>()
+    .expect("Every object's config should contain a 'object-instances' array, which should only have object-like members.") {
+        //
+        let inst_id = rhai_convert::dynamic_to_u32(&inst_info["id"])
+        .expect("Every instance in the 'object-instances' array of an object's config should contain an integer 'id' attribute.");
+        let (init_x, init_y) = (
+            rhai_convert::dynamic_to_f64(&inst_info["x"])
+            .expect("Every instance in the 'object-instances' array of an object's config should contain an float 'x' attribute."), 
+            rhai_convert::dynamic_to_f64(&inst_info["y"])
+            .expect("Every instance in the 'object-instances' array of an object's config should contain an float 'y' attribute."),
+        );
+        //
+        entity_defs.insert(inst_id, 
+            Rc::new(
+                EntityDefinition::new(&engine, 
+                    EntityRow::Object(inst_id)
+                )?
+            )
+        );
+        //
+        object_stack.borrow_mut().push(Rc::new( 
+                RefCell::new(
+                    EntityInstance::new(&engine,
+                        Rc::clone(
+                            entity_defs.get(&inst_id)
+                            .expect("entity_defs.get(&inst_id_u32) should have had the object's definition by now")
+                        ), Some((i, init_x, init_y))
+                    )?
+                )
+            )
+        );
+        //
+        i += 1;
+    }
 
     // Register API closures, which need to 
     // capture the game-loop's environment
@@ -285,15 +329,36 @@ fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(En
         //
         if cur_scene_borrow.is_err() {
             //
-            return Err("Can't use the 'get_cur_scene' function inside a scene script! Use the Scene object instead.".into());
+            return Err("Can't use the 'get_cur_scene' function inside a scene script! Use the Scene map instead.".into());
         }
         //
         Ok(cur_scene_borrow.unwrap().scope.get_value::<entity::Scene>("Scene")
-        .expect("The Scene object should have been created in this scene's scope by the time it was created"))
+        .expect("The Scene map should have been created in this scene's scope by the time it was created"))
+    });
+    //
+    let api_object_stack = Rc::clone(&object_stack);
+    engine.register_fn("get_object_from_stack", move |context: rhai::NativeCallContext, idx: rhai::INT| -> Result<entity::Object, Box<EvalAltResult>> {
+        //
+        if idx >= (api_object_stack.borrow().len() as rhai::INT) {
+            //
+            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_object_stack.borrow().len(), idx, context.position())));
+        }
+        //
+        let object_reference = Rc::clone( api_object_stack.borrow().get(idx as usize).unwrap() );
+        //
+        if object_reference.try_borrow().is_err() {
+            //
+            return Err("Can't use the 'get_object_from_stack' function to get this script's object! Use the Object map instead.".into());
+        }
+        //
+        let object = object_reference.borrow().scope.get_value::<entity::Object>("Object")
+        .expect("The Object map should have been created in this object's scope by the time it was created");
+        //
+        Ok(object)
     });
 
     // The API is done!
-    Ok((engine, state_manager, cur_scene, cur_scene_id))
+    Ok((engine, state_manager, cur_scene, cur_scene_id, object_stack))
 }
 
 //
@@ -303,12 +368,27 @@ pub fn run_game() -> Result<(), (EntityRow, Box<EvalAltResult>)>
     let mut entity_defs: HashMap<u32,Rc<EntityDefinition>> = HashMap::new();
     // Create the API 'Engine', and the state manager instance.
     let (api_engine, mut state_manager, 
-        cur_scene, mut cur_scene_id) = create_api(&mut entity_defs)?;
+        cur_scene, mut cur_scene_id, 
+        object_stack) = create_api(&mut entity_defs)?;
 
     // Call the 'create' function on the state manager instance.
     state_manager.call_fn(&api_engine, "create", ())?;
     //
     cur_scene.borrow_mut().call_fn(&api_engine, "create", ())?;
+
+    let mut i = 0_usize;
+    loop {
+        //
+        if i >= object_stack.borrow().len() {
+            break;
+        }
+        //
+        let object = Rc::clone( object_stack.borrow().get(i).unwrap() );
+        //
+        object.borrow_mut().call_fn(&api_engine, "create", ())?;
+        //
+        i += 1;
+    }
 
     // ..game loop..
 

@@ -6,8 +6,8 @@ use super::rhai_convert;
 //
 #[derive(Clone)]
 pub struct PositionPoint {
-    x: f64,
-    y: f64,
+    pub x: f64,
+    pub y: f64,
 }
 
 //
@@ -30,8 +30,8 @@ impl PositionPoint {
 //
 #[derive(Clone)]
 pub struct CollisionBox {
-    point1: PositionPoint,
-    point2: PositionPoint,
+    pub point1: PositionPoint,
+    pub point2: PositionPoint,
 }
 
 //
@@ -48,9 +48,9 @@ impl CollisionBox {
 #[derive(Clone)]
 pub struct Object {
     // sprite: 
-    position: PositionPoint,
-    origin_offset: PositionPoint,
-    collision_boxes: Vec<CollisionBox>,
+    pub position: PositionPoint,
+    pub origin_offset: PositionPoint,
+    pub collision_boxes: Vec<CollisionBox>,
 }
 
 //
@@ -82,7 +82,7 @@ impl Object {
 }
 
 //
-pub fn create_object(engine: &Engine, config: &Map, init_x: f64, init_y: f64) -> Object {
+pub fn create_object(engine: &Engine, config: &Map,  init_x: f64, init_y: f64) -> Object {
     //
     let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
     //
@@ -107,7 +107,7 @@ pub fn create_object(engine: &Engine, config: &Map, init_x: f64, init_y: f64) ->
     //
     Object {
         //
-        position: PositionPoint { x: (init_x), y: (init_y) },
+        position: PositionPoint { x: init_x, y: init_y },
         //
         origin_offset: PositionPoint { 
             x: rhai_convert::dynamic_to_f64(&config["origin-offset"].clone_cast::<Map>()["x"])
@@ -122,27 +122,9 @@ pub fn create_object(engine: &Engine, config: &Map, init_x: f64, init_y: f64) ->
 
 //
 #[derive(Clone)]
-pub struct ObjectInstanceInfo {
-    index: u32, 
-    init_x: f64,
-    init_y: f64,
-}
-//
-impl ObjectInstanceInfo {
-    pub fn get_index(&mut self) -> u32 { self.index.clone() }
-    pub fn get_init_x(&mut self) -> f64 { self.init_x.clone() }
-    pub fn get_init_y(&mut self) -> f64 { self.init_y.clone() }
-
-    pub fn to_string(&mut self) -> String {
-        format!("index - {idx} x - {x} y - {y}", idx = self.index, x = self.init_x, y = self.init_y)
-    }
-}
-
-//
-#[derive(Clone)]
 pub struct Layer {
-    name: String,
-    instances: Vec<ObjectInstanceInfo>,
+    pub name: String,
+    pub instances: Vec<u32>,
 }
 
 //
@@ -155,12 +137,9 @@ impl Layer {
         //
         for inst in &self.instances {
             //
-            let mut s = inst.clone().to_string();
+            instances_str.push_str(&format!("\n\n\t#{i} - {}", inst));
             //
-            s.insert_str( 0, &format!("\n\n\t#{}\n\t", i));
             i += 1;
-            //
-            instances_str.push_str(&s);
         }
         //
         format!("Name: {name}\nInstances:{instances}", name = self.name.clone(), instances = instances_str )
@@ -170,8 +149,8 @@ impl Layer {
 //
 #[derive(Clone)]
 pub struct Camera {
-    position: PositionPoint,
-    zoom: f32,
+    pub position: PositionPoint,
+    pub zoom: f32,
 }
 
 //
@@ -192,12 +171,12 @@ impl Camera {
 //
 #[derive(Clone)]
 pub struct Scene {
-    width: u64,
-    height: u64,
-    in_color: String,
-    out_color: String,
-    layers: Vec<Layer>,
-    camera: Camera,
+    pub width: u64,
+    pub height: u64,
+    pub in_color: String,
+    pub out_color: String,
+    pub layers: Vec<Layer>,
+    pub camera: Camera,
 }
 
 //
@@ -251,22 +230,14 @@ pub fn create_scene(engine: &Engine, config: &Map) -> Scene {
             .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."),
             instances: {
                 //
-                let mut instances_vec: Vec<ObjectInstanceInfo> = Vec::new();
+                let mut instances_vec: Vec<u32> = Vec::new();
                 //
-                for inst_map in map["instances"].clone().into_typed_array::<Map>()
+                for index in map["instances"].clone().into_array()
                 .expect("Every member in the 'layers' array of a scene's config should have a 'instances' array, which should only have object-like members.") {
                     //
-                    instances_vec.push( ObjectInstanceInfo {
-                        //
-                        index: rhai_convert::dynamic_to_u32(&inst_map["index"])
-                        .expect("Every member in an 'instances' array of a 'layers' array of a scene's config should contain an integer 'index' attribute."),
-                        //
-                        init_x: rhai_convert::dynamic_to_f64(&inst_map["x"])
-                        .expect("Every member in an 'instances' array of a 'layers' array of a scene's config should contain an float 'x' attribute."),
-                        //
-                        init_y: rhai_convert::dynamic_to_f64(&inst_map["y"])
-                        .expect("Every member in an 'instances' array of a 'layers' array of a scene's config should contain an float 'y' attribute.")
-                    } );
+                    instances_vec.push( rhai_convert::dynamic_to_u32(&index)
+                        .expect("Every member in an 'instances' array of a 'layers' array of a scene's config should contain an integer 'index' attribute.")
+                    );
                 }
                 instances_vec
             }
