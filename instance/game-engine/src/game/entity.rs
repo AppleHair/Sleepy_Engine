@@ -1,5 +1,5 @@
 
-use rhai::{Engine, Map, Dynamic};
+use rhai::{Map, Dynamic};
 
 use super::rhai_convert;
 
@@ -82,7 +82,7 @@ impl Object {
 }
 
 //
-pub fn create_object(engine: &Engine, config: &Map,  init_x: f64, init_y: f64) -> Object {
+pub fn create_object(config: &Map,  init_x: f64, init_y: f64) -> Object {
     //
     let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
     //
@@ -173,6 +173,7 @@ impl Camera {
 pub struct Scene {
     pub width: u64,
     pub height: u64,
+    pub stack_len: usize,
     pub in_color: String,
     pub out_color: String,
     pub layers: Vec<Layer>,
@@ -186,6 +187,7 @@ impl Scene {
     pub fn get_inside_color(&mut self) -> String { self.in_color.clone() }
     pub fn get_outside_color(&mut self) -> String { self.out_color.clone() }
     pub fn get_layers(&mut self) -> Dynamic { self.layers.clone().into() }
+    pub fn get_stack_len(&mut self) -> rhai::INT { self.stack_len.clone() as rhai::INT }
     pub fn get_camera(&mut self) -> Camera { self.camera.clone() }
 
     pub fn set_width(&mut self, value: u64) { self.width = value; }
@@ -218,7 +220,7 @@ impl Scene {
 }
 
 //
-pub fn create_scene(engine: &Engine, config: &Map) -> Scene {
+pub fn create_scene(config: &Map) -> Scene {
     //
     let mut layers_vec: Vec<Layer> = Vec::new();
     //
@@ -233,10 +235,12 @@ pub fn create_scene(engine: &Engine, config: &Map) -> Scene {
                 let mut instances_vec: Vec<u32> = Vec::new();
                 //
                 for index in map["instances"].clone().into_array()
-                .expect("Every member in the 'layers' array of a scene's config should have a 'instances' array, which should only have object-like members.") {
+                .expect(concat!("Every member in the 'layers' array of a scene's config should",
+                " have a 'instances' array, which should only have object-like members.")) {
                     //
                     instances_vec.push( rhai_convert::dynamic_to_u32(&index)
-                        .expect("Every member in an 'instances' array of a 'layers' array of a scene's config should contain an integer 'index' attribute.")
+                        .expect(concat!("Every member in an 'instances' array of a 'layers' array",
+                        " of a scene's config should contain an integer 'index' attribute."))
                     );
                 }
                 instances_vec
@@ -251,6 +255,9 @@ pub fn create_scene(engine: &Engine, config: &Map) -> Scene {
         //
         height: rhai_convert::dynamic_to_u64(&config["height"])
         .expect("Every scene's config should contain an integer 'height' attribute."),
+        //
+        stack_len: config["object-instances"].clone().into_array()
+        .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
         //
         in_color: config["background-color"].clone().into_string()
         .expect("Every scene's config should contain a string 'background-color' attribute."),
