@@ -14,6 +14,7 @@ mod rhai_convert;
 pub enum PostRuntimeTask {
     DeactivateObject(rhai::INT),
     ActivateObject(rhai::INT),
+    InstanceSwitchLayer(rhai::INT, rhai::INT, rhai::INT, rhai::Position),
 }
 
 //
@@ -305,12 +306,13 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
     .into_typed_array::<Map>().expect(concat!("Every object's config should contain a 'object-instances'",
     " array, which should only have object-like members.")) {
         //
-        let inst_id = rhai_convert::dynamic_to_u32(&inst_info["id"])
-        .expect("Every instance in the 'object-instances' array of an object's config should contain an integer 'id' attribute.");
+        let inst_id = rhai_convert::dynamic_to_number(&inst_info["id"])
+        .expect("Every instance in the 'object-instances' array of an object's config should contain an integer 'id' attribute.")
+        as u32;
         let (init_x, init_y) = (
-            rhai_convert::dynamic_to_f64(&inst_info["x"])
+            rhai_convert::dynamic_to_number(&inst_info["x"])
             .expect("Every instance in the 'object-instances' array of an object's config should contain an float 'x' attribute."), 
-            rhai_convert::dynamic_to_f64(&inst_info["y"])
+            rhai_convert::dynamic_to_number(&inst_info["y"])
             .expect("Every instance in the 'object-instances' array of an object's config should contain an float 'y' attribute."),
         );
         //
@@ -592,6 +594,16 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
         Ok(())
     });
 
+    //
+    let api_post_runtime_tasks = Rc::clone(&post_runtime_tasks);
+    engine.register_fn("instance_switch_layer", move |context: rhai::NativeCallContext,
+    layer_from: rhai::INT, layer_idx_from: rhai::INT, layer_to: rhai::INT| {
+        //
+        api_post_runtime_tasks.borrow_mut().push(
+            PostRuntimeTask::InstanceSwitchLayer(layer_from, layer_idx_from, layer_to, context.position())
+        );
+    });
+
     // //
     // let api_object_stack = Rc::clone(&object_stack);
     // engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
@@ -603,12 +615,18 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
 
 //
 fn handle_post_runtime_tasks(post_runtime_tasks: Rc<RefCell<Vec<PostRuntimeTask>>>,
-object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>) {
+object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>, cur_scene: Rc<RefCell<EntityInstance>>,
+fn_name: &str, ent_row: EntityRow) -> Result<(), (EntityRow, Box<EvalAltResult>)> {
     //
-    while !post_runtime_tasks.borrow().is_empty() {
+    post_runtime_tasks.borrow_mut().reverse();
+    //
+    loop {
         //
-        match post_runtime_tasks.borrow_mut().remove(0) {
-            PostRuntimeTask::ActivateObject(idx) => {
+        match post_runtime_tasks.borrow_mut().pop() {
+            //
+            None => { break Ok(()); },
+            //
+            Some(PostRuntimeTask::ActivateObject(idx)) => {
                 //
                 let object_reference = Rc::clone( 
                     object_stack.borrow().get(idx as usize).unwrap()
@@ -620,7 +638,8 @@ object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>) {
                 //
                 object_borrow.scope.push_constant("ACTIVE", true);
             },
-            PostRuntimeTask::DeactivateObject(idx) => {
+            //
+            Some(PostRuntimeTask::DeactivateObject(idx)) => {
                 //
                 let object_reference = Rc::clone( 
                     object_stack.borrow().get(idx as usize).unwrap()
@@ -631,6 +650,88 @@ object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>) {
                 let _ = object_borrow.scope.remove::<bool>("ACTIVE");
                 //
                 object_borrow.scope.push_constant("ACTIVE", false);
+            },
+            //
+            Some(PostRuntimeTask::InstanceSwitchLayer(layer_from, layer_idx_from, layer_to, position)) => {
+                //
+                let mut cur_scene_borrow = cur_scene.borrow_mut();
+                //
+                let mut cur_scene_map = cur_scene_borrow.scope.get_value::<entity::Scene>("Scene")
+                .expect("The 'Scene' map should have been created in this scene's scope by the time it was created");
+                //
+                let moving_stack_index: usize;
+                //
+                let to_update_stack_index: usize;
+                //
+                let new_layer_idx: rhai::INT;
+                //
+                if let Some(layer) = cur_scene_map.layers.get_mut(layer_from as usize) {
+                    if let Some(_) = layer.instances.get(layer_idx_from as usize) {
+                        //
+                        to_update_stack_index = layer.instances.last().unwrap().clone() as usize;
+                        //
+                        moving_stack_index = layer.instances.swap_remove(layer_idx_from as usize) as usize;
+                    } else {
+                        //
+                        break Err(
+                            (ent_row, Box::new(EvalAltResult::ErrorInFunctionCall(String::from(fn_name), String::new(),
+                            format!("Argument 'layer_idx_from' was out of bounds in call to 'instance_switch_layer'.")
+                            .into(), position)))
+                        );
+                    }
+                } else {
+                    //
+                    break Err(
+                        (ent_row, Box::new(EvalAltResult::ErrorInFunctionCall(String::from(fn_name), String::new(),
+                        format!("Argument 'layer_from' was out of bounds in call to 'instance_switch_layer'.")
+                        .into(), position)))
+                    );
+                }
+                //
+                if let Some(layer) = cur_scene_map.layers.get_mut(layer_to as usize) {
+                    //
+                    layer.instances.push(moving_stack_index as u32);
+                    //
+                    new_layer_idx = layer.instances.len() as rhai::INT;
+                } else {
+                    //
+                    break Err(
+                        (ent_row, Box::new(EvalAltResult::ErrorInFunctionCall(String::from(fn_name), String::new(),
+                        format!("Argument 'layer_to' was out of bounds in call to 'instance_switch_layer'.")
+                        .into(), position)))
+                    );
+                }
+
+                //
+                let moving_object_reference = Rc::clone( 
+                    object_stack.borrow().get(moving_stack_index)
+                    .expect("The indexes specified in every element of every layer's instances array should be correct.")
+                );
+                //
+                if moving_stack_index != to_update_stack_index {
+                    //
+                    let to_update_object_reference = Rc::clone( 
+                        object_stack.borrow().get(to_update_stack_index)
+                        .expect("The indexes specified in every element of every layer's instances array should be correct.")
+                    );
+                    //
+                    let mut to_update_object_borrow = to_update_object_reference.borrow_mut(); 
+                    //
+                    let _ = to_update_object_borrow.scope.remove::<rhai::INT>("LAYER_INDEX");
+                    //
+                    to_update_object_borrow.scope.push_constant("LAYER_INDEX", layer_idx_from);
+                }
+                //
+                let mut moving_object_borrow = moving_object_reference.borrow_mut(); 
+                //
+                let _ = moving_object_borrow.scope.remove::<rhai::INT>("LAYER");
+                //
+                let _ = moving_object_borrow.scope.push_constant("LAYER", layer_to)
+                .remove::<rhai::INT>("LAYER_INDEX");
+                //
+                moving_object_borrow.scope.push_constant("LAYER_INDEX", new_layer_idx);
+                //
+                cur_scene_borrow.scope.set_or_push("Scene", cur_scene_map);
             }
         }
     }
@@ -640,16 +741,24 @@ object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>) {
 fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine, manager: &Rc<RefCell<EntityInstance>>, 
 scene: &Rc<RefCell<EntityInstance>>, object_stack: &Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
 post_runtime_tasks: &Rc<RefCell<Vec<PostRuntimeTask>>>) -> Result<(), (EntityRow, Box<EvalAltResult>)> {
+    //
+    let mut cur_row: EntityRow;
     // Call the function on the state manager instance.
     manager.borrow_mut().call_fn(engine, name, args.clone())?;
     //
+    cur_row = manager.borrow().definition.row.clone();
+    //
     handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
-    Rc::clone(&object_stack));
+    Rc::clone(&object_stack), Rc::clone(&scene),
+    &name, cur_row)?;
     //
     scene.borrow_mut().call_fn(engine, name, args.clone())?;
     //
+    cur_row = scene.borrow().definition.row.clone();
+    //
     handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
-    Rc::clone(&object_stack));
+    Rc::clone(&object_stack), Rc::clone(&scene),
+    &name, cur_row)?;
     //
     let mut i = 0_usize;
     loop {
@@ -665,10 +774,13 @@ post_runtime_tasks: &Rc<RefCell<Vec<PostRuntimeTask>>>) -> Result<(), (EntityRow
         .expect("The 'ACTIVE' constant should have been created in this object's scope by the time it was created") {
             //
             object.borrow_mut().call_fn(engine, name, args.clone())?;
+            //
+            cur_row = object.borrow().definition.row.clone();
+            //
+            handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
+            Rc::clone(&object_stack), Rc::clone(&scene),
+            &name, cur_row)?;
         }
-        //
-        handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
-        Rc::clone(&object_stack));
         //
         i += 1;
     }

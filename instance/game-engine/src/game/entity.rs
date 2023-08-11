@@ -91,15 +91,15 @@ pub fn create_object(config: &Map,  init_x: f64, init_y: f64) -> Object {
         //
         collision_boxes_vec.push( CollisionBox {
             point1: PositionPoint { 
-                x: rhai_convert::dynamic_to_f64(&map["x1"])
+                x: rhai_convert::dynamic_to_number(&map["x1"])
                 .expect("Every collision box should contain an float 'x1' attribute."), 
-                y: rhai_convert::dynamic_to_f64(&map["y1"])
+                y: rhai_convert::dynamic_to_number(&map["y1"])
                 .expect("Every collision box should contain an float 'y1' attribute.") 
             },
             point2: PositionPoint { 
-                x: rhai_convert::dynamic_to_f64(&map["x2"])
+                x: rhai_convert::dynamic_to_number(&map["x2"])
                 .expect("Every collision box should contain an float 'x2' attribute."), 
-                y: rhai_convert::dynamic_to_f64(&map["y2"])
+                y: rhai_convert::dynamic_to_number(&map["y2"])
                 .expect("Every collision box should contain an float 'y2' attribute.") 
             }
         } );
@@ -110,9 +110,9 @@ pub fn create_object(config: &Map,  init_x: f64, init_y: f64) -> Object {
         position: PositionPoint { x: init_x, y: init_y },
         //
         origin_offset: PositionPoint { 
-            x: rhai_convert::dynamic_to_f64(&config["origin-offset"].clone_cast::<Map>()["x"])
+            x: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
             .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes."), 
-            y: rhai_convert::dynamic_to_f64(&config["origin-offset"].clone_cast::<Map>()["y"])
+            y: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
             .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.") 
         },
         //
@@ -238,9 +238,9 @@ pub fn create_scene(config: &Map) -> Scene {
                 .expect(concat!("Every member in the 'layers' array of a scene's config should",
                 " have a 'instances' array, which should only have object-like members.")) {
                     //
-                    instances_vec.push( rhai_convert::dynamic_to_u32(&index)
+                    instances_vec.push( rhai_convert::dynamic_to_number(&index)
                         .expect(concat!("Every member in an 'instances' array of a 'layers' array",
-                        " of a scene's config should contain an integer 'index' attribute."))
+                        " of a scene's config should contain an integer 'index' attribute.")) as u32
                     );
                 }
                 instances_vec
@@ -250,11 +250,11 @@ pub fn create_scene(config: &Map) -> Scene {
     //
     Scene {
         //
-        width: rhai_convert::dynamic_to_u64(&config["width"])
-        .expect("Every scene's config should contain an integer 'width' attribute."),
+        width: rhai_convert::dynamic_to_number(&config["width"])
+        .expect("Every scene's config should contain an integer 'width' attribute.") as u64,
         //
-        height: rhai_convert::dynamic_to_u64(&config["height"])
-        .expect("Every scene's config should contain an integer 'height' attribute."),
+        height: rhai_convert::dynamic_to_number(&config["height"])
+        .expect("Every scene's config should contain an integer 'height' attribute.") as u64,
         //
         stack_len: config["object-instances"].clone().into_array()
         .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
@@ -268,9 +268,9 @@ pub fn create_scene(config: &Map) -> Scene {
         camera: Camera {
             //
             position: PositionPoint { 
-                x: rhai_convert::dynamic_to_f64(&config["camera-position"].clone_cast::<Map>()["x"])
+                x: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
                 .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
-                y: rhai_convert::dynamic_to_f64(&config["camera-position"].clone_cast::<Map>()["y"])
+                y: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
                 .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
             }, 
             //
