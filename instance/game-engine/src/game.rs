@@ -604,10 +604,12 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
         );
     });
 
-    // //
-    // let api_object_stack = Rc::clone(&object_stack);
-    // engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
-    // idx: rhai::INT| -> rhai::INT {});
+    //
+    let api_object_stack = Rc::clone(&object_stack);
+    engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
+    idx: rhai::INT, layer: rhai::INT| -> rhai::INT {
+
+    });
 
     // The API is done!
     Ok((engine, state_manager, cur_scene, cur_scene_id, object_stack, post_runtime_tasks))
