@@ -30,12 +30,12 @@ function getBlob(rowid, asText = false) {
 }
 
 
-globalThis.getGameIcon = function() {
-    return getBlob(SQLITE.getRow(project, "metadata", 1).data);
+globalThis.getMetadataData = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "metadata", rowid).data);
 };
 
-globalThis.getGameScript = function() {
-    return getBlob(SQLITE.getRow(project, "metadata", 2).data, true);
+globalThis.getMetadataScript = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "metadata", rowid).data, true);
 };
 
 globalThis.getAssetData = function(rowid) {
@@ -46,13 +46,8 @@ globalThis.getEntityScript = function(rowid) {
     return getBlob(SQLITE.getRow(project, "entity", rowid).script, true);
 };
 
-
-globalThis.getProjectConfig = function() {
-    return getBlob(SQLITE.getRow(project, "metadata", 1).config, true);
-};
-
-globalThis.getGameConfig = function() {
-    return getBlob(SQLITE.getRow(project, "metadata", 2).config, true);
+globalThis.getMetadataConfig = function(rowid) {
+    return getBlob(SQLITE.getRow(project, "metadata", rowid).config, true);
 };
 
 globalThis.getAssetConfig = function(rowid) {

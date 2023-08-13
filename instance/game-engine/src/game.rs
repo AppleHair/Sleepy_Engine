@@ -11,78 +11,90 @@ mod entity;
 mod rhai_convert;
 
 //
-pub enum PostRuntimeTask {
-    DeactivateObject(rhai::INT),
-    ActivateObject(rhai::INT),
-    InstanceSwitchLayer(rhai::INT, rhai::INT, rhai::INT, rhai::Position),
+#[derive(Clone, Copy)]
+pub enum TableRow {
+    Metadata(u8),
+    Entity(u32, u8),
+    Asset(u32, u8),
 }
 
-//
-#[derive(Clone)]
-pub enum EntityRow {
-    Manager,
-    Scene(u32),
-    Object(u32),
+impl TableRow {
+    fn to_err_string(&self, err: &str) -> String {
+        let self_str = match self.clone() {
+            //
+            Self::Metadata(1) => String::from("\non 'Project Configurations'."),
+            //
+            Self::Metadata(2) => String::from("\non 'State Manager'."),
+            //
+            Self::Entity(id, kind) => format!("\non the '{}' {kind_str}.", webapp::getEntityName(id.clone()),
+            kind_str = match kind { 1 => "object", 2 => "scene", _ => "entity" }),
+            //
+            Self::Asset(id, kind) => format!("\non the '{}' {kind_str}.", webapp::getEntityName(id.clone()),
+            kind_str = match kind { 1 => "sprite", 2 => "audio", 3 => "font", _ => "asset" }),
+            //
+            _ => String::new(),
+        };
+        format!("{}{}", err, self_str)
+    }
 }
 
 //
 struct EntityDefinition {
-    row: EntityRow,
-    script: AST,
+    row: TableRow,
+    ast: AST,
     config: Map,
 }
 
 //
 impl EntityDefinition {
     //
-    fn new(engine: &Engine, row: EntityRow) -> Result<Self, (EntityRow, Box<EvalAltResult>)> {
+    fn new(engine: &Engine, row: TableRow) -> Result<Self, String> {
         //
         let ast = engine.compile(&match row {
-            EntityRow::Manager => webapp::getGameScript(),
-            EntityRow::Object(id) => webapp::getEntityScript(id),
-            EntityRow::Scene(id) => webapp::getEntityScript(id),
+            TableRow::Metadata(id) => webapp::getMetadataScript(id),
+            TableRow::Entity(id, _) => webapp::getEntityScript(id),
+            TableRow::Asset(_, _) => { return Err("Can't define an asset as an entity.".into()) },
         });
         //
-        if ast.is_err() {
+        if let Some(err) = ast.as_ref().err() {
             //
-            return Err((row, ast.unwrap_err().into()));
+            return Err(row.to_err_string(&err.to_string()));
         }
         //
         let json = engine.parse_json(&match row {
-            EntityRow::Manager => webapp::getGameConfig(),
-            EntityRow::Object(id) => webapp::getEntityConfig(id),
-            EntityRow::Scene(id) => webapp::getEntityConfig(id),
+            TableRow::Metadata(id) => webapp::getMetadataConfig(id),
+            TableRow::Entity(id, _) => webapp::getEntityConfig(id),
+            TableRow::Asset(_, _) => { return Err("Can't define an asset as an entity.".into()) },
         }, false);
         //
-        if json.is_err() {
+        if let Some(err) = json.as_ref().err() {
             //
-            return Err((row, json.unwrap_err()));
+            return Err(row.to_err_string(&err.to_string()));
         }
         //
-        let def = Self {
-            //
-            row,
-            //
-            script: ast.expect("This Err should have been caught by this function beforehand"),
-            //
-            config: json.expect("This Err should have been caught by this function beforehand"),
-        };
-        //
-        Ok(def)
+        Ok(
+            Self {
+                //
+                row,
+                //
+                ast: ast.expect("This Err should have been caught by this function beforehand"),
+                //
+                config: json.expect("This Err should have been caught by this function beforehand"),
+            }
+        )
     }
 }
 
 //
-struct EntityInstance {
+struct EntityScript {
     definition: Rc<EntityDefinition>,
     scope: Scope<'static>,
 }
 
 //
-impl EntityInstance {
+impl EntityScript {
     //
-    fn new(engine: &Engine, def: Rc<EntityDefinition>, 
-    obj_idx: Option<(usize, f64, f64)>) -> Result<Self, (EntityRow, Box<EvalAltResult>)> {
+    fn new(engine: &Engine, def: Rc<EntityDefinition>) -> Result<Self, String> {
         //
         let mut inst = Self {
             //
@@ -91,56 +103,163 @@ impl EntityInstance {
             scope: Scope::new(),
         };
         //
-        match (inst.definition.row.to_owned(), obj_idx) {
+        if let Some(err) = engine.run_ast_with_scope(&mut inst.scope,
+        &inst.definition.ast).err() {
             //
-            (EntityRow::Scene(_), None) => {
-                //
-                inst.scope.push("Scene", entity::create_scene(&inst.definition.config));
-            },
-            //
-            (EntityRow::Object(_), Some((idx, init_x, init_y))) => {
-                //
-                inst.scope.push_constant("INDEX", idx as rhai::INT);
-                //
-                inst.scope.push_constant("ACTIVE", true);
-                //
-                inst.scope.push("Object", entity::create_object(&inst.definition.config, init_x, init_y));
-            }
-            //
-            (EntityRow::Manager, None) => {},
-            //
-            _ => { return Err((inst.definition.row.to_owned(), "Couldn't find the right resources for the entity.".into()))},
-        }
-        //
-        let err = engine.run_ast_with_scope(&mut inst.scope, &inst.definition.script).err();
-        //
-        if err.is_some() {
-            //
-            return Err((inst.definition.row.to_owned(), err.unwrap()));
+            return Err(inst.definition.row.to_err_string(&err.to_string()));
         }
         //
         Ok(inst)
     }
 
     //
-    fn call_fn(&mut self, engine: &Engine, name: &str, args: impl rhai::FuncArgs) -> Result<(), (EntityRow, Box<EvalAltResult>)> 
-    {
+    fn recycle(&mut self, engine: &Engine, def: Rc<EntityDefinition>) -> Result<(), String> {
         //
-        let err = engine.call_fn::<()>(&mut self.scope, &self.definition.script, name, args).err();
+        self.definition = def;
         //
-        if err.is_some() {
+        self.scope.clear();
+        //
+        if let Some(err) = engine.run_ast_with_scope(&mut self.scope,
+        &self.definition.ast).err() {
             //
-            return Err((self.definition.row.to_owned(), err.unwrap()));
+            return Err(self.definition.row.to_err_string(&err.to_string()));
+        }
+        //
+        Ok(())
+    }
+
+    //
+    fn call_fn(&mut self, engine: &Engine, name: &str, args: impl rhai::FuncArgs) -> Result<(), String> {
+        //
+        if let Some(err) = engine.call_fn::<()>(&mut self.scope,
+        &self.definition.ast, name, args).err() {
+            //
+            return Err(self.definition.row.to_err_string(&err.to_string()));
         }
         //
         Ok(())
     }
 }
 
+struct State(Rc<RefCell<Dynamic>>);
+struct Scene(Rc<RefCell<Dynamic>>);
+struct Object(Rc<RefCell<Dynamic>>);
+
+struct Entity<T> {
+    map: T,
+    script: Rc<RefCell<EntityScript>>,
+}
+
+impl Entity<State> {
+    fn new_state(engine: &Engine, def: Rc<EntityDefinition>) -> Result<Self, String> {
+        //
+        let mut script = EntityScript::new(&engine, def)?;
+        //
+        match script.definition.row {
+            //
+            TableRow::Metadata(2) => {
+                //
+                let shared_map: State = State(Rc::new(RefCell::new(Dynamic::from_map(Map::default()))));
+                //
+                if let Some(map) = script.scope.remove::<Map>("State") {
+                    let _ = shared_map.0.replace(Dynamic::from_map(map));
+                }
+                //
+                script.scope.push_dynamic("State", Dynamic::from(Rc::clone(&shared_map.0)));
+                //
+                Ok(Self {
+                    map: shared_map,
+                    script: Rc::new(RefCell::new(script)),
+                })
+            },
+            //
+            _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create the",
+            " state manager with the wrong definition.")))
+        }
+    }
+}
+
+impl Entity<Scene> {
+    fn new_scene(engine: &Engine, def: Rc<EntityDefinition>) -> Result<Self, String> {
+        //
+        let mut script = EntityScript::new(&engine, def)?;
+        //
+        match script.definition.row {
+            //
+            TableRow::Entity(_, 2) => {
+                //
+                let shared_map: Scene = Scene(Rc::new(RefCell::new(
+                    Dynamic::from(entity::Scene::new(&script.definition.config))
+                )));
+                //
+                script.scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&shared_map.0)));
+                //
+                Ok(Self {
+                    map: shared_map,
+                    script: Rc::new(RefCell::new(script)),
+                })
+            },
+            //
+            _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create a",
+            " scene with the wrong definition.")))
+        }
+    }
+}
+
+impl Entity<Object> {
+    //
+    fn new_object(engine: &Engine, def: Rc<EntityDefinition>,
+    object_info: (u32, usize, usize, f64, f64)) -> Result<Self, String> {
+        //
+        let mut script = EntityScript::new(&engine, def)?;
+        //
+        match script.definition.row {
+            //
+            TableRow::Entity(_, 1) => {
+                //
+                let shared_map: Object;
+                //
+                shared_map = Object(Rc::new(RefCell::new(
+                        Dynamic::from(entity::Object::new(&script.definition.config,
+                        object_info.0, object_info.1,
+                        object_info.2, object_info.3, object_info.4))
+                )));
+                //
+                script.scope.push_dynamic("Object", Dynamic::from(Rc::clone(&shared_map.0)));
+                //
+                Ok(Self {
+                    map: shared_map,
+                    script: Rc::new(RefCell::new(script)),
+                })
+            },
+            //
+            _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create an",
+            " object with the wrong definition.")))
+        }
+    }
+    //
+    fn recycle_object(&self, engine: &Engine, def: Rc<EntityDefinition>,
+    object_info: (usize, usize, f64, f64)) -> Result<(), String> {
+        //
+        let script = Rc::clone(&self.script);
+        //
+        let map = Rc::clone(&self.map.0);
+        //
+        map.borrow_mut().write_lock::<entity::Object>().expect("write_lock cast should succeed")
+        .recycle(&def.config, object_info.0, object_info.1,
+        object_info.2, object_info.3);
+        //
+        script.borrow_mut().recycle(&engine, def)?;
+        //
+        script.borrow_mut().scope.push_dynamic("Object", Dynamic::from(Rc::clone(&map)));
+        //
+        Ok(())
+    }
+}
+
 //
-fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(Engine, Rc<RefCell<EntityInstance>>,
-Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>, Rc<RefCell<Vec<PostRuntimeTask>>>),
-(EntityRow, Box<EvalAltResult>)> {
+fn create_api(entity_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(Engine, Entity<State>,
+Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>), String> {
     // Create an 'Engine'
     let mut engine = Engine::new_raw();
 
@@ -162,6 +281,10 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
           .register_get_set("position", entity::Object::get_position, entity::Object::set_position)
           .register_get("origin_offset", entity::Object::get_origin_offset)
           .register_get("collision_boxes", entity::Object::get_collision_boxes)
+          .register_get("active", entity::Object::get_active)
+          .register_get("index_in_stack", entity::Object::get_index_in_stack)
+          .register_get("index_of_layer", entity::Object::get_index_of_layer)
+          .register_get("index_in_layer", entity::Object::get_index_in_layer)
           .register_fn("to_string", entity::Object::to_string)
           .register_type_with_name::<entity::Camera>("Camera")
           .register_get_set("position", entity::Camera::get_position, entity::Camera::set_position)
@@ -198,230 +321,195 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
     entity_defs.insert(0, 
         Rc::new(
             EntityDefinition::new(&engine, 
-                EntityRow::Manager
+                TableRow::Metadata(2)
             )?
         )
     );
     // Create a new entity instance for the state manager.
     // This instance will borrow its definition and contain
     // the entity's 'Scope'.
-    let state_manager: Rc<RefCell<EntityInstance>> = Rc::new(
-        RefCell::new(
-            EntityInstance::new(&engine, 
-                Rc::clone(
-                    entity_defs.get(&0)
-                    .expect("entity_defs.get(&0) should have had the state manager's definition by now")
-                ), None
-            )?
+    let state_manager = Entity::new_state(&engine, 
+        Rc::clone(
+            entity_defs.get(&0)
+            .expect("entity_defs.get(&0) should have had the state manager's definition by now")
         )
-    );
+    )?;
 
-    // Take the 'State' object map from 
-    // the state manager and turn it into
-    // a shared variable.
-    let state_map = state_manager.borrow_mut().scope.remove::<Dynamic>("State").unwrap_or(Dynamic::UNIT).into_shared();
-    // If it's not a ()
-    if !state_map.is_unit() {
-        // Push it back into the state manager
-        // as a shared object map variable.
-        state_manager.borrow_mut().scope.push("State", state_map.clone());
-        // Register a variable resolver.
-        engine.on_var(move |name, _, context| {
-            match name {
-                // If the name of the
-                // accessed variable is 'State'
-                "State" => {
-                    if context.scope().contains(name) {
-                        // If the variable exists
-                        // in the scope already
-                        // (which means it's the
-                        // state manager's scope)
-                        Ok(None) 
-                    } else {
-                        // Otherwise, return a clone
-                        // of the value of the state map
-                        Ok(Some(state_map.flatten_clone())) 
-                    }
-                },
-                // Otherwise, continue with the normal variable resolution process.
-                _ => Ok(None)
-            }
-        });
-        // Register a variable definition filter.
-        engine.on_def_var(|is_runtime, info, context| {
-            match info.name {
-                // If the name of the
-                // defined variable is 'State'
-                "State" => {
-                    if !context.scope().contains(info.name) {
-                        // If the variable doesn't
-                        // exist in the scope already
-                        // (which means it's not the 
-                        // state manager's scope)
-                        return Err("Can't define State outside the State Manager script.".into());
-                    } else if info.nesting_level > 0 as usize  {
-                        // If the variable is being
-                        // defined outside the global scope
-                        return Err("Can't define State outside the global scope.".into());
-                    } else {
-                        return Ok(true);
-                    } 
-                },
-                // Otherwise, continue with the normal variable definition process,
-                // where script runtime definitions of 'Scene' or 'Object' are forbidden.
-                _ => Ok((info.name != "Scene" && info.name != "Object") || !is_runtime)
-            }
-        });
-    }
+    // Register a variable definition filter.
+    engine.on_def_var(|is_runtime, info, context| {
+        match info.name {
+            // If the name of the
+            // defined variable is 'State'
+            "State" => {
+                if !context.scope().contains(info.name) {
+                    // If the variable doesn't
+                    // exist in the scope already
+                    // (which means it's not the 
+                    // state manager's scope)
+                    return Err("Can't define State outside the State Manager script.".into());
+                } else if info.nesting_level > 0 as usize  {
+                    // If the variable is being
+                    // defined outside the global scope
+                    return Err("Can't define State outside the global scope.".into());
+                } else {
+                    return Ok(true);
+                } 
+            },
+            // Otherwise, continue with the normal variable definition process,
+            // where script runtime definitions of 'Scene' or 'Object' are forbidden.
+            _ => Ok((info.name != "Scene" && info.name != "Object") || !is_runtime)
+        }
+    });
+    
 
     // Receive the rowid of the initial scene from the the state manager's config
-    let mut cur_scene_id = state_manager.borrow().definition.config["initial-scene"].as_int()
+    let mut cur_scene_id = state_manager.script.borrow().definition.config["initial-scene"].as_int()
     .expect("The value of 'initial-scene' in the state manager's config should be an integer") as u32;
     //
     entity_defs.insert(cur_scene_id, 
         Rc::new(
             EntityDefinition::new(&engine, 
-                EntityRow::Scene(cur_scene_id)
+                TableRow::Entity(cur_scene_id, 2)
             )?
         )
     );
     //
-    let cur_scene = Rc::new(
-        RefCell::new(
-            EntityInstance::new(&engine, 
-                Rc::clone(
-                    entity_defs.get(&cur_scene_id)
-                    .expect("entity_defs.get(&scene_id) should have had the scene's definition by now")
-                ), None
-            )?
+    let cur_scene = Entity::new_scene(&engine, 
+        Rc::clone(
+            entity_defs.get(&cur_scene_id)
+            .expect("entity_defs.get(&scene_id) should have had the scene's definition by now")
         )
-    );
+    )?;
     //
-    let object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>> = Rc::new(RefCell::new(Vec::new()));
+    let object_stack: Rc<RefCell<Vec<Entity<Object>>>> = Rc::new(RefCell::new(Vec::new()));
 
     //
-    let mut i = 0_usize;
-    //
-    for inst_info in cur_scene.borrow().definition.config["object-instances"].clone()
-    .into_typed_array::<Map>().expect(concat!("Every object's config should contain a 'object-instances'",
-    " array, which should only have object-like members.")) {
+    {
+        let instances = cur_scene.script.borrow().definition.config["object-instances"].clone()
+        .into_typed_array::<Map>().expect(concat!("Every object's config should contain a 'object-instances'",
+        " array, which should only have object-like members."));
+
         //
-        let inst_id = rhai_convert::dynamic_to_number(&inst_info["id"])
-        .expect("Every instance in the 'object-instances' array of an object's config should contain an integer 'id' attribute.")
-        as u32;
-        let (init_x, init_y) = (
-            rhai_convert::dynamic_to_number(&inst_info["x"])
-            .expect("Every instance in the 'object-instances' array of an object's config should contain an float 'x' attribute."), 
-            rhai_convert::dynamic_to_number(&inst_info["y"])
-            .expect("Every instance in the 'object-instances' array of an object's config should contain an float 'y' attribute."),
-        );
+        let mut i = 0_usize;
         //
-        entity_defs.insert(inst_id, 
-            Rc::new(
-                EntityDefinition::new(&engine, 
-                    EntityRow::Object(inst_id)
-                )?
-            )
-        );
-        //
-        object_stack.borrow_mut().push(Rc::new( 
-                RefCell::new(
-                    EntityInstance::new(&engine,
+        for layer in cur_scene.map.0.borrow().read_lock::<entity::Scene>()
+        .expect("read_lock cast should succeed").layers.clone() {
+            //
+            let mut j = 0_usize;
+            //
+            for idx in layer.instances {
+                //
+                let inst_info = instances.get(idx as usize)
+                .expect("The indexes specified in every element of every layer's instances array should be correct.");
+                //
+                let ent_id = rhai_convert::dynamic_to_number(&inst_info["id"])
+                .expect(concat!("Every instance in the 'object-instances' array of an object's",
+                " config should contain an integer 'id' attribute.")) as u32;
+                let (init_x, init_y) = (
+                    rhai_convert::dynamic_to_number(&inst_info["x"])
+                    .expect(concat!("Every instance in the 'object-instances' array of an object's",
+                    " config should contain an float 'x' attribute.")), 
+                    rhai_convert::dynamic_to_number(&inst_info["y"])
+                    .expect(concat!("Every instance in the 'object-instances' array of an object's",
+                    " config should contain an float 'y' attribute.")),
+                );
+                //
+                if !entity_defs.contains_key(&ent_id) {
+                    //
+                    entity_defs.insert(ent_id, 
+                        Rc::new(
+                            EntityDefinition::new(&engine, 
+                                TableRow::Entity(ent_id, 1)
+                            )?
+                        )
+                    );
+                }
+                //
+                object_stack.borrow_mut().push(
+                    Entity::new_object(&engine,
                         Rc::clone(
-                            entity_defs.get(&inst_id)
+                            entity_defs.get(&ent_id)
                             .expect("entity_defs.get(&inst_id_u32) should have had the object's definition by now")
-                        ), Some((i, init_x, init_y))
+                        ), (idx, i, j, init_x, init_y)
                     )?
-                )
-            )
-        );
-        //
-        i += 1;
+                );
+                //
+                j += 1;
+            }
+            //
+            i += 1;
+        }
     }
 
-    //
-    i = 0_usize;
-    //
-    for layer in cur_scene.borrow().scope.get_value::<entity::Scene>("Scene")
-    .expect("The Scene map should have been created in this scene's scope by the time it was created")
-    .layers {
-        //
-        let mut j: rhai::INT = 0;
-        //
-        for idx in layer.instances {
-            //
-            Rc::clone(object_stack.borrow().get(idx as usize).unwrap())
-            .borrow_mut().scope.push_constant("LAYER", i as rhai::INT)
-            .push_constant("LAYER_INDEX", j);
-            //
-            j += 1;
+    let api_state_map = Rc::clone(&state_manager.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    // Register a variable resolver.
+    engine.on_var(move |name, _, context| {
+        match name {
+            // If the name of the
+            // accessed variable is 'State'
+            "State" => {
+                if context.scope().contains(name) {
+                    // If the variable exists
+                    // in the scope already
+                    // (which means it's the
+                    // state manager's scope)
+                    Ok(None) 
+                } else {
+                    // Otherwise, return a clone
+                    // of the value of the state map
+                    Ok(Some(api_state_map.borrow().flatten_clone())) 
+                }
+            },
+            "Scene" => {
+                if context.scope().contains(name) {
+                    // If the variable exists
+                    // in the scope already
+                    // (which means it's the
+                    // state manager's scope)
+                    Ok(None) 
+                } else {
+                    // Otherwise, return a clone
+                    // of the value of the state map
+                    Ok(Some(api_scene_map.borrow().flatten_clone()))
+                }
+            },
+            // Otherwise, continue with the normal variable resolution process.
+            _ => Ok(None)
         }
-        //
-        i += 1;
-    }
-    
-    //
-    let post_runtime_tasks: Rc<RefCell<Vec<PostRuntimeTask>>> = Rc::new(RefCell::new(Vec::new()));
-
-    // Register API closures, which need to 
-    // capture the game-loop's environment
-    let api_cur_scene = Rc::clone(&cur_scene);
-    engine.register_fn("get_cur_scene", move || -> Result<entity::Scene, Box<EvalAltResult>> {
-        //
-        let cur_scene_borrow = api_cur_scene.try_borrow();
-        //
-        if cur_scene_borrow.is_err() {
-            //
-            return Err(concat!("Can't use the 'get_cur_scene' function inside a scene",
-            " script! Note: Use the 'Scene' map instead.").into());
-        }
-        //
-        Ok(cur_scene_borrow.unwrap().scope.get_value::<entity::Scene>("Scene")
-        .expect("The 'Scene' map should have been created in this scene's scope by the time it was created"))
     });
 
     //
-    let api_cur_scene = Rc::clone(&cur_scene);
+    let api_cur_scene_script = Rc::clone(&cur_scene.script);
     engine.register_fn("is_cur_scene", move |name: &str| -> Result<bool, Box<EvalAltResult>> {
         //
-        let cur_scene_borrow = api_cur_scene.try_borrow();
-        //
-        if cur_scene_borrow.is_err() {
+        if let Ok(borrow) = api_cur_scene_script.try_borrow() {
             //
-            return Err(concat!("Can't use the 'is_cur_scene' function inside a scene",
+            Ok(if let TableRow::Entity(id,2) = borrow.definition.row {
+                //
+                webapp::getEntityName(id) == name
+            } else { false })
+        } else {
+            //
+            Err(concat!("Can't use the 'is_cur_scene' function inside a scene",
             " script! Note: This script only runs when its scene is the current scene,",
-            " so you don't need to use this function inside this script.").into());
+            " so you don't need to use this function inside this script.").into())
         }
-        //
-        Ok(if let EntityRow::Scene(id) = cur_scene_borrow.unwrap().definition.row {
-            webapp::getEntityName(id) == name
-        } else { false })
     });
-
     //
     let api_object_stack = Rc::clone(&object_stack);
     engine.register_fn("get_object", move |context: rhai::NativeCallContext,
     idx: rhai::INT| -> Result<entity::Object, Box<EvalAltResult>> {
         //
-        if idx >= (api_object_stack.borrow().len() as rhai::INT) {
+        let object_stack_borrow = api_object_stack.borrow();
+        //
+        if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
-            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_object_stack.borrow().len(), idx, context.position())));
-        }
-        //
-        let object_reference = Rc::clone( 
-            api_object_stack.borrow().get(idx as usize).unwrap()
-        );
-        //
-        if object_reference.try_borrow().is_err() {
+            Ok(entity.map.0.borrow().clone_cast::<entity::Object>())
+        } else {
             //
-            return Err(concat!("Can't use the 'get_object' function to get values from the current script's",
-            " object! Note: Use the 'Object' map instead.").into());
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
         }
-        //
-        let object = object_reference.borrow().scope.get_value::<entity::Object>("Object")
-        .expect("The 'Object' map should have been created in this object's scope by the time it was created");
-        //
-        Ok(object)
     });
     //
     let api_object_stack = Rc::clone(&object_stack);
@@ -433,133 +521,92 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
     engine.register_fn("object_is_active", move |context: rhai::NativeCallContext, 
     idx: rhai::INT| -> Result<bool, Box<EvalAltResult>> {
         //
-        if idx >= (api_object_stack.borrow().len() as rhai::INT) {
+        let object_stack_borrow = api_object_stack.borrow();
+        //
+        if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
-            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_object_stack.borrow().len(), idx, context.position())));
-        }
-        //
-        let object_reference = Rc::clone( 
-            api_object_stack.borrow().get(idx as usize).unwrap()
-        );
-        //
-        if object_reference.try_borrow().is_err() {
+            Ok(entity.map.0.borrow().read_lock::<entity::Object>()
+            .expect("read_lock cast should succeed").active)
+        } else {
             //
-            return Err(concat!("Can't use the 'object_is_active' function to get values", 
-            " from the current script's object! Note: Use the 'ACTIVE' constant instead.").into());
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
         }
-        //
-        let active = object_reference.borrow().scope.get_value::<bool>("ACTIVE")
-        .expect("The 'ACTIVE' constant should have been created in this object's scope by the time it was created");
-        //
-        Ok(active)
     });
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_post_runtime_tasks = Rc::clone(&post_runtime_tasks);
     engine.register_fn("activate_object", move |context: rhai::NativeCallContext,
-    idx: rhai::INT| -> Result<bool, Box<EvalAltResult>> {
+    idx: rhai::INT| -> Result<(), Box<EvalAltResult>> {
         //
-        if idx >= (api_object_stack.borrow().len() as rhai::INT) {
+        let object_stack_borrow = api_object_stack.borrow();
+        //
+        if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
-            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_object_stack.borrow().len(), idx, context.position())));
+            entity.map.0.borrow_mut().write_lock::<entity::Object>()
+            .expect("read_lock cast should succeed").active = true;
+            //
+            Ok(())
+        } else {
+            //
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
         }
-        //
-        let object_reference = Rc::clone( 
-            api_object_stack.borrow().get(idx as usize).unwrap()
-        );
-        //
-        if object_reference.try_borrow_mut().is_err() {
-            //
-            api_post_runtime_tasks.borrow_mut().push(PostRuntimeTask::ActivateObject(idx));
-            //
-            return Ok(false)
-        }
-        //
-        let mut object_borrow = object_reference.borrow_mut();
-        //
-        let _ = object_borrow.scope.remove::<bool>("ACTIVE");
-        //
-        object_borrow.scope.push_constant("ACTIVE", true);
-        //
-        Ok(true)
     });
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_post_runtime_tasks = Rc::clone(&post_runtime_tasks);
     engine.register_fn("deactivate_object", move |context: rhai::NativeCallContext,
-    idx: rhai::INT| -> Result<bool, Box<EvalAltResult>> {
+    idx: rhai::INT| -> Result<(), Box<EvalAltResult>> {
         //
-        if idx >= (api_object_stack.borrow().len() as rhai::INT) {
+        let object_stack_borrow = api_object_stack.borrow();
+        //
+        if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
-            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_object_stack.borrow().len(), idx, context.position())));
+            entity.map.0.borrow_mut().write_lock::<entity::Object>()
+            .expect("read_lock cast should succeed").active = false;
+            //
+            Ok(())
+        } else {
+            //
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
         }
-        //
-        let object_reference = Rc::clone( 
-            api_object_stack.borrow().get(idx as usize).unwrap()
-        );
-        //
-        if object_reference.try_borrow_mut().is_err() {
-            //
-            api_post_runtime_tasks.borrow_mut().push(PostRuntimeTask::DeactivateObject(idx));
-            //
-            return Ok(false)
-        }
-        //
-        let mut object_borrow = object_reference.borrow_mut();
-        //
-        let _ = object_borrow.scope.remove::<bool>("ACTIVE");
-        //
-        object_borrow.scope.push_constant("ACTIVE", false);
-        //
-        Ok(true)
     });
 
     //
-    let api_state_manager = Rc::clone(&state_manager);
+    let api_state_manager_script = Rc::clone(&state_manager.script);
     engine.register_fn("message_state_manager", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
-        if api_state_manager.try_borrow_mut().is_err() {
+        if let Ok(mut borrow) = api_state_manager_script.try_borrow_mut() {
             //
-            return Err(concat!("Can't use the 'message_state_manager' function while the state manager's script is running",
+            if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
+                //
+                Err(format!("{}\nas a result of a call to 'message_state_manager'", err).into())
+            } else { Ok(()) }
+        } else {
+            //
+            Err(concat!("Can't use the 'message_state_manager' function while the state manager's script is running",
             " (is handling another callback). Note: This might have happened because you tried to message yourself,",
-            " or messaged an entity, which tried to message you back in the scope of that same message.").into());
+            " or messaged an entity, which tried to message you back in the scope of that same message.").into())
         }
-        //
-        let err = api_state_manager.borrow_mut().call_fn(context.engine(), 
-        &format!("message_{}", name), args).err();
-        //
-        if let Some((EntityRow::Manager, evalres)) = err {
-            return Err(format!("{}\non the script of 'State Manager',\nas a result of a call to 'message_state_manager'",
-            evalres.to_string()).into());
-        }
-        //
-        Ok(())
     });
 
     //
-    let api_cur_scene = Rc::clone(&cur_scene);
+    let api_cur_scene_script = Rc::clone(&cur_scene.script);
     engine.register_fn("message_cur_scene", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
-        if api_cur_scene.try_borrow_mut().is_err() {
+        if let Ok(mut borrow) = api_cur_scene_script.try_borrow_mut() {
             //
-            return Err(concat!("Can't use the 'message_cur_scene' function while the current scene's script is running",
+            if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
+                //
+                Err(format!("{}\nas a result of a call to 'message_cur_scene'", err).into())
+            } else { Ok(()) }
+        } else {
+            //
+            Err(concat!("Can't use the 'message_cur_scene' function while the current scene's script is running",
             " (is handling another callback). Note: This might have happened because you tried to message yourself,",
-            " or messaged an entity, which tried to message you back in the scope of that same message.").into());
+            " or messaged an entity, which tried to message you back in the scope of that same message.").into())
         }
-        //
-        let err = api_cur_scene.borrow_mut().call_fn(context.engine(), 
-        &format!("message_{}", name), args).err();
-        //
-        if let Some((EntityRow::Scene(id), evalres)) = err {
-            return Err(format!("{}\non the script of the '{name}' scene,\nas a result of a call to 'message_cur_scene'",
-            evalres.to_string(), name = webapp::getEntityName(id)).into());
-        }
-        //
-        Ok(())
     });
 
     //
@@ -567,200 +614,246 @@ Rc<RefCell<EntityInstance>>, u32, Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
     engine.register_fn("message_object", move |context: rhai::NativeCallContext, idx: rhai::INT, 
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
-        if idx >= (api_object_stack.borrow().len() as rhai::INT) {
+        let object_stack_borrow = api_object_stack.borrow();
+        //
+        if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
-            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_object_stack.borrow().len(), idx, context.position())));
-        }
-        //
-        let object_reference = Rc::clone( 
-            api_object_stack.borrow().get(idx as usize).unwrap()
-        );
-        //
-        if object_reference.try_borrow_mut().is_err() {
+            if let Ok(mut borrow) = entity.script.try_borrow_mut() {
+                //
+                if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
+                    //
+                    Err(format!("{}\nas a result of a call to 'message_object'", err).into())
+                } else { Ok(()) }
+            } else {
+                //
+                Err(concat!("Can't use the 'message_object' function while that object's script is running",
+                " (is handling another callback). Note: This might have happened because you tried to message yourself,",
+                " or messaged an entity, which tried to message you back in the scope of that same message.").into())
+            }
+        } else {
             //
-            return Err(concat!("Can't use the 'message_object' function while that object's script is running",
-            " (is handling another callback). Note: This might have happened because you tried to message yourself,",
-            " or messaged an entity, which tried to message you back in the scope of that same message.").into());
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
+        }
+    });
+
+    //
+    let api_object_stack = Rc::clone(&object_stack);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    engine.register_fn("instance_switch_layer", move |layer_from: rhai::INT, 
+    layer_idx_from: rhai::INT, layer_to: rhai::INT| -> Result<(), Box<EvalAltResult>> {
+        //
+        let object_stack_borrow = api_object_stack.borrow();
+        //
+        let mut scene_map_borrow = api_scene_map.borrow_mut();
+        //
+        let moving_stack_index: usize;
+        //
+        let to_update_stack_index: usize;
+        //
+        let new_layer_idx: rhai::INT;
+        //
+        if scene_map_borrow.read_lock::<entity::Scene>()
+        .expect("read_lock cast should succeed").layers.get(layer_to as usize).is_none() {
+            //
+            let info = "Argument 'layer_to' was out of bounds in call to 'instance_switch_layer'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on 'Scene.layers', when it only had {} elements.",
+            info, layer_to, scene_map_borrow.read_lock::<entity::Scene>()
+            .expect("read_lock cast should succeed").layers.len());
+            //
+            return Err(full_s.into());
         }
         //
-        let err = object_reference.borrow_mut().call_fn(context.engine(), 
-        &format!("message_{}", name), args).err();
-        //
-        if let Some((EntityRow::Object(id), evalres)) = err {
-            return Err(format!("{}\non the script of the '{name}' object,\nas a result of a call to 'message_object'",
-            evalres.to_string(), name = webapp::getEntityName(id)).into());
+        if scene_map_borrow.write_lock::<entity::Scene>()
+        .expect("write_lock cast should succeed").layers.get_mut(layer_from as usize).is_some() {
+            //
+            let mut scene_mut = scene_map_borrow.write_lock::<entity::Scene>()
+            .expect("write_lock cast should succeed");
+            //
+            let layer = scene_mut.layers.get_mut(layer_from as usize).unwrap();
+            //
+            if layer.instances.get(layer_idx_from as usize).is_some() {
+                //
+                to_update_stack_index = layer.instances.last().unwrap().clone() as usize;
+                //
+                moving_stack_index = layer.instances.swap_remove(layer_idx_from as usize) as usize;
+            } else {
+                //
+                let info = "Argument 'layer_idx_from' was out of bounds in call to 'instance_switch_layer'.";
+                //
+                let full_s = &format!("{}.\nTried to find index {} on 'Layer.instances', when it only had {} elements.",
+                info, layer_idx_from, layer.instances.len());
+                //
+                return Err(full_s.into());
+            }
+        } else {
+            //
+            let info = "Argument 'layer_from' was out of bounds in call to 'instance_switch_layer'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on 'Scene.layers', when it only had {} elements.",
+            info, layer_from, scene_map_borrow.read_lock::<entity::Scene>()
+            .expect("read_lock cast should succeed").layers.len());
+            //
+            return Err(info.into());
         }
+        //
+        new_layer_idx = scene_map_borrow.read_lock::<entity::Scene>()
+        .expect("read_lock cast should succeed").layers.get(layer_to as usize)
+        .expect("The argument 'layer_to' should be a valid index if it passed the argument check.")
+        .instances.len() as rhai::INT;
+        //
+        scene_map_borrow.write_lock::<entity::Scene>()
+        .expect("read_lock cast should succeed").layers.get_mut(layer_to as usize)
+        .expect("The argument 'layer_to' should be a valid index if it passed the argument check.")
+        .instances.push(moving_stack_index as u32);
+        //
+        let moving_object_map = Rc::clone(&object_stack_borrow.get(moving_stack_index)
+            .expect("The indexes specified in every element of every layer's instances array should be correct.").map.0);
+        //
+        if moving_stack_index != to_update_stack_index {
+            //
+            let to_update_object_map = Rc::clone(&object_stack_borrow.get(to_update_stack_index)
+                .expect("The indexes specified in every element of every layer's instances array should be correct.").map.0);
+            //
+            to_update_object_map.borrow_mut().write_lock::<entity::Object>()
+            .expect("write_lock cast should succeed").index_in_layer = layer_idx_from as usize; 
+        }
+        //
+        let mut moving_object_borrow = moving_object_map.borrow_mut(); 
+        //
+        moving_object_borrow.write_lock::<entity::Object>()
+        .expect("write_lock cast should succeed").index_of_layer = layer_to as usize;
+        //
+        moving_object_borrow.write_lock::<entity::Object>()
+        .expect("write_lock cast should succeed").index_in_layer = new_layer_idx as usize;
         //
         Ok(())
     });
 
     //
-    let api_post_runtime_tasks = Rc::clone(&post_runtime_tasks);
-    engine.register_fn("instance_switch_layer", move |context: rhai::NativeCallContext,
-    layer_from: rhai::INT, layer_idx_from: rhai::INT, layer_to: rhai::INT| {
-        //
-        api_post_runtime_tasks.borrow_mut().push(
-            PostRuntimeTask::InstanceSwitchLayer(layer_from, layer_idx_from, layer_to, context.position())
-        );
-    });
-
-    //
     let api_object_stack = Rc::clone(&object_stack);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
     engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
-    idx: rhai::INT, layer: rhai::INT| -> rhai::INT {
-
+    idx: rhai::INT, layer_to: rhai::INT, init_x: rhai::FLOAT, init_y: rhai::FLOAT| -> Result<rhai::INT, Box<EvalAltResult>> {
+        //
+        let mut object_stack_borrow = api_object_stack.borrow_mut();
+        //
+        let mut scene_map_borrow = api_scene_map.borrow_mut();
+        //
+        let def_reference: Rc<EntityDefinition>;
+        //
+        let new_layer_idx: usize;
+        //
+        if let Some(entity) = object_stack_borrow.get(idx as usize) {
+            //
+            if let Ok(borrow) = entity.script.try_borrow() {
+                //
+                def_reference = Rc::clone(&borrow.definition);
+            } else {
+                //
+                return Err(concat!("Can't create a new object using a reference to an object",
+                " whose script is running (is handling another callback). Note: It's recommended",
+                " to deactivate objects which are used for making other objects, and not use",
+                " 'message_' callbacks with this function, which might need to refer to objects",
+                " involved in the current callback to create new objects.").into());
+            }
+        } else {
+            //
+            let info = "Argument 'idx' was out of bounds in call to 'add_object_to_stack'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
+            info, idx, object_stack_borrow.len());
+            //
+            return Err(full_s.into());
+        }
+        //
+        if let Some(layer) = scene_map_borrow.read_lock::<entity::Scene>()
+        .expect("read_lock cast should succeed").layers.get(layer_to as usize) {
+            //
+            new_layer_idx = layer.instances.len();
+        } else {
+            //
+            let info = "Argument 'layer_to' was out of bounds in call to 'add_object_to_stack'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on 'Scene.layers', when it only had {} elements.",
+            info, layer_to, scene_map_borrow.read_lock::<entity::Scene>()
+            .expect("read_lock cast should succeed").layers.len());
+            //
+            return Err(full_s.into());
+        }
+        //
+        for object_idx in scene_map_borrow.flatten_clone().read_lock::<entity::Scene>()
+        .expect("read_lock cast should succeed").stack_len..object_stack_borrow.len()-1 {
+            //
+            let object = object_stack_borrow.get(object_idx)
+            .expect("Shouldn't be out of bounds (scene_map_borrow.clone().stack_len..object_stack_borrow.len()-1).");
+            //
+            let object_map =  Rc::clone(&object.map.0);
+            //
+            if object_map.borrow().read_lock::<entity::Object>()
+            .expect("read_lock cast should succeed").active == false {
+                //
+                scene_map_borrow.write_lock::<entity::Scene>()
+                .expect("write_lock cast should succeed").layers.get_mut(layer_to as usize)
+                .expect("The argument 'layer_to' should be a valid index if it passed the argument check.")
+                .instances.push(object_map.borrow().read_lock::<entity::Object>()
+                .expect("read_lock cast should succeed").index_in_stack);
+                //
+                scene_map_borrow.write_lock::<entity::Scene>()
+                .expect("write_lock cast should succeed").layers.get_mut(object_map.borrow().read_lock::<entity::Object>()
+                .expect("read_lock cast should succeed").index_of_layer)
+                .expect("The indexes specified in every object map should be correct.")
+                .instances.swap_remove(object_map.borrow().read_lock::<entity::Object>()
+                .expect("read_lock cast should succeed").index_in_layer);
+                //
+                if let Err(err) = object.recycle_object(context.engine(), def_reference,
+                (layer_to as usize, new_layer_idx, init_x as f64, init_y as f64)) {
+                    //
+                    return Err(format!("{}\nas a result of a call to 'add_object_to_stack'", err).into());
+                }
+                //
+                return Ok(object_map.borrow().read_lock::<entity::Object>()
+                .expect("read_lock cast should succeed").index_in_stack as rhai::INT);
+            }
+        }
+        //
+        let index = object_stack_borrow.len() as u32;
+        //
+        scene_map_borrow.write_lock::<entity::Scene>()
+        .expect("write_lock cast should succeed").layers.get_mut(layer_to as usize)
+        .expect("The argument 'layer_to' should be a valid index if it passed the argument check.")
+        .instances.push(index);
+        //
+        object_stack_borrow.push(
+            {
+                //
+                let entity = Entity::new_object(context.engine(),
+                def_reference, (index, layer_to as usize, new_layer_idx, init_x as f64, init_y as f64));
+                //
+                if let Some(err) = entity.as_ref().err() {
+                    //
+                    return Err(format!("{}\nas a result of a call to 'add_object_to_stack'", err).into());
+                }
+                //
+                entity.unwrap()
+            }
+        );
+        //
+        Ok(index as rhai::INT)
     });
 
     // The API is done!
-    Ok((engine, state_manager, cur_scene, cur_scene_id, object_stack, post_runtime_tasks))
+    Ok((engine, state_manager, cur_scene, cur_scene_id, object_stack))
 }
 
 //
-fn handle_post_runtime_tasks(post_runtime_tasks: Rc<RefCell<Vec<PostRuntimeTask>>>,
-object_stack: Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>, cur_scene: Rc<RefCell<EntityInstance>>,
-fn_name: &str, ent_row: EntityRow) -> Result<(), (EntityRow, Box<EvalAltResult>)> {
-    //
-    post_runtime_tasks.borrow_mut().reverse();
-    //
-    loop {
-        //
-        match post_runtime_tasks.borrow_mut().pop() {
-            //
-            None => { break Ok(()); },
-            //
-            Some(PostRuntimeTask::ActivateObject(idx)) => {
-                //
-                let object_reference = Rc::clone( 
-                    object_stack.borrow().get(idx as usize).unwrap()
-                );
-                //
-                let mut object_borrow = object_reference.borrow_mut();
-                //
-                let _ = object_borrow.scope.remove::<bool>("ACTIVE");
-                //
-                object_borrow.scope.push_constant("ACTIVE", true);
-            },
-            //
-            Some(PostRuntimeTask::DeactivateObject(idx)) => {
-                //
-                let object_reference = Rc::clone( 
-                    object_stack.borrow().get(idx as usize).unwrap()
-                );
-                //
-                let mut object_borrow = object_reference.borrow_mut();
-                //
-                let _ = object_borrow.scope.remove::<bool>("ACTIVE");
-                //
-                object_borrow.scope.push_constant("ACTIVE", false);
-            },
-            //
-            Some(PostRuntimeTask::InstanceSwitchLayer(layer_from, layer_idx_from, layer_to, position)) => {
-                //
-                let mut cur_scene_borrow = cur_scene.borrow_mut();
-                //
-                let mut cur_scene_map = cur_scene_borrow.scope.get_value::<entity::Scene>("Scene")
-                .expect("The 'Scene' map should have been created in this scene's scope by the time it was created");
-                //
-                let moving_stack_index: usize;
-                //
-                let to_update_stack_index: usize;
-                //
-                let new_layer_idx: rhai::INT;
-                //
-                if let Some(layer) = cur_scene_map.layers.get_mut(layer_from as usize) {
-                    if let Some(_) = layer.instances.get(layer_idx_from as usize) {
-                        //
-                        to_update_stack_index = layer.instances.last().unwrap().clone() as usize;
-                        //
-                        moving_stack_index = layer.instances.swap_remove(layer_idx_from as usize) as usize;
-                    } else {
-                        //
-                        break Err(
-                            (ent_row, Box::new(EvalAltResult::ErrorInFunctionCall(String::from(fn_name), String::new(),
-                            format!("Argument 'layer_idx_from' was out of bounds in call to 'instance_switch_layer'.")
-                            .into(), position)))
-                        );
-                    }
-                } else {
-                    //
-                    break Err(
-                        (ent_row, Box::new(EvalAltResult::ErrorInFunctionCall(String::from(fn_name), String::new(),
-                        format!("Argument 'layer_from' was out of bounds in call to 'instance_switch_layer'.")
-                        .into(), position)))
-                    );
-                }
-                //
-                if let Some(layer) = cur_scene_map.layers.get_mut(layer_to as usize) {
-                    //
-                    layer.instances.push(moving_stack_index as u32);
-                    //
-                    new_layer_idx = layer.instances.len() as rhai::INT;
-                } else {
-                    //
-                    break Err(
-                        (ent_row, Box::new(EvalAltResult::ErrorInFunctionCall(String::from(fn_name), String::new(),
-                        format!("Argument 'layer_to' was out of bounds in call to 'instance_switch_layer'.")
-                        .into(), position)))
-                    );
-                }
-
-                //
-                let moving_object_reference = Rc::clone( 
-                    object_stack.borrow().get(moving_stack_index)
-                    .expect("The indexes specified in every element of every layer's instances array should be correct.")
-                );
-                //
-                if moving_stack_index != to_update_stack_index {
-                    //
-                    let to_update_object_reference = Rc::clone( 
-                        object_stack.borrow().get(to_update_stack_index)
-                        .expect("The indexes specified in every element of every layer's instances array should be correct.")
-                    );
-                    //
-                    let mut to_update_object_borrow = to_update_object_reference.borrow_mut(); 
-                    //
-                    let _ = to_update_object_borrow.scope.remove::<rhai::INT>("LAYER_INDEX");
-                    //
-                    to_update_object_borrow.scope.push_constant("LAYER_INDEX", layer_idx_from);
-                }
-                //
-                let mut moving_object_borrow = moving_object_reference.borrow_mut(); 
-                //
-                let _ = moving_object_borrow.scope.remove::<rhai::INT>("LAYER");
-                //
-                let _ = moving_object_borrow.scope.push_constant("LAYER", layer_to)
-                .remove::<rhai::INT>("LAYER_INDEX");
-                //
-                moving_object_borrow.scope.push_constant("LAYER_INDEX", new_layer_idx);
-                //
-                cur_scene_borrow.scope.set_or_push("Scene", cur_scene_map);
-            }
-        }
-    }
-}
-
-//
-fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine, manager: &Rc<RefCell<EntityInstance>>, 
-scene: &Rc<RefCell<EntityInstance>>, object_stack: &Rc<RefCell<Vec<Rc<RefCell<EntityInstance>>>>>,
-post_runtime_tasks: &Rc<RefCell<Vec<PostRuntimeTask>>>) -> Result<(), (EntityRow, Box<EvalAltResult>)> {
-    //
-    let mut cur_row: EntityRow;
+fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine, manager: &Rc<RefCell<EntityScript>>, 
+scene: &Rc<RefCell<EntityScript>>, object_stack: &Rc<RefCell<Vec<Entity<Object>>>>)
+ -> Result<(), String> {
     // Call the function on the state manager instance.
     manager.borrow_mut().call_fn(engine, name, args.clone())?;
     //
-    cur_row = manager.borrow().definition.row.clone();
-    //
-    handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
-    Rc::clone(&object_stack), Rc::clone(&scene),
-    &name, cur_row)?;
-    //
     scene.borrow_mut().call_fn(engine, name, args.clone())?;
-    //
-    cur_row = scene.borrow().definition.row.clone();
-    //
-    handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
-    Rc::clone(&object_stack), Rc::clone(&scene),
-    &name, cur_row)?;
     //
     let mut i = 0_usize;
     loop {
@@ -768,42 +861,37 @@ post_runtime_tasks: &Rc<RefCell<Vec<PostRuntimeTask>>>) -> Result<(), (EntityRow
         if i >= object_stack.borrow().len() {
             break;
         }
-        
         //
-        let object = Rc::clone( object_stack.borrow().get(i).unwrap() );
-        //
-        if object.borrow().scope.get_value::<bool>("ACTIVE")
-        .expect("The 'ACTIVE' constant should have been created in this object's scope by the time it was created") {
+        if object_stack.borrow().get(i).unwrap().map.0.borrow()
+        .read_lock::<entity::Object>().expect("read_lock cast should succeed")
+        .active == true {
+            //
+            let object = Rc::clone( 
+                &object_stack.borrow().get(i).unwrap().script
+            );
             //
             object.borrow_mut().call_fn(engine, name, args.clone())?;
-            //
-            cur_row = object.borrow().definition.row.clone();
-            //
-            handle_post_runtime_tasks(Rc::clone(&post_runtime_tasks),
-            Rc::clone(&object_stack), Rc::clone(&scene),
-            &name, cur_row)?;
         }
         //
         i += 1;
     }
-
     //
     Ok(())
 }
 
 //
-pub fn run_game() -> Result<(), (EntityRow, Box<EvalAltResult>)>
+pub fn run_game() -> Result<(), String>
 {
     // Create the entity definitions hash map.
     let mut entity_defs: HashMap<u32,Rc<EntityDefinition>> = HashMap::new();
     // Create the API 'Engine', and the state manager instance.
     let (api_engine, state_manager, 
         cur_scene, mut cur_scene_id, 
-        object_stack,
-        post_runtime_tasks) = create_api(&mut entity_defs)?;
+        object_stack) = create_api(&mut entity_defs)?;
     
     //
-    call_fn_on_all("create", (), &api_engine, &state_manager, &cur_scene, &object_stack, &post_runtime_tasks)?;
+    call_fn_on_all("create", (), &api_engine, &state_manager.script, 
+    &cur_scene.script, &object_stack)?;
 
     // ..game loop..
 

@@ -47,7 +47,11 @@ impl CollisionBox {
 //
 #[derive(Clone)]
 pub struct Object {
-    // sprite: 
+    // sprite:
+    pub active: bool,
+    pub index_in_stack: u32,
+    pub index_of_layer: usize,
+    pub index_in_layer: usize,
     pub position: PositionPoint,
     pub origin_offset: PositionPoint,
     pub collision_boxes: Vec<CollisionBox>,
@@ -55,6 +59,10 @@ pub struct Object {
 
 //
 impl Object {
+    pub fn get_active(&mut self) -> bool { self.active.clone() }
+    pub fn get_index_in_layer(&mut self) -> rhai::INT { self.index_in_layer.clone() as rhai::INT }
+    pub fn get_index_of_layer(&mut self) -> rhai::INT { self.index_of_layer.clone() as rhai::INT }
+    pub fn get_index_in_stack(&mut self) -> rhai::INT { self.index_in_stack.clone() as rhai::INT }
     pub fn get_position(&mut self) -> PositionPoint { self.position.clone() }
     pub fn get_origin_offset(&mut self) -> PositionPoint { self.origin_offset.clone() }
     pub fn get_collision_boxes(&mut self) -> Dynamic { self.collision_boxes.clone().into() }
@@ -79,44 +87,96 @@ impl Object {
             pos = self.position.to_string(), orig_off = self.origin_offset.to_string(), 
             colli = collision_boxes_str)
     }
-}
 
-//
-pub fn create_object(config: &Map,  init_x: f64, init_y: f64) -> Object {
     //
-    let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
-    //
-    for map in config["collision-boxes"].clone().into_typed_array::<Map>()
-    .expect("Every scene's config should contain a 'collision-boxes' array, which should only have object-like members.") {
+    pub fn new(config: &Map, idx_in_stack: u32, idx_of_layer: usize,
+    idx_in_layer: usize, init_x: f64, init_y: f64) -> Self {
         //
-        collision_boxes_vec.push( CollisionBox {
-            point1: PositionPoint { 
-                x: rhai_convert::dynamic_to_number(&map["x1"])
-                .expect("Every collision box should contain an float 'x1' attribute."), 
-                y: rhai_convert::dynamic_to_number(&map["y1"])
-                .expect("Every collision box should contain an float 'y1' attribute.") 
+        let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
+        //
+        for map in config["collision-boxes"].clone().into_typed_array::<Map>()
+        .expect("Every scene's config should contain a 'collision-boxes' array, which should only have object-like members.") {
+            //
+            collision_boxes_vec.push( CollisionBox {
+                point1: PositionPoint { 
+                    x: rhai_convert::dynamic_to_number(&map["x1"])
+                    .expect("Every collision box should contain an float 'x1' attribute."), 
+                    y: rhai_convert::dynamic_to_number(&map["y1"])
+                    .expect("Every collision box should contain an float 'y1' attribute.") 
+                },
+                point2: PositionPoint { 
+                    x: rhai_convert::dynamic_to_number(&map["x2"])
+                    .expect("Every collision box should contain an float 'x2' attribute."), 
+                    y: rhai_convert::dynamic_to_number(&map["y2"])
+                    .expect("Every collision box should contain an float 'y2' attribute.") 
+                }
+            } );
+        }
+        //
+        Self {
+            //
+            active: true,
+            //
+            index_in_stack: idx_in_stack,
+            //
+            index_of_layer: idx_of_layer,
+            //
+            index_in_layer: idx_in_layer,
+            //
+            position: PositionPoint { x: init_x, y: init_y },
+            //
+            origin_offset: PositionPoint { 
+                x: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
+                .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes."), 
+                y: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
+                .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.") 
             },
-            point2: PositionPoint { 
-                x: rhai_convert::dynamic_to_number(&map["x2"])
-                .expect("Every collision box should contain an float 'x2' attribute."), 
-                y: rhai_convert::dynamic_to_number(&map["y2"])
-                .expect("Every collision box should contain an float 'y2' attribute.") 
-            }
-        } );
+            //
+            collision_boxes: collision_boxes_vec,
+        }
     }
     //
-    Object {
+    pub fn recycle(&mut self, config: &Map, idx_of_layer: usize,
+    idx_in_layer: usize, init_x: f64, init_y: f64) {
         //
-        position: PositionPoint { x: init_x, y: init_y },
+        let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
         //
-        origin_offset: PositionPoint { 
-            x: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
-            .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes."), 
-            y: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
-            .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.") 
-        },
+        for map in config["collision-boxes"].clone().into_typed_array::<Map>()
+        .expect("Every scene's config should contain a 'collision-boxes' array, which should only have object-like members.") {
+            //
+            collision_boxes_vec.push( CollisionBox {
+                point1: PositionPoint { 
+                    x: rhai_convert::dynamic_to_number(&map["x1"])
+                    .expect("Every collision box should contain an float 'x1' attribute."), 
+                    y: rhai_convert::dynamic_to_number(&map["y1"])
+                    .expect("Every collision box should contain an float 'y1' attribute.") 
+                },
+                point2: PositionPoint { 
+                    x: rhai_convert::dynamic_to_number(&map["x2"])
+                    .expect("Every collision box should contain an float 'x2' attribute."), 
+                    y: rhai_convert::dynamic_to_number(&map["y2"])
+                    .expect("Every collision box should contain an float 'y2' attribute.") 
+                }
+            } );
+        }
         //
-        collision_boxes: collision_boxes_vec,
+        self.active = true;
+        //
+        self.index_of_layer = idx_of_layer;
+        //
+        self.index_in_layer = idx_in_layer;
+        //
+        self.position.x = init_x;
+        //
+        self.position.y = init_y;
+        //
+        self.origin_offset.x = rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
+        .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.");
+        //
+        self.origin_offset.y = rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
+        .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.");
+        //
+        self.collision_boxes = collision_boxes_vec;
     }
 }
 
@@ -217,66 +277,66 @@ impl Scene {
             width = self.width, height = self.height, in_color = self.in_color, out_color = self.out_color, 
             camera = &mut self.camera.to_string(), layers = layers_str)
     }
-}
 
-//
-pub fn create_scene(config: &Map) -> Scene {
     //
-    let mut layers_vec: Vec<Layer> = Vec::new();
-    //
-    for map in config["layers"].clone().into_typed_array::<Map>()
-    .expect("Every scene's config should contain a 'layers' array, which should only have object-like members.") {
+    pub fn new(config: &Map) -> Self {
         //
-        layers_vec.push( Layer { 
-            name: map["name"].clone().into_string()
-            .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."),
-            instances: {
-                //
-                let mut instances_vec: Vec<u32> = Vec::new();
-                //
-                for index in map["instances"].clone().into_array()
-                .expect(concat!("Every member in the 'layers' array of a scene's config should",
-                " have a 'instances' array, which should only have object-like members.")) {
+        let mut layers_vec: Vec<Layer> = Vec::new();
+        //
+        for map in config["layers"].clone().into_typed_array::<Map>()
+        .expect("Every scene's config should contain a 'layers' array, which should only have object-like members.") {
+            //
+            layers_vec.push( Layer { 
+                name: map["name"].clone().into_string()
+                .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."),
+                instances: {
                     //
-                    instances_vec.push( rhai_convert::dynamic_to_number(&index)
-                        .expect(concat!("Every member in an 'instances' array of a 'layers' array",
-                        " of a scene's config should contain an integer 'index' attribute.")) as u32
-                    );
+                    let mut instances_vec: Vec<u32> = Vec::new();
+                    //
+                    for index in map["instances"].clone().into_array()
+                    .expect(concat!("Every member in the 'layers' array of a scene's config should",
+                    " have a 'instances' array, which should only have object-like members.")) {
+                        //
+                        instances_vec.push( rhai_convert::dynamic_to_number(&index)
+                            .expect(concat!("Every member in an 'instances' array of a 'layers' array",
+                            " of a scene's config should contain an integer 'index' attribute.")) as u32
+                        );
+                    }
+                    instances_vec
                 }
-                instances_vec
-            }
-        } );
-    }
-    //
-    Scene {
+            } );
+        }
         //
-        width: rhai_convert::dynamic_to_number(&config["width"])
-        .expect("Every scene's config should contain an integer 'width' attribute.") as u64,
-        //
-        height: rhai_convert::dynamic_to_number(&config["height"])
-        .expect("Every scene's config should contain an integer 'height' attribute.") as u64,
-        //
-        stack_len: config["object-instances"].clone().into_array()
-        .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
-        //
-        in_color: config["background-color"].clone().into_string()
-        .expect("Every scene's config should contain a string 'background-color' attribute."),
-        //
-        out_color: config["outside-color"].clone().into_string()
-        .expect("Every scene's config should contain a string 'outside-color' attribute."),
-        //
-        camera: Camera {
+        Self {
             //
-            position: PositionPoint { 
-                x: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
-                .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
-                y: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
-                .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
-            }, 
+            width: rhai_convert::dynamic_to_number(&config["width"])
+            .expect("Every scene's config should contain an integer 'width' attribute.") as u64,
             //
-            zoom: 1 as f32 
-        },
-        //
-        layers: layers_vec,
+            height: rhai_convert::dynamic_to_number(&config["height"])
+            .expect("Every scene's config should contain an integer 'height' attribute.") as u64,
+            //
+            stack_len: config["object-instances"].clone().into_array()
+            .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
+            //
+            in_color: config["background-color"].clone().into_string()
+            .expect("Every scene's config should contain a string 'background-color' attribute."),
+            //
+            out_color: config["outside-color"].clone().into_string()
+            .expect("Every scene's config should contain a string 'outside-color' attribute."),
+            //
+            camera: Camera {
+                //
+                position: PositionPoint { 
+                    x: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
+                    .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
+                    y: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
+                    .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
+                }, 
+                //
+                zoom: 1 as f32 
+            },
+            //
+            layers: layers_vec,
+        }
     }
 }

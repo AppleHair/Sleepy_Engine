@@ -223,18 +223,11 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
-    imports.wbg.__wbg_getEntityName_6aa210a2e69ba220 = function(arg0, arg1) {
-        const ret = getEntityName(arg1 >>> 0);
-        const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        getInt32Memory0()[arg0 / 4 + 1] = len1;
-        getInt32Memory0()[arg0 / 4 + 0] = ptr1;
-    };
     imports.wbg.__wbg_alert_89f35f60bb54f0ab = function(arg0, arg1) {
         alert(getStringFromWasm0(arg0, arg1));
     };
-    imports.wbg.__wbg_getGameScript_97322da4b5bbd1d0 = function(arg0) {
-        const ret = getGameScript();
+    imports.wbg.__wbg_getMetadataScript_af903fbe0cda1aae = function(arg0, arg1) {
+        const ret = getMetadataScript(arg1);
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;
@@ -247,8 +240,8 @@ function __wbg_get_imports() {
         getInt32Memory0()[arg0 / 4 + 1] = len1;
         getInt32Memory0()[arg0 / 4 + 0] = ptr1;
     };
-    imports.wbg.__wbg_getGameConfig_7703a3a991871d2c = function(arg0) {
-        const ret = getGameConfig();
+    imports.wbg.__wbg_getMetadataConfig_69da3ce11b69c4e1 = function(arg0, arg1) {
+        const ret = getMetadataConfig(arg1);
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;
@@ -256,6 +249,13 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbg_getEntityConfig_09b9f0a132a9b305 = function(arg0, arg1) {
         const ret = getEntityConfig(arg1 >>> 0);
+        const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        getInt32Memory0()[arg0 / 4 + 1] = len1;
+        getInt32Memory0()[arg0 / 4 + 0] = ptr1;
+    };
+    imports.wbg.__wbg_getEntityName_6aa210a2e69ba220 = function(arg0, arg1) {
+        const ret = getEntityName(arg1 >>> 0);
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;

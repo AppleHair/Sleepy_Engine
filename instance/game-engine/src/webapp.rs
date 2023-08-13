@@ -3,13 +3,12 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 extern {
     // data/script getters
-    pub fn getGameIcon() -> Box<[u8]>;
-    pub fn getGameScript() -> String;
+    pub fn getMetadataData(rowid: u8) -> Box<[u8]>;
+    pub fn getMetadataScript(rowid: u8) -> String;
     pub fn getAssetData(rowid: u32) -> Box<[u8]>;
     pub fn getEntityScript(rowid: u32) -> String;
     // config getters
-    pub fn getProjectConfig() -> String;
-    pub fn getGameConfig() -> String;
+    pub fn getMetadataConfig(rowid: u8) -> String;
     pub fn getAssetConfig(rowid: u32) -> String;
     pub fn getEntityConfig(rowid: u32) -> String;
     // id to name and vice versa
