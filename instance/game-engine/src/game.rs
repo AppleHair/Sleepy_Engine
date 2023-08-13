@@ -694,7 +694,7 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>), String> {
             info, layer_from, scene_map_borrow.read_lock::<entity::Scene>()
             .expect("read_lock cast should succeed").layers.len());
             //
-            return Err(info.into());
+            return Err(full_s.into());
         }
         //
         new_layer_idx = scene_map_borrow.read_lock::<entity::Scene>()
