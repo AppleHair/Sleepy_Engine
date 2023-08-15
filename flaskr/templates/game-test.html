@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <link id="game-icon" rel="icon" type="image/x-icon" href="/static/img/favicon.ico"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>GAME TEST - 2D Game Engine</title>
+        <style>
+            body {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+            }
+            #canvas {
+                width: 100%;
+                height: 100%;
+                image-rendering: pixelated;
+                object-fit: contain;
+            }
+        </style>
+        <script type="module" src="/static/js/editor/game-test.js"></script>
+    </head>
+    <body>
+        <canvas id="canvas"></canvas>
+    </body>
+</html>

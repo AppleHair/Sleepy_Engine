@@ -14,14 +14,27 @@ import documentInteractionSetup, * as DOM from "./DOMcontrol-wrap.js";
 // We import the SQL Control module
 import initSQLite, * as SQLITE from "./SQLcontrol.js";
 
+
+
+/////////////////////////////////////////
+//           Repeatedly Used           //
+
 //
-import initEngine, * as wasmEngine from "./engine-code/game_engine.js";
+let gameTestWindow = undefined;
 
+//
+onpagehide = (e) => {
+    //
+    if (gameTestWindow !== undefined && !e.persisted) {
+        //
+        gameTestWindow.close();
+    }
+};
 
-
-//////////////////////////////////
-//          For Wasm            //
-
+//
+const textEncoder = new TextEncoder();
+//
+const textDeoder = new TextDecoder();
 
 //
 function getBlob(rowid, asText = false) {
@@ -29,73 +42,16 @@ function getBlob(rowid, asText = false) {
     return ((asText) ? textDeoder.decode(blob) : blob);
 }
 
-
-globalThis.getMetadataData = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "metadata", rowid).data);
-};
-
-globalThis.getMetadataScript = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "metadata", rowid).data, true);
-};
-
-globalThis.getAssetData = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "asset", rowid).data);
-};
-
-globalThis.getEntityScript = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "entity", rowid).script, true);
-};
-
-globalThis.getMetadataConfig = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "metadata", rowid).config, true);
-};
-
-globalThis.getAssetConfig = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
-};
-
-globalThis.getEntityConfig = function(rowid) {
-    return getBlob(SQLITE.getRow(project, "entity", rowid).config, true);
-};
-
-globalThis.getEntityID = function(name) {
-    let stmt = project.prepare(`SELECT rowid FROM entity WHERE name=?;`, [name]);
-    stmt.step();
-    let res = stmt.get();
-    stmt.free();
-    return res[0];
-};
-
-globalThis.getAssetID = function(name) {
-    let stmt = project.prepare(`SELECT rowid FROM asset WHERE name=?;`, [name]);
-    stmt.step();
-    let res = stmt.get();
-    stmt.free();
-    return res[0];
-};
-
-globalThis.getEntityName = function(rowid) {
-    return SQLITE.getRow(project, "entity", rowid).name;
-};
-
-globalThis.getAssetName = function(rowid) {
-    return SQLITE.getRow(project, "asset", rowid).name;
-};
-
-/////////////////////////////////////////
-//           Repeatedly Used           //
-
-
-//
-const textEncoder = new TextEncoder();
-//
-const textDeoder = new TextDecoder();
-
 // This function loads data from
 // the project file into the document
 // and overrides previous data in the
 // document if there is any.
 function loadEditor() {
+    //
+    if (gameTestWindow !== undefined) {
+        //
+        gameTestWindow.close();
+    }
     // We empty the explorer item list
     document.querySelectorAll(".explorer > .item-list > *").forEach((item) => item.remove());
     // We empty the editor tab list
@@ -416,9 +372,79 @@ initSQLite().then((loaded) => {
             },
             //
             'test-game': () => {
-                initEngine().then(() => {
-                    wasmEngine.handle_game();
-                });
+                //
+                if (gameTestWindow !== undefined) {
+                    //
+                    gameTestWindow.close();
+                }
+                //
+                gameTestWindow = window.open("/game-test", "GAME TEST");
+                //
+                gameTestWindow.self.getMetadataData = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "metadata", rowid).data);
+                };
+                //
+                gameTestWindow.self.getMetadataScript = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "metadata", rowid).data, true);
+                };
+                //
+                gameTestWindow.self.getAssetData = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "asset", rowid).data);
+                };
+                //
+                gameTestWindow.self.getEntityScript = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "entity", rowid).script, true);
+                };
+                //
+                gameTestWindow.self.getMetadataConfig = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "metadata", rowid).config, true);
+                };
+                //
+                gameTestWindow.self.getAssetConfig = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
+                };
+                //
+                gameTestWindow.self.getEntityConfig = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "entity", rowid).config, true);
+                };
+                //
+                gameTestWindow.self.getEntityID = function(name) {
+                    let stmt = project.prepare(`SELECT rowid FROM entity WHERE name=?;`, [name]);
+                    stmt.step();
+                    let res = stmt.get();
+                    stmt.free();
+                    return res[0];
+                };
+                //
+                gameTestWindow.self.getAssetID = function(name) {
+                    let stmt = project.prepare(`SELECT rowid FROM asset WHERE name=?;`, [name]);
+                    stmt.step();
+                    let res = stmt.get();
+                    stmt.free();
+                    return res[0];
+                };
+                //
+                gameTestWindow.self.getEntityName = function(rowid) {
+                    return SQLITE.getRow(project, "entity", rowid).name;
+                };
+                //
+                gameTestWindow.self.getAssetName = function(rowid) {
+                    return SQLITE.getRow(project, "asset", rowid).name;
+                };
+
+                //
+                gameTestWindow.onbeforeunload = () => {
+                    //
+                    if (gameTestWindow !== undefined) {
+                        //
+                        gameTestWindow = undefined;
+                    }
+                }
+
+                gameTestWindow.onload = (e) => {
+                    e.target.title = projectName;
+                    e.target.querySelector("#game-icon").setAttribute("href", document.querySelector("#game-icon-label > img").src);
+                };
             },
             // This function lets the user
             // undo recent changes he made

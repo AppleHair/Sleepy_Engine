@@ -9,6 +9,7 @@ use rhai::{Engine, Scope, AST, Map, packages::Package, packages::StandardPackage
 
 mod entity;
 mod rhai_convert;
+mod renderer;
 
 //
 #[derive(Clone, Copy)]
@@ -888,10 +889,24 @@ pub fn run_game() -> Result<(), String>
     let (api_engine, state_manager, 
         cur_scene, mut cur_scene_id, 
         object_stack) = create_api(&mut entity_defs)?;
+
+    //
+    let project_config = api_engine.parse_json(
+        &webapp::getMetadataConfig(1),
+         false
+    ).unwrap();
     
     //
     call_fn_on_all("create", (), &api_engine, &state_manager.script, 
     &cur_scene.script, &object_stack)?;
+
+    //
+    renderer::start(rhai_convert::dynamic_to_number(&project_config["canvas-width"]).unwrap() as i64,
+    rhai_convert::dynamic_to_number(&project_config["canvas-height"]).unwrap() as i64).or_else(
+        |js| -> Result<(), String> {
+            Err(js.as_string().unwrap_or(String::from("Render Error!")))
+        }
+    )?;
 
     // ..game loop..
 

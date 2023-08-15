@@ -49,5 +49,10 @@ def create_app(test_config=None):
     @app.route('/')
     def open_editor():
         return render_template('editor.html')
+    # base route
+    @app.route('/game-test')
+    def open_game_test():
+        return render_template('game-test.html')
+
 
     return app
