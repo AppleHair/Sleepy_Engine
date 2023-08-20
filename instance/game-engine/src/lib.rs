@@ -1,22 +1,18 @@
 
-mod webapp;
+mod data;
 mod game;
 
 use std::panic;
 
-use crate::webapp::alert;
-use crate::game::run_game;
+use crate::game::{run_game, IntervalHandle};
 
 use wasm_bindgen::prelude::*;
 use console_error_panic_hook;
 
 #[wasm_bindgen]
-pub fn handle_game() {
+pub fn handle_game() -> Result<IntervalHandle, JsValue> {
     //
     panic::set_hook(Box::new(console_error_panic_hook::hook));
     //
-    if let Err(err) = run_game() {
-        //
-        alert(&err);
-    }
+    run_game()
 }

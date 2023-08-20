@@ -1,10 +1,13 @@
 
-use crate::webapp;
+use crate::data;
 
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{console::log_1, window};
 use rhai::{Engine, Scope, AST, Map, packages::Package, packages::StandardPackage, EvalAltResult, Dynamic};
 
 mod entity;
@@ -27,10 +30,10 @@ impl TableRow {
             //
             Self::Metadata(2) => String::from("\non 'State Manager'."),
             //
-            Self::Entity(id, kind) => format!("\non the '{}' {kind_str}.", webapp::getEntityName(id.clone()),
+            Self::Entity(id, kind) => format!("\non the '{}' {kind_str}.", data::get_entity_name(id.clone()),
             kind_str = match kind { 1 => "object", 2 => "scene", _ => "entity" }),
             //
-            Self::Asset(id, kind) => format!("\non the '{}' {kind_str}.", webapp::getEntityName(id.clone()),
+            Self::Asset(id, kind) => format!("\non the '{}' {kind_str}.", data::get_entity_name(id.clone()),
             kind_str = match kind { 1 => "sprite", 2 => "audio", 3 => "font", _ => "asset" }),
             //
             _ => String::new(),
@@ -52,8 +55,8 @@ impl EntityDefinition {
     fn new(engine: &Engine, row: TableRow) -> Result<Self, String> {
         //
         let ast = engine.compile(&match row {
-            TableRow::Metadata(id) => webapp::getMetadataScript(id),
-            TableRow::Entity(id, _) => webapp::getEntityScript(id),
+            TableRow::Metadata(id) => data::get_metadata_script(id),
+            TableRow::Entity(id, _) => data::get_entity_script(id),
             TableRow::Asset(_, _) => { return Err("Can't define an asset as an entity.".into()) },
         });
         //
@@ -63,8 +66,8 @@ impl EntityDefinition {
         }
         //
         let json = engine.parse_json(&match row {
-            TableRow::Metadata(id) => webapp::getMetadataConfig(id),
-            TableRow::Entity(id, _) => webapp::getEntityConfig(id),
+            TableRow::Metadata(id) => data::get_metadata_config(id),
+            TableRow::Entity(id, _) => data::get_entity_config(id),
             TableRow::Asset(_, _) => { return Err("Can't define an asset as an entity.".into()) },
         }, false);
         //
@@ -265,7 +268,7 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>), String> {
     let mut engine = Engine::new_raw();
 
     // Register API features to the 'Engine'
-    engine.on_print(|text| { webapp::log(text); })
+    engine.on_print(|text| { log_1(&wasm_bindgen::JsValue::from_str(text)); })
           .register_type_with_name::<entity::PositionPoint>("Position")
           .register_get_set("x", entity::PositionPoint::get_x, entity::PositionPoint::set_x)
           .register_set("x", entity::PositionPoint::set_x_rhai_int)
@@ -488,7 +491,7 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>), String> {
             //
             Ok(if let TableRow::Entity(id,2) = borrow.definition.row {
                 //
-                webapp::getEntityName(id) == name
+                data::get_entity_name(id) == name
             } else { false })
         } else {
             //
@@ -848,9 +851,40 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>), String> {
 }
 
 //
-fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine, manager: &Rc<RefCell<EntityScript>>, 
-scene: &Rc<RefCell<EntityScript>>, object_stack: &Rc<RefCell<Vec<Entity<Object>>>>)
- -> Result<(), String> {
+fn create_rendering_components(canvas_width: i32, canvas_height: i32)
+ -> Result<(web_sys::WebGlRenderingContext, web_sys::WebGlProgram,
+HashMap<String, renderer::ProgramDataLocation>, web_sys::WebGlBuffer), String> {
+    //
+    let gl = renderer::create_context(
+        canvas_width as i32, 
+        canvas_height as i32
+    ).or_else(|js| {
+        return Err(js
+            .as_string()
+            .unwrap_or(String::from("Rendering Error: Couldn't create WebGL context."))
+        );
+    })?;
+    //
+    let (gl_program, 
+        program_data) = renderer::create_scene_rendering_program(&gl
+    ).or_else(|js| {
+        return Err(js
+            .as_string()
+            .unwrap_or(String::from("Rendering Error: Couldn't create the scene rendering shader program."))
+        );
+    })?;
+    // 
+    let buffer = gl
+        .create_buffer()
+        .ok_or(String::from("failed to create buffer"))?;
+    //
+    Ok((gl, gl_program, program_data, buffer))
+}
+
+//
+fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine,
+manager: &Rc<RefCell<EntityScript>>, scene: &Rc<RefCell<EntityScript>>,
+object_stack: &Rc<RefCell<Vec<Entity<Object>>>>) -> Result<(), String> {
     // Call the function on the state manager instance.
     manager.borrow_mut().call_fn(engine, name, args.clone())?;
     //
@@ -880,36 +914,127 @@ scene: &Rc<RefCell<EntityScript>>, object_stack: &Rc<RefCell<Vec<Entity<Object>>
     Ok(())
 }
 
+#[wasm_bindgen]
+pub struct IntervalHandle {
+    interval_id: i32,
+    _closure: Closure::<dyn Fn() -> Result<(), JsValue>>,
+}
+
+impl Drop for IntervalHandle {
+    fn drop(&mut self) {
+        window().unwrap().clear_interval_with_handle(self.interval_id);
+    }
+}
+
 //
-pub fn run_game() -> Result<(), String>
+pub fn run_game() -> Result<IntervalHandle, JsValue>
 {
     // Create the entity definitions hash map.
     let mut entity_defs: HashMap<u32,Rc<EntityDefinition>> = HashMap::new();
+
     // Create the API 'Engine', and the state manager instance.
     let (api_engine, state_manager, 
         cur_scene, mut cur_scene_id, 
         object_stack) = create_api(&mut entity_defs)?;
 
     //
-    let project_config = api_engine.parse_json(
-        &webapp::getMetadataConfig(1),
-         false
-    ).unwrap();
-    
-    //
     call_fn_on_all("create", (), &api_engine, &state_manager.script, 
     &cur_scene.script, &object_stack)?;
+    
+    //
+    let project_config = api_engine.parse_json(
+    &data::get_metadata_config(1),false).unwrap();
+    //
+    let canvas_width = rhai_convert::dynamic_to_number(&project_config["canvas-width"]).unwrap() as i32;
+    //
+    let canvas_height = rhai_convert::dynamic_to_number(&project_config["canvas-height"]).unwrap() as i32;
 
     //
-    renderer::start(rhai_convert::dynamic_to_number(&project_config["canvas-width"]).unwrap() as i64,
-    rhai_convert::dynamic_to_number(&project_config["canvas-height"]).unwrap() as i64).or_else(
-        |js| -> Result<(), String> {
-            Err(js.as_string().unwrap_or(String::from("Render Error!")))
-        }
-    )?;
+    let (gl, gl_program,
+        program_data,
+        buffer) = create_rendering_components(canvas_width, canvas_height)?;
+    //
+    let cur_scene_map = Rc::clone(&cur_scene.map.0);
+    //
+    let draw_loop = Rc::new(RefCell::new(
+    None::<Closure::<dyn FnMut(f64) -> Result<(), JsValue>>>));
+    //
+    let draw_init = Rc::clone(&draw_loop);
+    //
+    let mut last_draw = window().unwrap().performance().unwrap().now();
+    //
+    *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
+    move |draw_time: f64| -> Result<(), JsValue> {
+        //
+        let elapsed = draw_time - last_draw;
+        last_draw = draw_time;
 
-    // ..game loop..
+        //
+        renderer::render_scene(
+            &gl, &gl_program, &program_data, &buffer,
+            &cur_scene_map.borrow()
+                .read_lock::<entity::Scene>()
+                .expect("read_lock cast should succeed")
+        )?;
+        //
+        window().unwrap().request_animation_frame(draw_loop
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unchecked_ref()
+        ).or_else(|js| {
+            //
+            return Err(js
+                .as_string()
+                .unwrap_or(String::from("Unknown error occurred while rendering the game."))
+            );
+        })?;
+        //
+        Ok(())
+    }));
+
+    //
+    window().unwrap().request_animation_frame(draw_init
+        .borrow()
+        .as_ref()
+        .unwrap()
+        .as_ref()
+        .unchecked_ref()
+    ).or_else(|js| {
+        return Err(js
+            .as_string()
+            .unwrap_or(String::from("Unknown error occurred while rendering the game."))
+        );
+    })?;
+
+    //
+    let frame_rate = rhai_convert::dynamic_to_number(&project_config["fps"]).unwrap() as i32;
+    //
+    let frame_time = 1000 / frame_rate;
+    //
+    let update_loop = Closure::<dyn Fn() -> Result<(), JsValue>>::new(
+    move || -> Result<(), JsValue> {
+        //
+        call_fn_on_all("update", (frame_time as f64, ), &api_engine,
+        &state_manager.script, &cur_scene.script, &object_stack)?;
+        //
+        Ok(())
+    });
+    //
+    let inter_id = window().unwrap().set_interval_with_callback_and_timeout_and_arguments_0(
+        update_loop.as_ref().unchecked_ref(),
+        frame_time
+    ).or_else(|js| {
+        return Err(js
+            .as_string()
+            .unwrap_or(String::from("Unknown error occurred while running the game."))
+        );
+    })?;
 
     // Done!
-    Ok(())
+    Ok(IntervalHandle {
+        interval_id: inter_id,
+        _closure: update_loop,
+    })
 }
