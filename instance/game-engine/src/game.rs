@@ -20,8 +20,8 @@ mod renderer;
 pub struct ClosuresHandle {
     interval_id: i32,
     _interval: Closure::<dyn Fn() -> Result<(), JsValue>>,
-    _keydown: Closure::<dyn Fn(web_sys::KeyboardEvent) -> Result<(), JsValue>>,
-    _keyup: Closure::<dyn Fn(web_sys::KeyboardEvent) -> Result<(), JsValue>>,
+    _keydown: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
+    _keyup: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
 }
 
 impl Drop for ClosuresHandle {
@@ -52,8 +52,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     //
     let event_keys_just_changed = Rc::clone(&keys_just_changed);
     //
-    let onkeydown = Closure::<dyn Fn(web_sys::KeyboardEvent) -> Result<(), JsValue>>::new(
-    move |event: web_sys::KeyboardEvent| -> Result<(), JsValue> {
+    let onkeydown = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+    move |event: web_sys::KeyboardEvent| {
         //
         let mut key_states_borrow = event_key_states.borrow_mut();
         //
@@ -62,8 +62,6 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         key_states_borrow.insert(event.key(), rhai_api::KeyState { is_held: true, just_pressed: true, just_released: false });
         //
         keys_just_changed_borrow.push(event.key());
-        //
-        Ok(())
     });
 
     window().unwrap().document().unwrap().add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
@@ -73,8 +71,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     //
     let event_keys_just_changed = Rc::clone(&keys_just_changed);
     //
-    let onkeyup = Closure::<dyn Fn(web_sys::KeyboardEvent) -> Result<(), JsValue>>::new(
-    move |event: web_sys::KeyboardEvent| -> Result<(), JsValue> {
+    let onkeyup = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+    move |event: web_sys::KeyboardEvent| {
         //
         let mut key_states_borrow = event_key_states.borrow_mut();
         //
@@ -83,8 +81,6 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         key_states_borrow.insert(event.key(), rhai_api::KeyState { is_held: false, just_pressed: false, just_released: true });
         //
         keys_just_changed_borrow.push(event.key());
-        //
-        Ok(())
     });
 
     window().unwrap().document().unwrap().add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
