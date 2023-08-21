@@ -1,26 +1,26 @@
 
 use rhai::{Map, Dynamic};
 
-use super::rhai_convert;
+use super::rhai_api::dynamic_to_number;
 
 //
 #[derive(Clone)]
 pub struct PositionPoint {
-    pub x: f64,
-    pub y: f64,
+    pub x: f32,
+    pub y: f32,
 }
 
 //
 impl PositionPoint {
-    pub fn get_x(&mut self) -> f64 { self.x.clone() }
-    pub fn get_y(&mut self) -> f64 { self.y.clone() }
+    pub fn get_x(&mut self) -> f32 { self.x.clone() }
+    pub fn get_y(&mut self) -> f32 { self.y.clone() }
 
-    pub fn set_x(&mut self, value: f64) { self.x = value; }
-    pub fn set_x_rhai_int(&mut self, value: rhai::INT) { self.x = value as f64; }
-    pub fn set_x_rhai_float(&mut self, value: rhai::FLOAT) { self.x = value as f64; }
-    pub fn set_y(&mut self, value: f64) { self.y = value; }
-    pub fn set_y_rhai_int(&mut self, value: rhai::INT) { self.y = value as f64; }
-    pub fn set_y_rhai_float(&mut self, value: rhai::FLOAT) { self.y = value as f64; }
+    pub fn set_x(&mut self, value: f32) { self.x = value; }
+    pub fn set_x_rhai_int(&mut self, value: rhai::INT) { self.x = value as f32; }
+    pub fn set_x_rhai_float(&mut self, value: rhai::FLOAT) { self.x = value as f32; }
+    pub fn set_y(&mut self, value: f32) { self.y = value; }
+    pub fn set_y_rhai_int(&mut self, value: rhai::INT) { self.y = value as f32; }
+    pub fn set_y_rhai_float(&mut self, value: rhai::FLOAT) { self.y = value as f32; }
 
     pub fn to_string(&mut self) -> String { 
         format!("x - {x} y - {y}", x = self.x, y = self.y)
@@ -90,7 +90,7 @@ impl Object {
 
     //
     pub fn new(config: &Map, idx_in_stack: u32, idx_of_layer: usize,
-    idx_in_layer: usize, init_x: f64, init_y: f64) -> Self {
+    idx_in_layer: usize, init_x: f32, init_y: f32) -> Self {
         //
         let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
         //
@@ -99,15 +99,15 @@ impl Object {
             //
             collision_boxes_vec.push( CollisionBox {
                 point1: PositionPoint { 
-                    x: rhai_convert::dynamic_to_number(&map["x1"])
+                    x: dynamic_to_number(&map["x1"])
                     .expect("Every collision box should contain an float 'x1' attribute."), 
-                    y: rhai_convert::dynamic_to_number(&map["y1"])
+                    y: dynamic_to_number(&map["y1"])
                     .expect("Every collision box should contain an float 'y1' attribute.") 
                 },
                 point2: PositionPoint { 
-                    x: rhai_convert::dynamic_to_number(&map["x2"])
+                    x: dynamic_to_number(&map["x2"])
                     .expect("Every collision box should contain an float 'x2' attribute."), 
-                    y: rhai_convert::dynamic_to_number(&map["y2"])
+                    y: dynamic_to_number(&map["y2"])
                     .expect("Every collision box should contain an float 'y2' attribute.") 
                 }
             } );
@@ -126,9 +126,9 @@ impl Object {
             position: PositionPoint { x: init_x, y: init_y },
             //
             origin_offset: PositionPoint { 
-                x: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
+                x: dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
                 .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes."), 
-                y: rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
+                y: dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
                 .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.") 
             },
             //
@@ -137,24 +137,24 @@ impl Object {
     }
     //
     pub fn recycle(&mut self, config: &Map, idx_of_layer: usize,
-    idx_in_layer: usize, init_x: f64, init_y: f64) {
+    idx_in_layer: usize, init_x: f32, init_y: f32) {
         //
-        let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
+        self.collision_boxes.clear();
         //
         for map in config["collision-boxes"].clone().into_typed_array::<Map>()
         .expect("Every scene's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
-            collision_boxes_vec.push( CollisionBox {
+            self.collision_boxes.push( CollisionBox {
                 point1: PositionPoint { 
-                    x: rhai_convert::dynamic_to_number(&map["x1"])
+                    x: dynamic_to_number(&map["x1"])
                     .expect("Every collision box should contain an float 'x1' attribute."), 
-                    y: rhai_convert::dynamic_to_number(&map["y1"])
+                    y: dynamic_to_number(&map["y1"])
                     .expect("Every collision box should contain an float 'y1' attribute.") 
                 },
                 point2: PositionPoint { 
-                    x: rhai_convert::dynamic_to_number(&map["x2"])
+                    x: dynamic_to_number(&map["x2"])
                     .expect("Every collision box should contain an float 'x2' attribute."), 
-                    y: rhai_convert::dynamic_to_number(&map["y2"])
+                    y: dynamic_to_number(&map["y2"])
                     .expect("Every collision box should contain an float 'y2' attribute.") 
                 }
             } );
@@ -170,13 +170,11 @@ impl Object {
         //
         self.position.y = init_y;
         //
-        self.origin_offset.x = rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
+        self.origin_offset.x = dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
         .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.");
         //
-        self.origin_offset.y = rhai_convert::dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
+        self.origin_offset.y = dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
         .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.");
-        //
-        self.collision_boxes = collision_boxes_vec;
     }
 }
 
@@ -231,8 +229,8 @@ impl Camera {
 //
 #[derive(Clone)]
 pub struct Scene {
-    pub width: u64,
-    pub height: u64,
+    pub width: f32,
+    pub height: f32,
     pub stack_len: usize,
     pub in_color: String,
     pub out_color: String,
@@ -242,20 +240,20 @@ pub struct Scene {
 
 //
 impl Scene {
-    pub fn get_width(&mut self) -> u64 { self.width.clone() }
-    pub fn get_height(&mut self) -> u64 { self.height.clone() }
+    pub fn get_width(&mut self) -> f32 { self.width.clone() }
+    pub fn get_height(&mut self) -> f32 { self.height.clone() }
     pub fn get_inside_color(&mut self) -> String { self.in_color.clone() }
     pub fn get_outside_color(&mut self) -> String { self.out_color.clone() }
     pub fn get_layers(&mut self) -> Dynamic { self.layers.clone().into() }
     pub fn get_stack_len(&mut self) -> rhai::INT { self.stack_len.clone() as rhai::INT }
     pub fn get_camera(&mut self) -> Camera { self.camera.clone() }
 
-    pub fn set_width(&mut self, value: u64) { self.width = value; }
-    pub fn set_width_rhai_int(&mut self, value: rhai::INT) { self.width = value as u64; }
-    pub fn set_width_rhai_float(&mut self, value: rhai::FLOAT) { self.width = value as u64; }
-    pub fn set_height(&mut self, value: u64) { self.height = value; }
-    pub fn set_height_rhai_int(&mut self, value: rhai::INT) { self.height = value as u64; }
-    pub fn set_height_rhai_float(&mut self, value: rhai::FLOAT) { self.height = value as u64; }
+    pub fn set_width(&mut self, value: f32) { self.width = value; }
+    pub fn set_width_rhai_int(&mut self, value: rhai::INT) { self.width = value as f32; }
+    pub fn set_width_rhai_float(&mut self, value: rhai::FLOAT) { self.width = value as f32; }
+    pub fn set_height(&mut self, value: f32) { self.height = value; }
+    pub fn set_height_rhai_int(&mut self, value: rhai::INT) { self.height = value as f32; }
+    pub fn set_height_rhai_float(&mut self, value: rhai::FLOAT) { self.height = value as f32; }
     pub fn set_inside_color(&mut self, value: String) { self.in_color = value; }
     pub fn set_outside_color(&mut self, value: String) { self.out_color = value; }
     pub fn set_camera(&mut self, value: Camera) { self.camera = value; }
@@ -297,7 +295,7 @@ impl Scene {
                     .expect(concat!("Every member in the 'layers' array of a scene's config should",
                     " have a 'instances' array, which should only have object-like members.")) {
                         //
-                        instances_vec.push( rhai_convert::dynamic_to_number(&index)
+                        instances_vec.push( dynamic_to_number(&index)
                             .expect(concat!("Every member in an 'instances' array of a 'layers' array",
                             " of a scene's config should contain an integer 'index' attribute.")) as u32
                         );
@@ -309,11 +307,11 @@ impl Scene {
         //
         Self {
             //
-            width: rhai_convert::dynamic_to_number(&config["width"])
-            .expect("Every scene's config should contain an integer 'width' attribute.") as u64,
+            width: dynamic_to_number(&config["width"])
+            .expect("Every scene's config should contain an integer 'width' attribute.") as f32,
             //
-            height: rhai_convert::dynamic_to_number(&config["height"])
-            .expect("Every scene's config should contain an integer 'height' attribute.") as u64,
+            height: dynamic_to_number(&config["height"])
+            .expect("Every scene's config should contain an integer 'height' attribute.") as f32,
             //
             stack_len: config["object-instances"].clone().into_array()
             .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
@@ -327,9 +325,9 @@ impl Scene {
             camera: Camera {
                 //
                 position: PositionPoint { 
-                    x: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
+                    x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
                     .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
-                    y: rhai_convert::dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
+                    y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
                     .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
                 }, 
                 //

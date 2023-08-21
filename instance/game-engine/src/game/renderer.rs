@@ -105,7 +105,7 @@ data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuf
     context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
 
     // Create a vertex array for the scene rectangle.
-    let vertices = generate_rectangle(0.0, 0.0, scene.width as f32, scene.height as f32);
+    let vertices = generate_rectangle(0.0, 0.0, scene.width, scene.height);
 
     // Copy the data form the vertex array
     // into the vertex array buffer.
@@ -163,7 +163,7 @@ data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuf
         return Err("Couldn't find uniform 'u_camera'".into());
     }
     //
-    context.uniform2f(Some(&camera_uniform_location), scene.camera.position.x as f32, scene.camera.position.y as f32);
+    context.uniform2f(Some(&camera_uniform_location), scene.camera.position.x, scene.camera.position.y);
 
     //
     let incolor_uniform_location: web_sys::WebGlUniformLocation;
