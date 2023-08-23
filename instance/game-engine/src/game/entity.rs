@@ -1,7 +1,7 @@
 
 use rhai::{Map, Dynamic};
 
-use super::rhai_api::dynamic_to_number;
+use super::engine_api::dynamic_to_number;
 
 //
 #[derive(Clone)]
@@ -231,7 +231,9 @@ impl Camera {
 pub struct Scene {
     pub width: f32,
     pub height: f32,
-    pub stack_len: usize,
+    pub objects_len: usize,
+    pub runtimes_len: usize,
+    pub layers_len: usize,
     pub in_color: String,
     pub out_color: String,
     pub layers: Vec<Layer>,
@@ -244,8 +246,9 @@ impl Scene {
     pub fn get_height(&mut self) -> f32 { self.height.clone() }
     pub fn get_inside_color(&mut self) -> String { self.in_color.clone() }
     pub fn get_outside_color(&mut self) -> String { self.out_color.clone() }
-    pub fn get_layers(&mut self) -> Dynamic { self.layers.clone().into() }
-    pub fn get_stack_len(&mut self) -> rhai::INT { self.stack_len.clone() as rhai::INT }
+    pub fn get_layers(&mut self) -> Dynamic { self.layers[0..self.layers_len].to_vec().into() }
+    pub fn get_objects_len(&mut self) -> rhai::INT { self.objects_len.clone() as rhai::INT }
+    pub fn get_runtimes_len(&mut self) -> rhai::INT { self.runtimes_len.clone() as rhai::INT }
     pub fn get_camera(&mut self) -> Camera { self.camera.clone() }
 
     pub fn set_width(&mut self, value: f32) { self.width = value; }
@@ -313,8 +316,12 @@ impl Scene {
             height: dynamic_to_number(&config["height"])
             .expect("Every scene's config should contain an integer 'height' attribute.") as f32,
             //
-            stack_len: config["object-instances"].clone().into_array()
+            objects_len: config["object-instances"].clone().into_array()
             .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
+            //
+            layers_len: layers_vec.len(),
+            //
+            runtimes_len: 0,
             //
             in_color: config["background-color"].clone().into_string()
             .expect("Every scene's config should contain a string 'background-color' attribute."),
@@ -336,5 +343,90 @@ impl Scene {
             //
             layers: layers_vec,
         }
+    }
+
+    //
+    pub fn recycle(&mut self, config: &Map) {
+        //
+        let mut i = 0_usize;
+        //
+        for map in config["layers"].clone().into_typed_array::<Map>()
+        .expect("Every scene's config should contain a 'layers' array, which should only have object-like members.") {
+            //
+            if i < self.layers.len() {
+                //
+                self.layers[i].name.clear();
+                self.layers[i].name.push_str(&map["name"].clone().into_string()
+                .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."));
+                
+                //
+                self.layers[i].instances.clear();
+                for index in map["instances"].clone().into_array()
+                .expect(concat!("Every member in the 'layers' array of a scene's config should",
+                " have a 'instances' array, which should only have object-like members.")) {
+                    //
+                    self.layers[i].instances.push(dynamic_to_number(&index)
+                    .expect(concat!("Every member in an 'instances' array of a 'layers' array",
+                    " of a scene's config should contain an integer 'index' attribute.")) as u32);
+                }
+                //
+                i += 1;
+                continue;
+            }
+            //
+            self.layers.push( Layer { 
+                name: map["name"].clone().into_string()
+                .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."),
+                instances: {
+                    //
+                    let mut instances_vec: Vec<u32> = Vec::new();
+                    //
+                    for index in map["instances"].clone().into_array()
+                    .expect(concat!("Every member in the 'layers' array of a scene's config should",
+                    " have a 'instances' array, which should only have object-like members.")) {
+                        //
+                        instances_vec.push(dynamic_to_number(&index)
+                        .expect(concat!("Every member in an 'instances' array of a 'layers' array",
+                        " of a scene's config should contain an integer 'index' attribute.")) as u32);
+                    }
+                    instances_vec
+                }
+            } );
+            //
+            i += 1;
+        }
+        //
+        self.layers_len = i;
+        //
+        self.runtimes_len = 0;
+        //
+        self.objects_len = config["object-instances"].clone().into_array()
+        .expect("Every scene's config should contain an array 'object-instances' attribute.").len();
+        //
+        self.width = dynamic_to_number(&config["width"])
+        .expect("Every scene's config should contain an integer 'width' attribute.") as f32;
+        //
+        self.height = dynamic_to_number(&config["height"])
+        .expect("Every scene's config should contain an integer 'height' attribute.") as f32;
+        //
+        self.in_color.clear();
+        self.in_color.push_str(&config["background-color"].clone().into_string()
+        .expect("Every scene's config should contain a string 'background-color' attribute."));
+        //
+        self.out_color.clear();
+        self.out_color.push_str(&config["outside-color"].clone().into_string()
+        .expect("Every scene's config should contain a string 'outside-color' attribute."));
+        //
+        self.camera = Camera {
+            //
+            position: PositionPoint { 
+                x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
+                .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
+                y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
+                .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
+            }, 
+            //
+            zoom: 1 as f32,
+        };
     }
 }

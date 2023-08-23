@@ -27,4 +27,9 @@ extern {
     pub fn get_entity_name(id: u32) -> String;
     #[wasm_bindgen(js_name=getAssetName)]
     pub fn get_asset_name(id: u32) -> String;
+    // type getters
+    #[wasm_bindgen(js_name=getEntityType)]
+    pub fn get_entity_type(id: u32) -> u8;
+    #[wasm_bindgen(js_name=getAssetType)]
+    pub fn get_asset_type(id: u32) -> u8;
 }

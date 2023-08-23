@@ -425,11 +425,21 @@ initSQLite().then((loaded) => {
                 };
                 //
                 gameTestWindow.self.getEntityName = function(rowid) {
-                    return SQLITE.getRow(project, "entity", rowid).name;
+                    const result = SQLITE.getRow(project, "entity", rowid).name;
+                    return ((result === undefined) ? "" : result);
                 };
                 //
                 gameTestWindow.self.getAssetName = function(rowid) {
-                    return SQLITE.getRow(project, "asset", rowid).name;
+                    const result = SQLITE.getRow(project, "asset", rowid).name;
+                    return ((result === undefined) ? "" : result);
+                };
+                //
+                gameTestWindow.self.getEntityType = function(rowid) {
+                    return SQLITE.getRow(project, "entity", rowid).type;
+                };
+                //
+                gameTestWindow.self.getAssetType = function(rowid) {
+                    return SQLITE.getRow(project, "asset", rowid).type;
                 };
 
                 //

@@ -52,7 +52,12 @@ impl TableRow {
     }
 }
 
+impl Default for TableRow {
+    fn default() -> Self { Self::Entity(Default::default(), Default::default()) }
+}
+
 //
+#[derive(Default)]
 pub struct EntityDefinition {
     pub row: TableRow,
     pub ast: AST,
@@ -100,6 +105,7 @@ impl EntityDefinition {
 }
 
 //
+#[derive(Default)]
 pub struct EntityScript {
     pub definition: Rc<EntityDefinition>,
     pub scope: Scope<'static>,
@@ -194,6 +200,7 @@ impl Entity<State> {
 }
 
 impl Entity<Scene> {
+    //
     pub fn new_scene(engine: &Engine, def: Rc<EntityDefinition>) -> Result<Self, String> {
         //
         let mut script = EntityScript::new(&engine, def)?;
@@ -217,6 +224,22 @@ impl Entity<Scene> {
             _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create a",
             " scene with the wrong definition.")))
         }
+    }
+    //
+    pub fn recycle_scene(&self, engine: &Engine, def: Rc<EntityDefinition>) -> Result<(), String> {
+        //
+        let script = Rc::clone(&self.script);
+        //
+        let map = Rc::clone(&self.map.0);
+        //
+        map.borrow_mut().write_lock::<entity::Scene>().expect("write_lock cast should succeed")
+        .recycle(&def.config);
+        //
+        script.borrow_mut().recycle(&engine, def)?;
+        //
+        script.borrow_mut().scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&map)));
+        //
+        Ok(())
     }
 }
 
@@ -272,8 +295,8 @@ impl Entity<Object> {
 }
 
 //
-pub fn create_api(object_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(Engine, Entity<State>,
-Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
+pub fn create_api(object_defs: &mut HashMap<u32,Rc<EntityDefinition>>) -> Result<(Engine, Entity<State>, Entity<Scene>,
+Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
     // Create an 'Engine'
     let mut engine = Engine::new_raw();
 
@@ -320,7 +343,8 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
           .register_get_set("in_color", entity::Scene::get_inside_color, entity::Scene::set_inside_color)
           .register_get_set("out_color", entity::Scene::get_outside_color, entity::Scene::set_outside_color)
           .register_get_set("camera", entity::Scene::get_camera, entity::Scene::set_camera)
-          .register_get("stack_len", entity::Scene::get_stack_len)
+          .register_get("objects_len", entity::Scene::get_objects_len)
+          .register_get("runtimes_len", entity::Scene::get_runtimes_len)
           .register_get("layers", entity::Scene::get_layers)
           .register_fn("to_string", entity::Scene::to_string);
 
@@ -368,13 +392,17 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
     
 
     // Receive the rowid of the initial scene from the the state manager's config
-    let mut cur_scene_id = state_manager.script.borrow().definition.config["initial-scene"].as_int()
-    .expect("The value of 'initial-scene' in the state manager's config should be an integer") as u32;
+    let cur_scene_id = Rc::new(RefCell::new(
+        state_manager.script.borrow().definition.config["initial-scene"].as_int()
+        .expect("The value of 'initial-scene' in the state manager's config should be an integer") as u32
+    ));
+    //
+    let prv_scene_id = Rc::new(RefCell::new(0_u32));
     //
     let cur_scene = Entity::new_scene(&engine, 
         Rc::new(
             EntityDefinition::new(&engine, 
-                TableRow::Entity(cur_scene_id, 2)
+                TableRow::Entity(cur_scene_id.borrow().clone(), 2)
             )?
         )
     )?;
@@ -386,6 +414,8 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
         let instances = cur_scene.script.borrow().definition.config["object-instances"].clone()
         .into_typed_array::<Map>().expect(concat!("Every object's config should contain a 'object-instances'",
         " array, which should only have object-like members."));
+
+        object_stack.borrow_mut().resize_with(instances.len(), || { Entity { map: Object(Default::default()), script: Default::default() } });
 
         //
         let mut i = 0_usize;
@@ -423,14 +453,14 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
                     );
                 }
                 //
-                object_stack.borrow_mut().push(
-                    Entity::new_object(&engine,
-                        Rc::clone(
-                            object_defs.get(&ent_id)
-                            .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
-                        ), (idx, i, j, init_x, init_y)
-                    )?
-                );
+                *object_stack.borrow_mut().get_mut(idx as usize)
+                .expect("The indexes specified in every element of every layer's instances array should be correct.") = 
+                Entity::new_object(&engine,
+                    Rc::clone(
+                        object_defs.get(&ent_id)
+                        .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
+                    ), (idx, i, j, init_x, init_y)
+                )?;
                 //
                 j += 1;
             }
@@ -538,8 +568,20 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
     });
     //
     let api_object_stack = Rc::clone(&object_stack);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
     engine.register_fn("get_object", move |context: rhai::NativeCallContext,
     idx: rhai::INT| -> Result<entity::Object, Box<EvalAltResult>> {
+        //
+        let objects_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").objects_len;
+        //
+        let runtimes_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").runtimes_len;
+        //
+        if idx >= (objects_len+runtimes_len) as rhai::INT {
+            //
+            return Err(Box::new(EvalAltResult::ErrorArrayBounds(objects_len+runtimes_len, idx, context.position())));
+        }
         //
         let object_stack_borrow = api_object_stack.borrow();
         //
@@ -548,13 +590,20 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
             Ok(entity.map.0.borrow().clone_cast::<entity::Object>())
         } else {
             //
-            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(objects_len+runtimes_len, idx, context.position())))
         }
     });
     //
-    let api_object_stack = Rc::clone(&object_stack);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
     engine.register_fn("object_is_valid", move |idx: rhai::INT| -> bool {
-        idx < (api_object_stack.borrow().len() as rhai::INT) && idx > -1
+        //
+        let objects_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").objects_len;
+        //
+        let runtimes_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").runtimes_len;
+        //
+        idx < (objects_len+runtimes_len) as rhai::INT && idx > -1
     });
     //
     let api_object_stack = Rc::clone(&object_stack);
@@ -575,20 +624,31 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
 
     //
     let api_object_stack = Rc::clone(&object_stack);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
     engine.register_fn("activate_object", move |context: rhai::NativeCallContext,
     idx: rhai::INT| -> Result<(), Box<EvalAltResult>> {
+        //
+        let objects_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").objects_len;
+        //
+        let runtimes_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").runtimes_len;
+        //
+        if idx >= (objects_len+runtimes_len) as rhai::INT {
+            return Err(Box::new(EvalAltResult::ErrorArrayBounds(objects_len+runtimes_len, idx, context.position())));
+        }
         //
         let object_stack_borrow = api_object_stack.borrow();
         //
         if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
             entity.map.0.borrow_mut().write_lock::<entity::Object>()
-            .expect("read_lock cast should succeed").active = true;
+            .expect("write_lock cast should succeed").active = true;
             //
             Ok(())
         } else {
             //
-            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(objects_len+runtimes_len, idx, context.position())))
         }
     });
 
@@ -602,7 +662,7 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
         if let Some(entity) = object_stack_borrow.get(idx as usize) {
             //
             entity.map.0.borrow_mut().write_lock::<entity::Object>()
-            .expect("read_lock cast should succeed").active = false;
+            .expect("write_lock cast should succeed").active = false;
             //
             Ok(())
         } else {
@@ -651,8 +711,25 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
 
     //
     let api_object_stack = Rc::clone(&object_stack);
+    let api_scene_map = Rc::clone(&cur_scene.map.0);
     engine.register_fn("message_object", move |context: rhai::NativeCallContext, idx: rhai::INT, 
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
+        //
+        let objects_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").objects_len;
+        //
+        let runtimes_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").runtimes_len;
+        //
+        if idx >= (objects_len+runtimes_len) as rhai::INT {
+            //
+            let info = "Argument 'idx' was out of bounds in call to 'message_object'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
+            info, idx, objects_len+runtimes_len);
+            //
+            return Err(full_s.into());
+        }
         //
         let object_stack_borrow = api_object_stack.borrow();
         //
@@ -672,7 +749,12 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
             }
         } else {
             //
-            Err(Box::new(EvalAltResult::ErrorArrayBounds(object_stack_borrow.len(), idx, context.position())))
+            let info = "Argument 'idx' was out of bounds in call to 'message_object'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
+            info, idx, objects_len+runtimes_len);
+            //
+            return Err(full_s.into());
         }
     });
 
@@ -776,6 +858,22 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
     engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
     idx: rhai::INT, layer_to: rhai::INT, init_x: rhai::FLOAT, init_y: rhai::FLOAT| -> Result<rhai::INT, Box<EvalAltResult>> {
         //
+        let objects_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").objects_len;
+        //
+        let runtimes_len = api_scene_map.borrow()
+        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").runtimes_len;
+        //
+        if idx >= (objects_len+runtimes_len) as rhai::INT {
+            //
+            let info = "Argument 'idx' was out of bounds in call to 'add_object_to_stack'.";
+            //
+            let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
+            info, idx, objects_len+runtimes_len);
+            //
+            return Err(full_s.into());
+        }
+        //
         let mut object_stack_borrow = api_object_stack.borrow_mut();
         //
         let mut scene_map_borrow = api_scene_map.borrow_mut();
@@ -802,7 +900,7 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
             let info = "Argument 'idx' was out of bounds in call to 'add_object_to_stack'.";
             //
             let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
-            info, idx, object_stack_borrow.len());
+            info, idx, objects_len+runtimes_len);
             //
             return Err(full_s.into());
         }
@@ -822,10 +920,7 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
             return Err(full_s.into());
         }
         //
-        let stack_len = scene_map_borrow
-        .read_lock::<entity::Scene>().expect("read_lock cast should succeed").stack_len;
-        //
-        for object_idx in stack_len..object_stack_borrow.len() {
+        for object_idx in objects_len..object_stack_borrow.len() {
             //
             if object_idx == object_stack_borrow.len() {
                 //
@@ -847,8 +942,8 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
                 .expect("read_lock cast should succeed").index_in_stack);
                 //
                 scene_map_borrow.write_lock::<entity::Scene>()
-                .expect("write_lock cast should succeed").layers.get_mut(object_map.borrow().read_lock::<entity::Object>()
-                .expect("read_lock cast should succeed").index_of_layer)
+                .expect("write_lock cast should succeed").layers.get_mut(object_map.borrow()
+                .read_lock::<entity::Object>().expect("read_lock cast should succeed").index_of_layer)
                 .expect("The indexes specified in every object map should be correct.")
                 .instances.swap_remove(object_map.borrow().read_lock::<entity::Object>()
                 .expect("read_lock cast should succeed").index_in_layer);
@@ -857,6 +952,11 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
                 (layer_to as usize, new_layer_idx, init_x as f32, init_y as f32)) {
                     //
                     return Err(format!("{}\nas a result of a call to 'add_object_to_stack'", err).into());
+                }
+                //
+                if objects_len+runtimes_len <= object_idx {
+                    scene_map_borrow.write_lock::<entity::Scene>()
+                    .expect("write_lock cast should succeed").runtimes_len += 1;
                 }
                 //
                 let index = object_map.borrow().read_lock::<entity::Object>()
@@ -888,9 +988,39 @@ Entity<Scene>, u32, Rc<RefCell<Vec<Entity<Object>>>>, Rc<RefCell<HashMap<String,
             }
         );
         //
+        scene_map_borrow.write_lock::<entity::Scene>()
+        .expect("write_lock cast should succeed").runtimes_len += 1;
+        //
         Ok(index as rhai::INT)
     });
 
+    //
+    let api_cur_scene_id = Rc::clone(&cur_scene_id);
+    let api_prv_scene_id = Rc::clone(&prv_scene_id);
+    engine.register_fn("switch_scene", move |name: &str| -> Result<(), Box<EvalAltResult>> {
+        //
+        if *api_prv_scene_id.borrow() != *api_cur_scene_id.borrow() {
+            //
+            return Err(concat!("Can't use the 'switch_scene' function while a scene is being created \\ switched.",
+            " Note: This might have happened because you tried to use this function on the 'create' callback, which",
+            " is being call within the process of creating a scene.").into());
+        }
+        //
+        let new_id = data::get_entity_id(name);
+        //
+        let kind = data::get_entity_type(new_id);
+        //
+        if new_id != 0 && kind == 2 {
+            //
+            *api_cur_scene_id.borrow_mut() = new_id;
+            //
+            Ok(())
+        } else {
+            //
+            Err("Tried to switch to a scene that doesn't exist using the 'switch_scene' function.".into())
+        }
+    });
+
     // The API is done!
-    Ok((engine, state_manager, cur_scene, cur_scene_id, object_stack, key_states))
+    Ok((engine, state_manager, cur_scene, cur_scene_id, prv_scene_id, object_stack, key_states))
 }

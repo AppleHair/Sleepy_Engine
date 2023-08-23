@@ -11,7 +11,7 @@ use web_sys::window;
 use rhai::Engine;
 
 mod entity;
-mod rhai_api;
+mod engine_api;
 mod renderer;
 
 
@@ -19,7 +19,7 @@ mod renderer;
 #[wasm_bindgen]
 pub struct ClosuresHandle {
     interval_id: i32,
-    _interval: Closure::<dyn Fn() -> Result<(), JsValue>>,
+    _interval: Closure::<dyn FnMut() -> Result<(), JsValue>>,
     _keydown: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
 }
@@ -36,16 +36,16 @@ impl Drop for ClosuresHandle {
 pub fn run_game() -> Result<ClosuresHandle, JsValue>
 {
     // Create the object definitions hash map.
-    let mut object_defs: HashMap<u32,Rc<rhai_api::EntityDefinition>> = HashMap::new();
+    let mut object_defs: HashMap<u32,Rc<engine_api::EntityDefinition>> = HashMap::new();
 
     //
     let keys_just_changed: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
     // Create the API 'Engine', and the state manager instance.
     let (api_engine, state_manager, 
-        cur_scene, mut cur_scene_id, 
-        object_stack,
-        key_states) = rhai_api::create_api(&mut object_defs)?;
+        cur_scene, cur_scene_id,
+        prv_scene_id, object_stack,
+        key_states) = engine_api::create_api(&mut object_defs)?;
     
     //
     let event_key_states = Rc::clone(&key_states);
@@ -59,7 +59,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
         //
-        key_states_borrow.insert(event.key(), rhai_api::KeyState { is_held: true, just_pressed: true, just_released: false });
+        key_states_borrow.insert(event.key(), engine_api::KeyState { is_held: true, just_pressed: true, just_released: false });
         //
         keys_just_changed_borrow.push(event.key());
     });
@@ -78,7 +78,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
         //
-        key_states_borrow.insert(event.key(), rhai_api::KeyState { is_held: false, just_pressed: false, just_released: true });
+        key_states_borrow.insert(event.key(), engine_api::KeyState { is_held: false, just_pressed: false, just_released: true });
         //
         keys_just_changed_borrow.push(event.key());
     });
@@ -88,15 +88,15 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
     //
     call_fn_on_all("create", (), &api_engine, &state_manager.script, 
-    &cur_scene.script, &object_stack, &key_states, &keys_just_changed)?;
-    
+    &cur_scene.script, &object_stack)?;
+
     //
     let project_config = api_engine.parse_json(
     &data::get_metadata_config(1),false).unwrap();
     //
-    let canvas_width = rhai_api::dynamic_to_number(&project_config["canvas-width"]).unwrap() as i32;
+    let canvas_width = engine_api::dynamic_to_number(&project_config["canvas-width"]).unwrap() as i32;
     //
-    let canvas_height = rhai_api::dynamic_to_number(&project_config["canvas-height"]).unwrap() as i32;
+    let canvas_height = engine_api::dynamic_to_number(&project_config["canvas-height"]).unwrap() as i32;
 
     //
     let (gl, gl_program,
@@ -158,22 +158,59 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     })?;
 
     //
-    let frame_rate = rhai_api::dynamic_to_number(&project_config["fps"]).unwrap() as i32;
+    let frame_rate = engine_api::dynamic_to_number(&project_config["fps"]).unwrap() as i32;
     //
-    let frame_time = 1000 / frame_rate;
+    let mut last_update = window().unwrap().performance().unwrap().now();
     //
-    let update_loop = Closure::<dyn Fn() -> Result<(), JsValue>>::new(
+    *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
+    //
+    let update_loop = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
     move || -> Result<(), JsValue> {
         //
-        call_fn_on_all("update", (frame_time as rhai::FLOAT, ), &api_engine,
-        &state_manager.script, &cur_scene.script, &object_stack, &key_states, &keys_just_changed)?;
+        let update_time = window().unwrap().performance().unwrap().now();
+        let elapsed = update_time - last_update;
+        last_update = update_time;
+        //
+        call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &api_engine,
+        &state_manager.script, &cur_scene.script, &object_stack)?;
+        //
+        {
+            //
+            let mut key_states_borrow = key_states.borrow_mut();
+            //
+            let mut keys_just_changed_borrow = keys_just_changed.borrow_mut();
+            //
+            for key in keys_just_changed_borrow.clone() {
+                //
+                key_states_borrow.get_mut(&key)
+                .expect("key should exist if it's inside the keys_just_changed vector")
+                .just_pressed = false;
+                //
+                key_states_borrow.get_mut(&key)
+                .expect("key should exist if it's inside the keys_just_changed vector")
+                .just_released = false;
+            }
+            //
+            keys_just_changed_borrow.clear();
+        }        
+        //
+        if *prv_scene_id.borrow() != *cur_scene_id.borrow() {
+            //
+            switch_scene(cur_scene_id.borrow().clone(), &api_engine,
+            &cur_scene, &object_stack, &mut object_defs)?;
+            //
+            call_fn_on_all("create", (), &api_engine,
+            &state_manager.script, &cur_scene.script, &object_stack)?;
+            //
+            *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
+        }
         //
         Ok(())
     });
     //
     let inter_id = window().unwrap().set_interval_with_callback_and_timeout_and_arguments_0(
         update_loop.as_ref().unchecked_ref(),
-        frame_time
+        1000 / frame_rate
     ).or_else(|js| {
         return Err(js
             .as_string()
@@ -194,10 +231,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
 //
 fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine,
-manager: &Rc<RefCell<rhai_api::EntityScript>>, scene: &Rc<RefCell<rhai_api::EntityScript>>,
-object_stack: &Rc<RefCell<Vec<rhai_api::Entity<rhai_api::Object>>>>,
-key_states: &Rc<RefCell<HashMap<String, rhai_api::KeyState>>>,
-keys_just_changed: &Rc<RefCell<Vec<String>>>) -> Result<(), String> {
+manager: &Rc<RefCell<engine_api::EntityScript>>, scene: &Rc<RefCell<engine_api::EntityScript>>,
+object_stack: &Rc<RefCell<Vec<engine_api::Entity<engine_api::Object>>>>) -> Result<(), String> {
     // Call the function on the state manager instance.
     manager.borrow_mut().call_fn(engine, name, args.clone())?;
     //
@@ -224,27 +259,125 @@ keys_just_changed: &Rc<RefCell<Vec<String>>>) -> Result<(), String> {
         i += 1;
     }
     //
-    let mut key_states_borrow = key_states.borrow_mut();
-    //
-    let mut keys_just_changed_borrow = keys_just_changed.borrow_mut();
-    //
-    for key in keys_just_changed_borrow.clone() {
-        //
-        key_states_borrow.get_mut(&key)
-        .expect("key should exist if it's inside the keys_just_changed vector")
-        .just_pressed = false;
-        //
-        key_states_borrow.get_mut(&key)
-        .expect("key should exist if it's inside the keys_just_changed vector")
-        .just_released = false;
-    }
-    //
-    keys_just_changed_borrow.clear();
-    //
     Ok(())
 }
 
+//
+fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::Entity<engine_api::Scene>,
+object_stack: &Rc<RefCell<Vec<engine_api::Entity<engine_api::Object>>>>,
+object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), String> {
+    //
+    object_defs.clear();
+    //
+    scene.recycle_scene(&engine, 
+        Rc::new(
+            engine_api::EntityDefinition::new(&engine, 
+                engine_api::TableRow::Entity(scene_id, 2)
+            )?
+        )
+    )?;
+    //
+    let instances = scene.script.borrow().definition.config["object-instances"].clone()
+    .into_typed_array::<rhai::Map>().expect(concat!("Every object's config should contain a 'object-instances'",
+    " array, which should only have object-like members."));
+    //
+    let mut object_stack_borrow = object_stack.borrow_mut();
+    //
+    if instances.len() > object_stack_borrow.len() {
+        //
+        object_stack_borrow.resize_with(instances.len(), || { engine_api::Entity { 
+            map: engine_api::Object(Rc::new(RefCell::new(rhai::Dynamic::UNIT))), script: Default::default() } 
+        });
+    }
+    //
+    if instances.len() < object_stack_borrow.len() {
+        //
+        for idx in instances.len()..object_stack_borrow.len() {
+            //
+            let object_borrow = object_stack_borrow.get(idx).expect("Range was wrong.");
+            //
+            object_borrow.script.borrow_mut().definition = Default::default();
+            //
+            object_borrow.map.0.borrow_mut().write_lock::<entity::Object>()
+            .expect("write_lock cast should succeed").active = false;
+        }
+    }
 
+    //
+    let mut i = 0_usize;
+    //
+    let layers_len = scene.map.0.borrow().read_lock::<entity::Scene>()
+    .expect("read_lock cast should succeed").layers_len;
+    //
+    for layer in scene.map.0.borrow().read_lock::<entity::Scene>()
+    .expect("read_lock cast should succeed").layers.clone() {
+        //
+        if i >= layers_len {
+            //
+            break;
+        }
+        //
+        let mut j = 0_usize;
+        //
+        for idx in layer.instances {
+            //
+            let inst_info = instances.get(idx as usize)
+            .expect("The indexes specified in every element of every layer's instances array should be correct.");
+            //
+            let ent_id = engine_api::dynamic_to_number(&inst_info["id"])
+            .expect(concat!("Every instance in the 'object-instances' array of an object's",
+            " config should contain an integer 'id' attribute.")) as u32;
+            let (init_x, init_y) = (
+                engine_api::dynamic_to_number(&inst_info["x"])
+                .expect(concat!("Every instance in the 'object-instances' array of an object's",
+                " config should contain an float 'x' attribute.")), 
+                engine_api::dynamic_to_number(&inst_info["y"])
+                .expect(concat!("Every instance in the 'object-instances' array of an object's",
+                " config should contain an float 'y' attribute.")),
+            );
+            //
+            if !object_defs.contains_key(&ent_id) {
+                //
+                object_defs.insert(ent_id, 
+                    Rc::new(
+                        engine_api::EntityDefinition::new(&engine, 
+                            engine_api::TableRow::Entity(ent_id, 1)
+                        )?
+                    )
+                );
+            }
+            //
+            let object_borrow = object_stack_borrow.get_mut(idx as usize)
+            .expect("The indexes specified in every element of every layer's instances array should be correct.");
+            //
+            if object_borrow.map.0.borrow().is_unit() {
+                //
+                *object_borrow = engine_api::Entity::new_object(&engine,
+                    Rc::clone(
+                        object_defs.get(&ent_id)
+                        .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
+                    ), (idx, i, j, init_x, init_y)
+                )?;
+                //
+                j += 1;
+                continue;
+            }
+            //
+            object_borrow.recycle_object(&engine,
+                Rc::clone(
+                    object_defs.get(&ent_id)
+                    .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
+                ), (i, j, init_x, init_y)
+            )?;
+            //
+            j += 1;
+        }
+        //
+        i += 1;
+    }
+    //
+    Ok(())
+}
 
 //
 fn create_rendering_components(canvas_width: i32, canvas_height: i32)
