@@ -576,8 +576,8 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_log_1d3ae0273d8f4f8a = function(arg0) {
         console.log(getObject(arg0));
     };
-    imports.wbg.__wbg_key_8aeaa079126a9cc7 = function(arg0, arg1) {
-        const ret = getObject(arg1).key;
+    imports.wbg.__wbg_code_96d6322b968b2d17 = function(arg0, arg1) {
+        const ret = getObject(arg1).code;
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         getInt32Memory0()[arg0 / 4 + 1] = len1;

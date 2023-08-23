@@ -59,9 +59,9 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
         //
-        key_states_borrow.insert(event.key(), engine_api::KeyState { is_held: true, just_pressed: true, just_released: false });
+        key_states_borrow.insert(event.code(), engine_api::KeyState { is_held: true, just_pressed: true, just_released: false });
         //
-        keys_just_changed_borrow.push(event.key());
+        keys_just_changed_borrow.push(event.code());
     });
 
     window().unwrap().document().unwrap().add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
@@ -78,9 +78,9 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
         //
-        key_states_borrow.insert(event.key(), engine_api::KeyState { is_held: false, just_pressed: false, just_released: true });
+        key_states_borrow.insert(event.code(), engine_api::KeyState { is_held: false, just_pressed: false, just_released: true });
         //
-        keys_just_changed_borrow.push(event.key());
+        keys_just_changed_borrow.push(event.code());
     });
 
     window().unwrap().document().unwrap().add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
