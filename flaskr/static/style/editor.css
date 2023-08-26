@@ -185,12 +185,12 @@ header {
     flex-direction: row;
 }
 
-.action-menu > li, .menu-button, .explorer > .metadata, .folder > .switch, .asset, .entity, .tab > span, .tab > .x {
+.action-menu > li, .menu-button, .explorer > .metadata, .folder > .switch, .asset, .element, .tab > span, .tab > .x {
     user-select: none;
     cursor: pointer;
 }
 
-.menu-button:hover, .menu-button#menuSelected, .explorer > .metadata:hover, .folder > .switch:hover, .asset:hover, .entity:hover, .tab:hover {
+.menu-button:hover, .menu-button#menuSelected, .explorer > .metadata:hover, .folder > .switch:hover, .asset:hover, .element:hover, .tab:hover {
     background-color: hsla(0, 0%, 100%, 0.15);
     color: rgb(152, 255, 166);
 }
@@ -361,7 +361,7 @@ header {
     flex-grow: 1;
 }
 
-.item-list .asset > span::before, .item-list .entity > span::before, .explorer > .metadata > span::before {
+.item-list .asset > span::before, .item-list .element > span::before, .explorer > .metadata > span::before {
     content: "";
     display: inline-block;
     width: 1rem;
@@ -376,15 +376,15 @@ header {
     background-image: url('/static/img/asset-icons.png');
 }
 
-.explorer .entity[data-type] > span::before, .explorer > .metadata > span::before {
-    background-image: url('/static/img/entity-icons.png');
+.explorer .element[data-type] > span::before, .explorer > .metadata > span::before {
+    background-image: url('/static/img/element-icons.png');
 }
 
-.explorer .asset[data-type="sprite"] > span::before, .explorer .entity[data-type="object"] > span::before {
+.explorer .asset[data-type="sprite"] > span::before, .explorer .element[data-type="object"] > span::before {
     background-position: 0px 0px;
 }
 
-.explorer .asset[data-type="font"] > span::before, .explorer .entity[data-type="scene"] > span::before {
+.explorer .asset[data-type="font"] > span::before, .explorer .element[data-type="scene"] > span::before {
     background-position: 0px -1rem;
 }
 
@@ -468,15 +468,15 @@ header {
     background-image: url('/static/img/asset-icons.png');
 }
 
-.tab[data-table="entity"][data-type] span::before, .tab[data-table="metadata"] span::before {
-    background-image: url('/static/img/entity-icons.png');
+.tab[data-table="element"][data-type] span::before, .tab[data-table="metadata"] span::before {
+    background-image: url('/static/img/element-icons.png');
 }
 
-.tab[data-table="asset"][data-type="sprite"] span::before, .tab[data-table="entity"][data-type="object"] span::before {
+.tab[data-table="asset"][data-type="sprite"] span::before, .tab[data-table="element"][data-type="object"] span::before {
     background-position: 0px 0px;
 }
 
-.tab[data-table="asset"][data-type="font"] span::before, .tab[data-table="entity"][data-type="scene"] span::before {
+.tab[data-table="asset"][data-type="font"] span::before, .tab[data-table="element"][data-type="scene"] span::before {
     background-position: 0px -1rem;
 }
 
@@ -787,7 +787,7 @@ header {
     display: flex !important;
 }
 
-.material-section:not([data-mode="game"], [data-mode="project"], [data-mode="script"]) > #preview  {
+.material-section:not([data-mode="state"], [data-mode="project"], [data-mode="script"]) > #preview  {
     display: block !important;
     flex-grow: 1;
     min-width: 0px;
@@ -798,7 +798,7 @@ header {
     background-color: rgb(40, 42, 57);
 }
 
-.material-section[data-mode="game"] > #game-config.config {
+.material-section[data-mode="state"] > #state-config.config {
     display: flex !important;
     resize: none;
     flex-grow: 1;
@@ -809,7 +809,7 @@ header {
     flex-grow: 1;
 }
 
-.material-section:is([data-mode="game"], [data-mode="object"], [data-mode="scene"]) > #toScript-button.material-button {
+.material-section:is([data-mode="state"], [data-mode="object"], [data-mode="scene"]) > #toScript-button.material-button {
     display: block !important;
 }
 

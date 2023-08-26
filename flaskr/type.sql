@@ -1,11 +1,11 @@
-DROP TABLE IF EXISTS entityType;
-CREATE TABLE entityType( name text, baseScript integer, baseConfig integer);
+DROP TABLE IF EXISTS elementType;
+CREATE TABLE elementType( name text, baseScript integer, baseConfig integer);
 DROP TABLE IF EXISTS assetType;
 CREATE TABLE assetType( name text, dataType text, baseConfig integer);
 DROP TABLE IF EXISTS blobs;
 CREATE TABLE blobs( data blob);
-INSERT INTO entityType VALUES ('object', 1, 2);
-INSERT INTO entityType VALUES ('scene', 3, 4);
+INSERT INTO elementType VALUES ('object', 1, 2);
+INSERT INTO elementType VALUES ('scene', 3, 4);
 INSERT INTO assetType VALUES ('sprite', 'png', 5);
 INSERT INTO assetType VALUES ('audio', 'ogg', 6);
 INSERT INTO assetType VALUES ('font', 'ttf', 7);

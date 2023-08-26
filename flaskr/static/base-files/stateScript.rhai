@@ -1,9 +1,9 @@
 
-    // Game Entity Template Script //
+    // State Manager Template Script //
 
 /*
     You can add local variables to
-    this entity in the scripts body.
+    this element in the scripts body.
 */
 
 // variables go here

@@ -6,26 +6,26 @@
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
 
 
-// This is a pointer to the pop-up element
+// This is a pointer to the pop-up HTML element
 const popup = document.querySelector(".page-wrapper > .pop-up");
 
 
-// This is a pointer to the pop-up window element
+// This is a pointer to the pop-up window HTML element
 const popupWin = popup.querySelector(":scope > .window");
-// This is a pointer to the window's message p element
+// This is a pointer to the window's message p HTML element
 const popupMessage = popupWin.querySelector(":scope > p");
 
 // This is an object which contains
 // pointers to different input fields
 // in the pop-up window
 const popupInput = {
-    // This is a pointer to the name input element
+    // This is a pointer to the name input HTML element
     'name': popupWin.querySelector(":scope #name"),
-    // This is a pointer to the color input element
+    // This is a pointer to the color input HTML element
     'color': popupWin.querySelector(":scope #color"),
-    // This is a pointer to the type select element
+    // This is a pointer to the type select HTML element
     'type': popupWin.querySelector(":scope #type"),
-    // This is a pointer to the data input element
+    // This is a pointer to the data input HTML element
     'data': popupWin.querySelector(":scope #data")
 }
 // This is an object which contains
@@ -38,8 +38,8 @@ const popupDefaultValues = {
 }
 
 // These are pointers to the 
-// confirm and cancal elements
-// of the pop-up window
+// confirm and cancal HTML
+// HTML elements of the pop-up window
 const popupConfirm = popupWin.querySelector(":scope #confirm");
 const popupCancal = popupWin.querySelector(":scope #cancal");
 
@@ -55,7 +55,7 @@ function closePopupWindow() {
     // they are clicked
     popupCancal.onclick = null;
     popupConfirm.onclick = null;
-    // We remove the pop-up element's
+    // We remove the pop-up HTML element's
     // style attribute and make it invisible
     popup.removeAttribute("style");
 
@@ -74,7 +74,7 @@ function closePopupWindow() {
         popupInput[input].parentNode.removeAttribute("style");
     }
 
-    // We remove all the options out of the type select element
+    // We remove all the options out of the type select HTML element
     popupInput['type'].querySelectorAll(":scope > *").forEach((item) => item.remove());
 }
 
@@ -84,7 +84,7 @@ function closePopupWindow() {
 // before preforming a certain action, 
 // asking him to confirm the action. 
 function openMessageWindow(message, onConfirm) {
-    // We set the pop-up element's
+    // We set the pop-up HTML element's
     // display property to flex, in
     // order to make it and its content
     // appear correctly on the page
@@ -117,7 +117,7 @@ function openMessageWindow(message, onConfirm) {
 // color, type or data fields from
 // the pop-up window.
 function openInputWindow(message, inputs, onConfirm, types, row) {
-    // We set the pop-up element's
+    // We set the pop-up HTML element's
     // display property to flex, in
     // order to make it and its content
     // appear correctly on the page
@@ -138,7 +138,7 @@ function openInputWindow(message, inputs, onConfirm, types, row) {
         if (input === undefined) {
             continue;
         }
-        // We set the element's
+        // We set the HTML element's
         // display property to flex
         // and remove its disabled 
         // attribute to make it visible 
@@ -159,12 +159,12 @@ function openInputWindow(message, inputs, onConfirm, types, row) {
         // row that we should edit
         if (row !== undefined) {
             // We receive its corresponding
-            // value to the input element
+            // value to the input HTML element
             let curValue = row[input.id];
             // if he has such value
             if (curValue !== undefined) {
                 // we give it to the 
-                // input element
+                // input HTML element
                 input.value = curValue;  
             }
         }
@@ -174,7 +174,7 @@ function openInputWindow(message, inputs, onConfirm, types, row) {
     if (types !== undefined) {
         // we itrate on its key, value pairs
         types.forEach((value,key) => {
-            // We add an option to the type select element
+            // We add an option to the type select HTML element
             const option = popupInput['type'].appendChild(document.createElement("option"));
             // We set this option's value to the key
             option.setAttribute("value", key);

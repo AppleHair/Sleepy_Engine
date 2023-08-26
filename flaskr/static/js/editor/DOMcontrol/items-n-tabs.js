@@ -16,22 +16,22 @@
 // 'open' boolean value (false by default).
 // It adds the item which the received row
 // represents to its corresponding container
-// in the explorer element of the document.
+// in the explorer HTML element of the document.
 // if the 'open' boolean is true, the item
 // will be selected, revealed and ,if it's not
 // a folder, opened in a new tab when it's added.
-// An item can be a folder, entity or asset.
+// An item can be a folder, element or asset.
 function addItem(table, row, types, open = false) {
     // row['container'] is an ID used
     // to reference the rowid of the
     // container in the folder table.
     // If it equals 0, the container
     // is the base folder(the item-list
-    // element in the explorer). if
+    // HTML element in the explorer). if
     // it doesn't equal 0, the container
     // is a real folder, and its class
     // name will be "folder". For styling
-    // purposes, the real container element
+    // purposes, the real container HTML element
     // in a real folder is nested like this:
     // folder > .folder-content > ul
     // with "ul" as the real container.
@@ -41,17 +41,17 @@ function addItem(table, row, types, open = false) {
         container = container.querySelector(":scope > .folder-content > ul");
     }
 
-    // We create the element of the item and add it to its container.
+    // We create the HTML element of the item and add it to its container.
     const item = container.appendChild(document.createElement("li"));
-    // Its class name will be the table it belongs to (folder/entity/asset).
+    // Its class name will be the table it belongs to (folder/element/asset).
     item.className = table;
     // row['name'] is the name of the item.
-    // Its corresponding attribute in the element
-    // will be "name".
+    // Its corresponding attribute in the HTML
+    // element will be "name".
     item.setAttribute("name", row['name']);
     // row['rowid'] is the row ID of the item
     // in its corresponding table. Its corresponding 
-    // attribute in the element will be "data-table-id",
+    // attribute in the HTML element will be "data-table-id",
     // which appears in the dataset as dataset['tableId'].
     item.dataset['tableId'] = row['rowid'];
 
@@ -65,19 +65,19 @@ function addItem(table, row, types, open = false) {
         // This div will be the switch that makes the folder open and close
         // and will also contain the span which displays the folder's name.
         const fswitch = item.appendChild(document.createElement("div"));
-        // The span is defined as the child of the switch element.
+        // The span is defined as the child of the switch HTML element.
         span = fswitch.appendChild(document.createElement("span"));
         // This div is a warpper for the folder's contents.
         const foldercontent = item.appendChild(document.createElement("div"));
         // This div will have the folder's contents inside of it.
         foldercontent.appendChild(document.createElement("ul"));
 
-        // We give class names to some of the elements
+        // We give class names to some of the HTML elements
         foldercontent.className = "folder-content";
         fswitch.className = "switch";
 
         // We add the folder state data attribute to the
-        // element, and give it the default value "close".
+        // HTML element, and give it the default value "close".
         // This attribute is checked in the style sheet,
         // and will make the folder open or close.
         item.dataset['folderState'] = "close";
@@ -87,12 +87,12 @@ function addItem(table, row, types, open = false) {
         // attribute, using the "--folder-color" variable
         // which is defined in the style sheet.
         item.setAttribute("style", `--folder-color: ${row['color']};`);
-    } else { // if the item isn't a folder, but a entity or asset
-        // The span is defined as the child of the item element itself.
+    } else { // if the item isn't a folder, but a element or asset
+        // The span is defined as the child of the item HTML element itself.
         span = item.appendChild(document.createElement("span"));
         // row['type'] is an ID used
         // to reference the rowid of the
-        // type of this item in the entityType/assetType
+        // type of this item in the elementType/assetType
         // table from the typesDB. The types map we got
         // as an argument gives us an easyer way to
         // use row['type'] and the table name in order
@@ -128,7 +128,7 @@ function addItem(table, row, types, open = false) {
 }
 
 // This function receives an
-// item element and a validation
+// item HTML element and a validation
 // function. It tries to remove
 // the item from the document, or
 // remove multiple items if the
@@ -225,7 +225,7 @@ function removeItem(item, onValidation) {
 }
 
 // This function receives an
-// item element and selects it.
+// item HTML element and selects it.
 // The style sheet makes selected
 // items' name appear light green,
 // even when the mouse doesn't hover
@@ -266,7 +266,7 @@ function selectItem(item, scroll = true) {
 }
 
 // This function receives an
-// item element and opens all
+// item HTML element and opens all
 // the folders which contain him,
 // and as a result, the item will
 // be visable on the item list.
@@ -283,7 +283,7 @@ function revealItem(item) {
 }
 
 // This function receives a folder
-// item element and toggles its state
+// item HTML element and toggles its state
 // (from open to close and vice versa)
 function toggleFolderState(folder) {
     if (folder.dataset['folderState'] != "close") {
@@ -300,9 +300,9 @@ function toggleFolderState(folder) {
 
 
 // This function receives an item
-// element and creates a tab element
-// that corresponds to it in the
-// tab-list element of the document.
+// HTML element and creates a tab HTML
+// element that corresponds to it in the
+// tab-list HTML element of the document.
 function addTab(item) {
     // we save the items table
     // and rowid in constants
@@ -318,16 +318,16 @@ function addTab(item) {
         return null;
     }
     
-    // We create the tab element and add it to the tab-list element.
+    // We create the tab HTML element and add it to the tab-list HTML element.
     const tab = document.querySelector(".editor .tab-section .tab-list").appendChild(document.createElement("li"));
-    // We create a span inside the tab element, which will make the tab's name appear on the document.
+    // We create a span inside the tab HTML element, which will make the tab's name appear on the document.
     const span = tab.appendChild(document.createElement("span"));
-    // We create the x element, which will close the tab when it's clicked.
+    // We create the x HTML element, which will close the tab when it's clicked.
     const x = document.createElement("button");
-    // We add the x element after the span.
+    // We add the x HTML element after the span.
     span.after(x);
 
-    // We give class names to some of the elements
+    // We give class names to some of the HTML elements
     tab.className = "tab";
     x.className = "x";
 

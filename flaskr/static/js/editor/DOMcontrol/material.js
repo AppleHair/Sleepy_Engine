@@ -32,7 +32,7 @@ const modeComponents = {
     'font': ['preview'],
     'object': ['config', 'preview', 'script'],
     'scene': ['config', 'preview', 'script'],
-    'game': ['config', 'script'],
+    'state': ['config', 'script'],
     'project': ['config'],
     'loading': ['preview'],
     'none': ['preview'],
@@ -188,7 +188,7 @@ const configForms = {
     'sprite': document.querySelector("#sprite-config"),
     'object': document.querySelector("#object-config"),
     'scene': document.querySelector("#scene-config"),
-    'game': document.querySelector("#game-config"),
+    'state': document.querySelector("#state-config"),
     'project': document.querySelector("#project-config")
 };
 
@@ -200,14 +200,14 @@ let configInfo = {
 };
 
 //
-function getJSONScope(element) {
+function getJSONScope(htmlElement) {
     //
     const path = [];
     //
-    while (element.className != "config") {
-        element = element.parentNode;
-        if (element.hasAttribute("name")) {
-            path.push(element.getAttribute("name"));
+    while (htmlElement.className != "config") {
+        htmlElement = htmlElement.parentNode;
+        if (htmlElement.hasAttribute("name")) {
+            path.push(htmlElement.getAttribute("name"));
         }
     }
     //
@@ -319,21 +319,21 @@ function loadConfig(form) {
     }
 
     //
-    function determineLoadMethod(element, scope) {
-        if (element.className.includes('json-field')) {
-            loadVariable(element.querySelector(":scope > input"), scope, "field");
+    function determineLoadMethod(htmlElement, scope) {
+        if (htmlElement.className.includes('json-field')) {
+            loadVariable(htmlElement.querySelector(":scope > input"), scope, "field");
         }
-        if (element.className.includes('json-object')) {
-            loadVariable(element, scope, "object");
+        if (htmlElement.className.includes('json-object')) {
+            loadVariable(htmlElement, scope, "object");
         }
-        if (element.className.includes('json-array')) {
-            loadVariable(element, scope, "array");
+        if (htmlElement.className.includes('json-array')) {
+            loadVariable(htmlElement, scope, "array");
         }
     }
     //
-    function loadVariable(element, scope, method) {
+    function loadVariable(htmlElement, scope, method) {
         //
-        let key = element.getAttribute("name");
+        let key = htmlElement.getAttribute("name");
         //
         if (key === null) {
             return;
@@ -341,13 +341,13 @@ function loadConfig(form) {
 
         //
         if (method == "field") {
-            element.value = scope[key];
+            htmlElement.value = scope[key];
             return;
         }
         //
         if (method == "object") {
             //
-            element.querySelectorAll(":scope > *").forEach((attr) => {
+            htmlElement.querySelectorAll(":scope > *").forEach((attr) => {
                 //
                 determineLoadMethod(attr, scope[key]);
             });
@@ -357,19 +357,19 @@ function loadConfig(form) {
             //
             let li;
             //
-            const isVersion = element.getAttribute("name") == "version";
+            const isVersion = htmlElement.getAttribute("name") == "version";
             //
             for (let i = 0 ; i < scope[key].length ; i++) {
                 //
                 if (isVersion) {
                     //
-                    li = element.querySelector(`input[name="${i}"]`);
+                    li = htmlElement.querySelector(`input[name="${i}"]`);
                     //
                     loadVariable(li, scope[key], "field");
                     continue;
                 }
                 //
-                li = addItemToConfigArray(element, i, false);
+                li = addItemToConfigArray(htmlElement, i, false);
                 //
                 determineLoadMethod(li, scope[key]);
             }
@@ -378,29 +378,29 @@ function loadConfig(form) {
     //
     const JSON = configInfo.JSON;
     //
-    form.querySelectorAll(":scope > *:not(#game-icon)").forEach((element) => {
-        determineLoadMethod(element, JSON);
+    form.querySelectorAll(":scope > *:not(#game-icon)").forEach((htmlElement) => {
+        determineLoadMethod(htmlElement, JSON);
     });
 }
 
 //
 function addItemToConfigArray(jsonArray, index, update = true) {
     //
-    function determineAddMethod(element, scope) {
-        if (element.className.includes('json-field')) {
-            addVariable(element.querySelector(":scope > input"), scope, "field");
+    function determineAddMethod(htmlElement, scope) {
+        if (htmlElement.className.includes('json-field')) {
+            addVariable(htmlElement.querySelector(":scope > input"), scope, "field");
         }
-        if (element.className.includes('json-object')) {
-            addVariable(element, scope, "object");
+        if (htmlElement.className.includes('json-object')) {
+            addVariable(htmlElement, scope, "object");
         }
-        if (element.className.includes('json-array')) {
-            addVariable(element, scope, "array");
+        if (htmlElement.className.includes('json-array')) {
+            addVariable(htmlElement, scope, "array");
         }
     }
     //
-    function addVariable(element, scope, method) {
+    function addVariable(htmlElement, scope, method) {
         //
-        let key = element.getAttribute("name");
+        let key = htmlElement.getAttribute("name");
         //
         if (key === null) {
             return;
@@ -409,13 +409,13 @@ function addItemToConfigArray(jsonArray, index, update = true) {
         //
         if (method == "field") {
             //
-            scope[key] = (element.type == "number") ? Number(element.value) : element.value;
+            scope[key] = (htmlElement.type == "number") ? Number(htmlElement.value) : htmlElement.value;
         }
         //
         if (method == "object") {
             scope[key] = {};
             //
-            element.querySelectorAll(":scope > *").forEach((attr) => {
+            htmlElement.querySelectorAll(":scope > *").forEach((attr) => {
                 //
                 determineAddMethod(attr, scope[key]);
             });
@@ -425,7 +425,7 @@ function addItemToConfigArray(jsonArray, index, update = true) {
             //
             scope[key] = [];
             //
-            element.querySelectorAll(":scope > li > :is(json-field, json-object, json-array)").forEach((item) => {
+            htmlElement.querySelectorAll(":scope > li > :is(json-field, json-object, json-array)").forEach((item) => {
                 //
                 determineAddMethod(item, scope[key]);
             });

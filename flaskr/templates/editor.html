@@ -22,8 +22,8 @@
 
             <div class="workspace">
                 <aside class="explorer">
-                    <div class="metadata" name="Game Manager" data-table-id="2" data-type="game">
-                        <span>Game Manager</span>
+                    <div class="metadata" name="State Manager" data-table-id="2" data-type="state">
+                        <span>State Manager</span>
                     </div>
                     <ul class="item-list" data-table-id="0">
                         <!-- FOLDERS AND ITEMS GO HERE -->
@@ -231,7 +231,7 @@
                                 <div class="plus-button"></div>
                             </ol>
                         </form>
-                        <form id="game-config" class="config">
+                        <form id="state-config" class="config">
                             <div class="json-field scene-reference">
                                 <label>Initial Scene ID</label>
                                 <input type="number" name="initial-scene"/>
@@ -379,17 +379,17 @@
 
         <ul class="action-menu">
             <li name="new-folder" data-table="folder item-list">New Folder</li>
-            <li name="new-entity" data-table="folder item-list">New Entity</li>
+            <li name="new-element" data-table="folder item-list">New Element</li>
             <li name="new-asset" data-table="folder item-list">New Asset</li>
 
             <li name="recolor-folder" data-table="folder">Re-Color Folder</li>
 
             <li name="rename-folder" data-table="folder">Rename Folder</li>
-            <li name="rename-entity" data-table="entity">Rename Entity</li>
+            <li name="rename-element" data-table="element">Rename Element</li>
             <li name="rename-asset" data-table="asset">Rename Asset</li>
             
             <li name="delete-folder" data-table="folder">Delete Folder</li>
-            <li name="delete-entity" data-table="entity">Delete Entity</li>
+            <li name="delete-element" data-table="element">Delete Element</li>
             <li name="delete-asset" data-table="asset">Delete Asset</li>
         </ul>
 

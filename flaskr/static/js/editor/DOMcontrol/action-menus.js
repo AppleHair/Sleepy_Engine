@@ -17,7 +17,7 @@
 let inContextMenu = false;
 let inDropDownMenu = false;
 
-// This is a pointer to the context menu element
+// This is a pointer to the context menu HTML element
 const contextMenu = document.querySelector("body > .action-menu");
 // This is a node list of every option 
 // the context menu provides for any item
@@ -46,7 +46,7 @@ function contextMenuSetup(optionsFn = {}) {
 }
 
 // This function receives an 
-// item/item-list element and
+// item/item-list HTML element and
 // x and y coordinates on the
 // page. It opens a context menu 
 // on the received x and y positions 
@@ -108,7 +108,7 @@ function closeActionMenus() {
 // documentInteractionSetup, which
 // gives it its option functions.
 function dropDownMenuSetup(optionsFn = {}) {
-    // We get a pointer to the menu bar element
+    // We get a pointer to the menu bar HTML element
     const menubar = document.querySelector(".menu-bar");
 
     // This function will make

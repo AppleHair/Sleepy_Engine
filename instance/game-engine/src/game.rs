@@ -10,7 +10,7 @@ use wasm_bindgen::JsCast;
 use web_sys::window;
 use rhai::Engine;
 
-mod entity;
+mod element;
 mod engine_api;
 mod renderer;
 
@@ -36,7 +36,7 @@ impl Drop for ClosuresHandle {
 pub fn run_game() -> Result<ClosuresHandle, JsValue>
 {
     // Create the object definitions hash map.
-    let mut object_defs: HashMap<u32,Rc<engine_api::EntityDefinition>> = HashMap::new();
+    let mut object_defs: HashMap<u32,Rc<engine_api::ElementDefinition>> = HashMap::new();
 
     //
     let keys_just_changed: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
@@ -122,7 +122,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         renderer::render_scene(
             &gl, &gl_program, &program_data, &buffer,
             &cur_scene_map.borrow()
-                .read_lock::<entity::Scene>()
+                .read_lock::<element::Scene>()
                 .expect("read_lock cast should succeed")
         )?;
         //
@@ -231,8 +231,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
 //
 fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine,
-manager: &Rc<RefCell<engine_api::EntityScript>>, scene: &Rc<RefCell<engine_api::EntityScript>>,
-object_stack: &Rc<RefCell<Vec<engine_api::Entity<engine_api::Object>>>>) -> Result<(), String> {
+manager: &Rc<RefCell<engine_api::ElementScript>>, scene: &Rc<RefCell<engine_api::ElementScript>>,
+object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Result<(), String> {
     // Call the function on the state manager instance.
     manager.borrow_mut().call_fn(engine, name, args.clone())?;
     //
@@ -246,7 +246,7 @@ object_stack: &Rc<RefCell<Vec<engine_api::Entity<engine_api::Object>>>>) -> Resu
         }
         //
         if object_stack.borrow().get(i).unwrap().map.0.borrow()
-        .read_lock::<entity::Object>().expect("read_lock cast should succeed")
+        .read_lock::<element::Object>().expect("read_lock cast should succeed")
         .active == true {
             //
             let object = Rc::clone( 
@@ -263,16 +263,16 @@ object_stack: &Rc<RefCell<Vec<engine_api::Entity<engine_api::Object>>>>) -> Resu
 }
 
 //
-fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::Entity<engine_api::Scene>,
-object_stack: &Rc<RefCell<Vec<engine_api::Entity<engine_api::Object>>>>,
-object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), String> {
+fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::Element<engine_api::Scene>,
+object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>,
+object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), String> {
     //
     object_defs.clear();
     //
     scene.recycle_scene(&engine, 
         Rc::new(
-            engine_api::EntityDefinition::new(&engine, 
-                engine_api::TableRow::Entity(scene_id, 2)
+            engine_api::ElementDefinition::new(&engine, 
+                engine_api::TableRow::Element(scene_id, 2)
             )?
         )
     )?;
@@ -285,7 +285,7 @@ object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), S
     //
     if instances.len() > object_stack_borrow.len() {
         //
-        object_stack_borrow.resize_with(instances.len(), || { engine_api::Entity { 
+        object_stack_borrow.resize_with(instances.len(), || { engine_api::Element { 
             map: engine_api::Object(Rc::new(RefCell::new(rhai::Dynamic::UNIT))), script: Default::default() } 
         });
     }
@@ -298,7 +298,7 @@ object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), S
             //
             object_borrow.script.borrow_mut().definition = Default::default();
             //
-            object_borrow.map.0.borrow_mut().write_lock::<entity::Object>()
+            object_borrow.map.0.borrow_mut().write_lock::<element::Object>()
             .expect("write_lock cast should succeed").active = false;
         }
     }
@@ -306,10 +306,10 @@ object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), S
     //
     let mut i = 0_usize;
     //
-    let layers_len = scene.map.0.borrow().read_lock::<entity::Scene>()
+    let layers_len = scene.map.0.borrow().read_lock::<element::Scene>()
     .expect("read_lock cast should succeed").layers_len;
     //
-    for layer in scene.map.0.borrow().read_lock::<entity::Scene>()
+    for layer in scene.map.0.borrow().read_lock::<element::Scene>()
     .expect("read_lock cast should succeed").layers.clone() {
         //
         if i >= layers_len {
@@ -340,8 +340,8 @@ object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), S
                 //
                 object_defs.insert(ent_id, 
                     Rc::new(
-                        engine_api::EntityDefinition::new(&engine, 
-                            engine_api::TableRow::Entity(ent_id, 1)
+                        engine_api::ElementDefinition::new(&engine, 
+                            engine_api::TableRow::Element(ent_id, 1)
                         )?
                     )
                 );
@@ -352,7 +352,7 @@ object_defs: &mut HashMap<u32,Rc<engine_api::EntityDefinition>>) -> Result<(), S
             //
             if object_borrow.map.0.borrow().is_unit() {
                 //
-                *object_borrow = engine_api::Entity::new_object(&engine,
+                *object_borrow = engine_api::Element::new_object(&engine,
                     Rc::clone(
                         object_defs.get(&ent_id)
                         .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")

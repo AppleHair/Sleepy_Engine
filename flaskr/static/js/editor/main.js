@@ -65,7 +65,7 @@ function loadEditor() {
 
     // We iterate on the names of the
     // tables we want to load items from.
-    for (let table of ["folder", "entity", "asset"]) {
+    for (let table of ["folder", "element", "asset"]) {
         // We add every row from these tables to
         // the explorer item list through the DOM.
         SQLITE.forEachInTable(project, table, (row) => DOM.addItem(table, row, types));
@@ -104,7 +104,7 @@ function loadGameIcon(blob) {
 }
 
 // This function receives an
-// item element, and deletes
+// item HTML element, and deletes
 // it from the project file
 // and the document if the
 // user confirms the action
@@ -152,10 +152,10 @@ function itemDeletion(item) {
                     if (entry.table == "asset") {
                         blobIDs.push(row['data']);
                     }
-                    // if the item is an entity,
+                    // if the item is an element,
                     // we push the rowid of its
                     // script blob into the array
-                    if (entry.table == "entity") {
+                    if (entry.table == "element") {
                         blobIDs.push(row['script']);
                     }
                     
@@ -178,7 +178,7 @@ function itemDeletion(item) {
 }
 
 // This function receives an
-// item element, and renames
+// item HTML element, and renames
 // it in the project file and
 // the document according to 
 // the user's input in the 
@@ -246,7 +246,7 @@ new SQLITE.ServerDBRequest(
         // We create the types map
         // using the typesDB database.
         types = new Map([
-            ["entity", SQLITE.getMap(typesDB, "entityType", "rowid", "name")],
+            ["element", SQLITE.getMap(typesDB, "elementType", "rowid", "name")],
             ["asset", SQLITE.getMap(typesDB, "assetType", "rowid", "name")]
         ]);
     }
@@ -316,15 +316,15 @@ initSQLite().then((loaded) => {
             // file from his hard disk 
             // drive to the editor.
             'load-project': () => {
-                // We get the document's load "file input" element
+                // We get the document's load "file input" HTML element
                 const fileInput = document.querySelector("#project-load");
                 // We reset the value of the
-                // input element to make the
+                // input HTML element to make the
                 // file reload even if it's
                 // already selected
                 fileInput.value = '';
                 // We show the file picker
-                // of the element to the user
+                // of the HTML element to the user
                 fileInput.showPicker();
                 // When the user picks a file
                 fileInput.oninput = () => {
@@ -353,18 +353,18 @@ initSQLite().then((loaded) => {
             // download his project file to his
             // hard disk drive.
             'save-project': () => {
-                // We get the document's save "a" element
+                // We get the document's save "a" HTML element
                 const a = document.querySelector("#project-save");
                 // We create a new URL for the project
-                // file and give it to the a element.
+                // file and give it to the a HTML element.
                 a.href = URL.createObjectURL(new Blob([project.export()]));
-                // We define the a element as a download link and
+                // We define the a HTML element as a download link and
                 // tell it to download the file with the name of the project.
                 a.download = projectName + ".sqlite";
                 // We set the target to _black, which will
                 // make the download happen on a new window/tab.
                 a.target = '_blank';
-                // We "click" the a element to tell the
+                // We "click" the a HTML element to tell the
                 // browser we want to download the file.
                 a.click();
                 // We revoke the URL after the download.
@@ -392,8 +392,8 @@ initSQLite().then((loaded) => {
                     return getBlob(SQLITE.getRow(project, "asset", rowid).data);
                 };
                 //
-                gameTestWindow.self.getEntityScript = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "entity", rowid).script, true);
+                gameTestWindow.self.getElementScript = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "element", rowid).script, true);
                 };
                 //
                 gameTestWindow.self.getMetadataConfig = function(rowid) {
@@ -404,12 +404,12 @@ initSQLite().then((loaded) => {
                     return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
                 };
                 //
-                gameTestWindow.self.getEntityConfig = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "entity", rowid).config, true);
+                gameTestWindow.self.getElementConfig = function(rowid) {
+                    return getBlob(SQLITE.getRow(project, "element", rowid).config, true);
                 };
                 //
-                gameTestWindow.self.getEntityID = function(name) {
-                    let stmt = project.prepare(`SELECT rowid FROM entity WHERE name=?;`, [name]);
+                gameTestWindow.self.getElementID = function(name) {
+                    let stmt = project.prepare(`SELECT rowid FROM element WHERE name=?;`, [name]);
                     stmt.step();
                     let res = stmt.get();
                     stmt.free();
@@ -424,8 +424,8 @@ initSQLite().then((loaded) => {
                     return res[0];
                 };
                 //
-                gameTestWindow.self.getEntityName = function(rowid) {
-                    const result = SQLITE.getRow(project, "entity", rowid).name;
+                gameTestWindow.self.getElementName = function(rowid) {
+                    const result = SQLITE.getRow(project, "element", rowid).name;
                     return ((result === undefined) ? "" : result);
                 };
                 //
@@ -434,8 +434,8 @@ initSQLite().then((loaded) => {
                     return ((result === undefined) ? "" : result);
                 };
                 //
-                gameTestWindow.self.getEntityType = function(rowid) {
-                    return SQLITE.getRow(project, "entity", rowid).type;
+                gameTestWindow.self.getElementType = function(rowid) {
+                    return SQLITE.getRow(project, "element", rowid).type;
                 };
                 //
                 gameTestWindow.self.getAssetType = function(rowid) {
@@ -479,7 +479,7 @@ initSQLite().then((loaded) => {
             'new-folder': (container) => {
                 // We define a message for the user
                 // which fits the action of adding
-                // a folder to the item list element
+                // a folder to the item list HTML element
                 let message = `The new folder will be added to the base folder.
                 
                 Please define the new folder:`;
@@ -510,42 +510,42 @@ initSQLite().then((loaded) => {
             },
 
             // This function lets the user
-            // create a new entity in a certain
+            // create a new element in a certain
             // container, which can be the item
             // list or a folder.
-            'new-entity': (container) => {
+            'new-element': (container) => {
                 // We define a message for the user
                 // which fits the action of adding
-                // an entity to the item list element
-                let message = `The new entity will be added to the base folder.
+                // an element to the item list HTML element
+                let message = `The new element will be added to the base folder.
                 
-                Please define the new entity:`;
+                Please define the new element:`;
                 // if the container is a folder
                 if (container.className == "folder") {
                     // We make the message fit the 
-                    // action of adding an entity to
+                    // action of adding an element to
                     // a folder
-                    message = `The new entity will be added to the "${container.getAttribute("name")}" folder.
+                    message = `The new element will be added to the "${container.getAttribute("name")}" folder.
                     
-                    Please define the new entity:`;
+                    Please define the new element:`;
                 }
                 // We open an input window for
                 // the user, where he will be
                 // able to define the basic 
-                // attributes of the entity
+                // attributes of the element
                 DOM.openInputWindow(message, ['name','type'],
                     // When the user confirms
                     (results) => {
-                        // We create a new config file for the entity
+                        // We create a new config file for the element
                         let blobConfig = SQLITE.addRow(project, "blobs", [
                             SQLITE.getRow(typesDB,"blobs",
-                                SQLITE.getRow(typesDB,"entityType",results[1])['baseConfig']
+                                SQLITE.getRow(typesDB,"elementType",results[1])['baseConfig']
                                 )['data']
                             ]);
-                        // We create a new script file for the entity
+                        // We create a new script file for the element
                         let blobScript = SQLITE.addRow(project, "blobs", [
                             SQLITE.getRow(typesDB,"blobs",
-                                SQLITE.getRow(typesDB,"entityType",results[1])['baseScript']
+                                SQLITE.getRow(typesDB,"elementType",results[1])['baseScript']
                                 )['data']
                             ]);
 
@@ -553,11 +553,11 @@ initSQLite().then((loaded) => {
                         // the config blob's rowid and the
                         // script blob's rowid into the results array
                         results.push(container.dataset['tableId'], blobConfig['rowid'], blobScript['rowid']);
-                        // We use the results array to add the entity
+                        // We use the results array to add the element
                         // to the project file and the document
-                        DOM.addItem("entity", SQLITE.addRow(project, "entity", results), types, true);
+                        DOM.addItem("element", SQLITE.addRow(project, "element", results), types, true);
                     }, 
-                    types.get("entity")
+                    types.get("element")
                 );
             },
 
@@ -568,7 +568,7 @@ initSQLite().then((loaded) => {
             'new-asset': (container) => {
                 // We define a message for the user
                 // which fits the action of adding
-                // an asset to the item list element
+                // an asset to the item list HTML element
                 let message = `The new asset will be added to the base folder.
                 
                 Please define the new asset:`;
@@ -662,9 +662,9 @@ initSQLite().then((loaded) => {
                 itemRename(folder);
             },
             // This function lets the
-            // user rename a entity
-            'rename-entity': (entity) => {
-                itemRename(entity);
+            // user rename a element
+            'rename-element': (element) => {
+                itemRename(element);
             },
             // This function lets the
             // user rename a asset
@@ -677,9 +677,9 @@ initSQLite().then((loaded) => {
                 itemDeletion(folder);
             },
             // This function lets the
-            // user delete a entity
-            'delete-entity': (entity) => {
-                itemDeletion(entity);
+            // user delete a element
+            'delete-element': (element) => {
+                itemDeletion(element);
             },
             // This function lets the
             // user delete a asset

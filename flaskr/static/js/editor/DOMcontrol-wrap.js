@@ -4,7 +4,7 @@
 
 // This module and all the others use the HTML DOM
 // to access, change and control the behavior of
-// elements in the HTML document. The comments in
+// HTML elements in the document. The comments in
 // every module describe the way various methods 
 // and classes from the DOM have been used, but 
 // descriptions of the methods themselves will 
@@ -39,7 +39,7 @@ import { addItem, removeItem, selectItem,
 
 
 // This function's purpose is to set up
-// pre-defined document elements to be
+// pre-defined HTML elements to be
 // interactive and call different functions
 // according to the users activity on the page.
 // It receives to objects: the first contains
@@ -52,11 +52,11 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
     document.addEventListener("click", (event) => {
         //
         closeActionMenus();
-        // This function makes the item element get selected when it's
+        // This function makes the item HTML element get selected when it's
         // clicked, and also selects its corresponding tab if it exists.
         if (event.target.matches(".item-list *, .metadata, .metadata *")) {
             //
-            const item = event.target.closest(".entity, .asset, .folder, .metadata");
+            const item = event.target.closest(".element, .asset, .folder, .metadata");
             // This function makes a new tab open for the 
             // project configs when it's clicked, and if
             // it already has a tab opened, the tab will be selected.
@@ -77,7 +77,7 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
             }
             //
             selectItem(item, false);
-            // This function makes the switch element open and close the folder
+            // This function makes the switch HTML element open and close the folder
             // when it's clicked, and also makes the folder get selected.
             if (item.className == "folder") {
                 toggleFolderState(item);
@@ -99,7 +99,7 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
         //
         if (event.target.matches(".item-list, .item-list *")) {
             //
-            const item = event.target.closest(".entity, .asset, .folder, .item-list");
+            const item = event.target.closest(".element, .asset, .folder, .item-list");
             //
             openContextMenu(item,event.pageX, event.pageY);
             // We select the item only if
@@ -120,9 +120,9 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
     // item is double clicked, and also selects the new tab.
     document.querySelector(".explorer").addEventListener("dblclick", (event) => {
         //
-        if (event.target.matches(".entity, .entity *, .asset, .asset *, .metadata, .metadata *")) {
+        if (event.target.matches(".element, .element *, .asset, .asset *, .metadata, .metadata *")) {
             //
-            const item = event.target.closest(".entity, .asset, .metadata");
+            const item = event.target.closest(".element, .asset, .metadata");
             //
             const tab = addTab(item);
             //
@@ -149,7 +149,7 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
             //
             const tab = event.target.closest(".tab");
             // This function removes the tab
-            // if his x element is clicked.
+            // if his x HTML element is clicked.
             if (event.target.closest(".x") !== null) {
                 //
                 changed = removeTab(tab);
@@ -194,7 +194,7 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
             }
             // if the target is not the explorer,
             // than it should be the header, which
-            // should be the only other element observed
+            // should be the only other HTML element observed
             // by this object. we set the --header-height
             // css variable to the header's new width 
             // in order to use css to give the workspace

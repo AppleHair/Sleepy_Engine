@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
-use super::entity;
+use super::element;
 
 pub enum ProgramDataLocation {
     Attribute(u32),
@@ -96,7 +96,7 @@ pub fn create_scene_rendering_program(context: &WebGlRenderingContext)
 }
 
 pub fn render_scene(context: &WebGlRenderingContext, program: &WebGlProgram,
-data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuffer, scene: &entity::Scene) -> Result<(), JsValue> {
+data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     context.use_program(Some(&program));
 
