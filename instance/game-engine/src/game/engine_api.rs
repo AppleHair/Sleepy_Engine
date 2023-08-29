@@ -6,9 +6,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use web_sys::console::log_1;
-use rhai::{Engine, Scope, AST, Map, packages::Package, packages::StandardPackage, EvalAltResult, Dynamic};
+use rhai::{Engine, Scope, AST, Map, packages::Package, packages, EvalAltResult, Dynamic};
 
-use super::element;
+pub mod element;
+pub mod asset;
 
 //
 pub fn dynamic_to_number(dynam: &Dynamic) -> Result<f32, &str> {
@@ -18,6 +19,7 @@ pub fn dynamic_to_number(dynam: &Dynamic) -> Result<f32, &str> {
     Ok(dynam.as_float()? as f32)
 }
 
+//
 pub struct KeyState {
     pub is_held: bool,
     pub just_pressed: bool,
@@ -304,11 +306,9 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     engine.on_print(|text| { log_1(&wasm_bindgen::JsValue::from_str(text)); })
           .register_type_with_name::<element::PositionPoint>("Position")
           .register_get_set("x", element::PositionPoint::get_x, element::PositionPoint::set_x)
-          .register_set("x", element::PositionPoint::set_x_rhai_int)
-          .register_set("x", element::PositionPoint::set_x_rhai_float)
+          .register_get_set("x_int", element::PositionPoint::get_x_int, element::PositionPoint::set_x_int)
           .register_get_set("y", element::PositionPoint::get_y, element::PositionPoint::set_y)
-          .register_set("y", element::PositionPoint::set_y_rhai_int)
-          .register_set("y", element::PositionPoint::set_y_rhai_float)
+          .register_get_set("y_int", element::PositionPoint::get_y_int, element::PositionPoint::set_y_int)
           .register_fn("to_string", element::PositionPoint::to_string)
           .register_type_with_name::<element::CollisionBox>("CollisionBox")
           .register_get("point1", element::CollisionBox::get_point1)
@@ -326,8 +326,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_type_with_name::<element::Camera>("Camera")
           .register_get_set("position", element::Camera::get_position, element::Camera::set_position)
           .register_get_set("zoom", element::Camera::get_zoom, element::Camera::set_zoom)
-          .register_set("zoom", element::Camera::set_zoom_rhai_int)
-          .register_set("zoom", element::Camera::set_zoom_rhai_float)
+          .register_get_set("zoom_int", element::Camera::get_zoom_int, element::Camera::set_zoom_int)
           .register_fn("to_string", element::Camera::to_string)
           .register_type_with_name::<element::Layer>("Layer")
           .register_get("name", element::Layer::get_name)
@@ -335,23 +334,23 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_fn("to_string", element::Layer::to_string)
           .register_type_with_name::<element::Scene>("Scene")
           .register_get_set("width", element::Scene::get_width, element::Scene::set_width)
-          .register_set("width", element::Scene::set_width_rhai_int)
-          .register_set("width", element::Scene::set_width_rhai_float)
+          .register_get_set("width_int", element::Scene::get_width_int, element::Scene::set_width_int)
           .register_get_set("height", element::Scene::get_height, element::Scene::set_height)
-          .register_set("height", element::Scene::set_height_rhai_int)
-          .register_set("height", element::Scene::set_height_rhai_float)
-          .register_get_set("in_color", element::Scene::get_inside_color, element::Scene::set_inside_color)
-          .register_get_set("out_color", element::Scene::get_outside_color, element::Scene::set_outside_color)
+          .register_get_set("height_int", element::Scene::get_height_int, element::Scene::set_height_int)
+          .register_get("in_color", element::Scene::get_inside_color)
+          .register_set("in_color", element::Scene::set_inside_color)
+          .register_get("out_color", element::Scene::get_outside_color)
+          .register_set("out_color", element::Scene::set_outside_color)
           .register_get_set("camera", element::Scene::get_camera, element::Scene::set_camera)
           .register_get("objects_len", element::Scene::get_objects_len)
           .register_get("runtimes_len", element::Scene::get_runtimes_len)
           .register_get("layers", element::Scene::get_layers)
           .register_fn("to_string", element::Scene::to_string);
 
-    // Register the Standard Package
-    let package = StandardPackage::new();
-    // Load the package into the 'Engine'
-    package.register_into_engine(&mut engine);
+    // Register the standard packages
+    let std_package = packages::StandardPackage::new();
+    // Load the standard packages into the 'Engine'
+    std_package.register_into_engine(&mut engine);
 
     // Create a new element instance for the state manager.
     // This instance will borrow its definition and contain

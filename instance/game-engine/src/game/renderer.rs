@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
-use super::element;
+use super::engine_api::element;
 
 pub enum ProgramDataLocation {
     Attribute(u32),
@@ -105,7 +105,7 @@ data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuf
     context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
 
     // Create a vertex array for the scene rectangle.
-    let vertices = generate_rectangle(0.0, 0.0, scene.width, scene.height);
+    let vertices = generate_rectangle(0.0, 0.0, scene.width.floor(), scene.height.floor());
 
     // Copy the data form the vertex array
     // into the vertex array buffer.
@@ -163,7 +163,7 @@ data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuf
         return Err("Couldn't find uniform 'u_camera'".into());
     }
     //
-    context.uniform2f(Some(&camera_uniform_location), scene.camera.position.x, scene.camera.position.y);
+    context.uniform2f(Some(&camera_uniform_location), scene.camera.position.x.round(), scene.camera.position.y.round());
 
     //
     let incolor_uniform_location: web_sys::WebGlUniformLocation;

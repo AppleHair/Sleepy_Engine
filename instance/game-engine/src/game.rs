@@ -10,7 +10,6 @@ use wasm_bindgen::JsCast;
 use web_sys::window;
 use rhai::Engine;
 
-mod element;
 mod engine_api;
 mod renderer;
 
@@ -122,7 +121,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         renderer::render_scene(
             &gl, &gl_program, &program_data, &buffer,
             &cur_scene_map.borrow()
-                .read_lock::<element::Scene>()
+                .read_lock::<engine_api::element::Scene>()
                 .expect("read_lock cast should succeed")
         )?;
         //
@@ -246,7 +245,7 @@ object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Res
         }
         //
         if object_stack.borrow().get(i).unwrap().map.0.borrow()
-        .read_lock::<element::Object>().expect("read_lock cast should succeed")
+        .read_lock::<engine_api::element::Object>().expect("read_lock cast should succeed")
         .active == true {
             //
             let object = Rc::clone( 
@@ -298,7 +297,7 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
             //
             object_borrow.script.borrow_mut().definition = Default::default();
             //
-            object_borrow.map.0.borrow_mut().write_lock::<element::Object>()
+            object_borrow.map.0.borrow_mut().write_lock::<engine_api::element::Object>()
             .expect("write_lock cast should succeed").active = false;
         }
     }
@@ -306,10 +305,10 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
     //
     let mut i = 0_usize;
     //
-    let layers_len = scene.map.0.borrow().read_lock::<element::Scene>()
+    let layers_len = scene.map.0.borrow().read_lock::<engine_api::element::Scene>()
     .expect("read_lock cast should succeed").layers_len;
     //
-    for layer in scene.map.0.borrow().read_lock::<element::Scene>()
+    for layer in scene.map.0.borrow().read_lock::<engine_api::element::Scene>()
     .expect("read_lock cast should succeed").layers.clone() {
         //
         if i >= layers_len {
