@@ -13,6 +13,16 @@ pub struct Sprite {
 }
 
 impl Sprite {
+    pub fn new(new_id: u32) -> Self { Self {
+        id: new_id, cur_animation: String::new(),
+        cur_frame: 0_u32, is_animation_finished: true,
+        animation_time: 0_f64, repeat: false
+    } }
+    pub fn recycle(&mut self, new_id: u32) {
+        self.id = new_id; self.cur_animation.clear();
+        self.cur_frame = 0_u32; self.is_animation_finished = true;
+        self.animation_time = 0_f64; self.repeat = false;
+    }
     pub fn get_id(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_id_float(&mut self) -> rhai::FLOAT { self.id.clone() as rhai::FLOAT }
     pub fn get_cur_animation(&mut self) -> String { self.cur_animation.clone() }
@@ -40,7 +50,7 @@ impl Sprite {
     }
 
     //
-    pub fn play_or_repeat_animation(&mut self, name: &str, repeat: bool) {
+    pub fn play_animation_on_time(&mut self, name: &str, time: rhai::FLOAT) {
         //
         self.cur_animation.clear();
         //
@@ -48,12 +58,14 @@ impl Sprite {
         //
         self.cur_frame = 0;
         //
-        self.animation_time = 0.0;
+        self.animation_time = time as f64;
         //
-        self.repeat = repeat;
+        self.repeat = false;
         //
         self.is_animation_finished = false;
     }
+
+    pub fn set_repeat(&mut self, value: bool) { self.repeat = value; }
 
     pub fn set_cur_animation(&mut self, value: &str) -> Result<(), Box<rhai::EvalAltResult>> {
         //
@@ -113,6 +125,18 @@ pub struct Audio {
 }
 
 impl Audio {
+    pub fn new(new_id: u32) -> Self { Self {
+        id: new_id, tag: String::new(),
+        audio_time: 0_f64, paused: true,
+        repeat: false, volume: 0_f32,
+        repeat_start_time: 0_f64
+    } }
+    pub fn recycle(&mut self, new_id: u32) {
+        self.id = new_id; self.tag.clear(); 
+        self.audio_time = 0_f64; self.paused = true;
+        self.repeat = false; self.volume = 0_f32;
+        self.repeat_start_time = 0_f64;
+    }
     pub fn get_id(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_id_float(&mut self) -> rhai::FLOAT { self.id.clone() as rhai::FLOAT }
     pub fn get_audio_time(&mut self) -> rhai::FLOAT { self.audio_time.clone() as rhai::FLOAT }
@@ -168,6 +192,12 @@ pub struct Font {
 }
 
 impl Font {
+    pub fn new(new_id: u32) -> Self {
+        Self { id: new_id, text: String::new() }
+    }
+    pub fn recycle(&mut self, new_id: u32) {
+        self.id = new_id; self.text.clear();
+    }
     pub fn get_id(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_id_float(&mut self) -> rhai::FLOAT { self.id.clone() as rhai::FLOAT }
     pub fn get_text(&mut self) -> String { self.text.clone() }
@@ -179,11 +209,20 @@ impl Font {
 pub struct AssetList<T: Clone> {
     pub members: Vec<T>,
     pub locked_on: Vec<usize>,
+    pub len: usize,
     pub is_locked: bool,
 }
 
 //
 impl<T: Clone> AssetList<T> {
+    //
+    pub fn new(vec: Vec<T>) -> Self {
+        //
+        let length = vec.len();
+        //
+        Self { members: vec, locked_on: Vec::new(),
+        len: length, is_locked: false }
+    }
     //
     pub fn len(&mut self) -> rhai::INT {
         //
@@ -192,7 +231,7 @@ impl<T: Clone> AssetList<T> {
             self.locked_on.len() as rhai::INT
         } else {
             //
-            self.members.len() as rhai::INT
+            self.len as rhai::INT
         }
     }
     //
@@ -206,8 +245,6 @@ impl<T: Clone> AssetList<T> {
             .into());
         }
         //
-        let len = self.members.len();
-        //
         let mut actual_index: usize;
         //
         for index in indcies {
@@ -216,10 +253,10 @@ impl<T: Clone> AssetList<T> {
                 //
                 actual_index = if idx < 0 {
                     //
-                    idx.checked_abs().map_or(0, |n| len - (n as usize).min(len))
+                    idx.checked_abs().map_or(0, |n| self.len - (n as usize).min(self.len))
                 } else {
                     //
-                    (idx as usize).min(len)
+                    (idx as usize).min(self.len)
                 };
                 //
                 if !self.locked_on.contains(&actual_index) {
@@ -255,14 +292,12 @@ impl<T: Clone> AssetList<T> {
     //
     pub fn get_asset(&mut self, idx: rhai::INT) -> Result<T, Box<rhai::EvalAltResult>> {
         //
-        let len = self.members.len();
-        //
         let actual_index = if idx < 0 {
             //
-            idx.checked_abs().map_or(0, |n| len - (n as usize).min(len))
+            idx.checked_abs().map_or(0, |n| self.len - (n as usize).min(self.len))
         } else {
             //
-            (idx as usize).min(len)
+            (idx as usize).min(self.len)
         };
         //
         if self.is_locked && !self.locked_on.contains(&actual_index) {
@@ -279,14 +314,12 @@ impl<T: Clone> AssetList<T> {
     //
     pub fn set_asset(&mut self, idx: rhai::INT, asset: T) -> Result<(), Box<rhai::EvalAltResult>> {
         //
-        let len = self.members.len();
-        //
         let actual_index = if idx < 0 {
             //
-            idx.checked_abs().map_or(0, |n| len - (n as usize).min(len))
+            idx.checked_abs().map_or(0, |n| self.len - (n as usize).min(self.len))
         } else {
             //
-            (idx as usize).min(len)
+            (idx as usize).min(self.len)
         };
         if self.is_locked && !self.locked_on.contains(&actual_index) {
             //
@@ -328,11 +361,37 @@ impl AssetList<Sprite> {
                 asset.id == id as u32
             }) {
                 //
-                Dynamic::from(idx)
+                if idx < self.len { Dynamic::from(idx) }
+                //
+                else { Dynamic::UNIT }
             } else {
                 //
                 Dynamic::UNIT
             }
+        }
+    }
+    //
+    pub fn recycle(&mut self, vec: Vec<i32>) {
+        //
+        self.locked_on.clear();
+        self.is_locked = false;
+        //
+        self.len = vec.len();
+        //
+        let mut i = 0_usize;
+        //
+        for id in vec {
+            if i < self.members.len() {
+                //
+                self.members[i].recycle(id as u32);
+                //
+                i += 1;
+                continue;
+            }
+            //
+            self.members.push(Sprite::new(id as u32));
+            //
+            i += 1;
         }
     }
 }
@@ -362,11 +421,37 @@ impl AssetList<Audio> {
                 asset.id == id as u32
             }) {
                 //
-                Dynamic::from(idx)
+                if idx < self.len { Dynamic::from(idx) }
+                //
+                else { Dynamic::UNIT }
             } else {
                 //
                 Dynamic::UNIT
             }
+        }
+    }
+    //
+    pub fn recycle(&mut self, vec: Vec<i32>) {
+        //
+        self.locked_on.clear();
+        self.is_locked = false;
+        //
+        self.len = vec.len();
+        //
+        let mut i = 0_usize;
+        //
+        for id in vec {
+            if i < self.members.len() {
+                //
+                self.members[i].recycle(id as u32);
+                //
+                i += 1;
+                continue;
+            }
+            //
+            self.members.push(Audio::new(id as u32));
+            //
+            i += 1;
         }
     }
 }
@@ -396,11 +481,37 @@ impl AssetList<Font> {
                 asset.id == id as u32
             }) {
                 //
-                Dynamic::from(idx)
+                if idx < self.len { Dynamic::from(idx) }
+                //
+                else { Dynamic::UNIT }
             } else {
                 //
                 Dynamic::UNIT
             }
+        }
+    }
+    //
+    pub fn recycle(&mut self, vec: Vec<i32>) {
+        //
+        self.locked_on.clear();
+        self.is_locked = false;
+        //
+        self.len = vec.len();
+        //
+        let mut i = 0_usize;
+        //
+        for id in vec {
+            if i < self.members.len() {
+                //
+                self.members[i].recycle(id as u32);
+                //
+                i += 1;
+                continue;
+            }
+            //
+            self.members.push(Font::new(id as u32));
+            //
+            i += 1;
         }
     }
 }

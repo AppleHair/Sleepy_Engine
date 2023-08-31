@@ -18,6 +18,7 @@ version = "1.15.1"
 features = [
   "wasm-bindgen",
   "f32_float",
+  "only_i32",
   "no_time",
   "no_module",
   "no_custom_syntax"

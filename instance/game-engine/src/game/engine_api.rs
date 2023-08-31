@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use web_sys::console::log_1;
-use rhai::{Engine, Scope, AST, Map, packages::Package, packages, EvalAltResult, Dynamic};
+use rhai::{Engine, Scope, AST, Map, packages::{Package, StandardPackage}, EvalAltResult, Dynamic};
 
 pub mod element;
 pub mod asset;
@@ -314,8 +314,30 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_get("point1", element::CollisionBox::get_point1)
           .register_get("point2", element::CollisionBox::get_point2)
           .register_fn("to_string", element::CollisionBox::to_string)
+          .register_type_with_name::<asset::Sprite>("Sprite")
+          .register_get("id", asset::Sprite::get_id)
+          .register_get("id_float", asset::Sprite::get_id_float)
+          .register_get("cur_animation", asset::Sprite::get_cur_animation)
+          .register_set("cur_animation", asset::Sprite::set_cur_animation)
+          .register_get_set("cur_frame", asset::Sprite::get_cur_frame, asset::Sprite::set_cur_frame)
+          .register_get_set("cur_frame_float", asset::Sprite::get_cur_frame_float,asset::Sprite::set_cur_frame_float)
+          .register_get("animation_time", asset::Sprite::get_animation_time)
+          .register_get("animation_time_int", asset::Sprite::get_animation_time_int)
+          .register_get_set("repeat", asset::Sprite::get_repeat, asset::Sprite::set_repeat)
+          .register_get("is_animation_finished", asset::Sprite::get_is_animation_finished)
+          .register_fn("play_animation", asset::Sprite::play_animation)
+          .register_fn("play_animation", asset::Sprite::play_animation_on_time)
+          .register_type_with_name::<asset::AssetList<asset::Sprite>>("AssetList<Sprite>")
+          .register_indexer_get(asset::AssetList::<asset::Sprite>::get_asset)
+          .register_indexer_set(asset::AssetList::<asset::Sprite>::set_asset)
+          .register_fn("lock", asset::AssetList::<asset::Sprite>::lock)
+          .register_fn("lock", asset::AssetList::<asset::Sprite>::lock_with_indcies)
+          .register_fn("len", asset::AssetList::<asset::Sprite>::len)
+          .register_get("len", asset::AssetList::<asset::Sprite>::len)
+          .register_fn("contains", asset::AssetList::<asset::Sprite>::contains)
           .register_type_with_name::<element::Object>("Object")
           .register_get_set("position", element::Object::get_position, element::Object::set_position)
+          .register_get_set("sprites", element::Object::get_sprites, element::Object::set_sprites)
           .register_get("origin_offset", element::Object::get_origin_offset)
           .register_get("collision_boxes", element::Object::get_collision_boxes)
           .register_get("active", element::Object::get_active)
@@ -348,7 +370,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_fn("to_string", element::Scene::to_string);
 
     // Register the standard packages
-    let std_package = packages::StandardPackage::new();
+    let std_package = StandardPackage::new();
     // Load the standard packages into the 'Engine'
     std_package.register_into_engine(&mut engine);
 

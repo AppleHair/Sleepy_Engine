@@ -42,9 +42,9 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
     // Create the API 'Engine', and the state manager instance.
     let (api_engine, state_manager, 
-        cur_scene, cur_scene_id,
-        prv_scene_id, object_stack,
-        key_states) = engine_api::create_api(&mut object_defs)?;
+    cur_scene, cur_scene_id,
+    prv_scene_id, object_stack,
+    key_states) = engine_api::create_api(&mut object_defs)?;
     
     //
     let event_key_states = Rc::clone(&key_states);
@@ -58,12 +58,16 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
         //
-        key_states_borrow.insert(event.code(), engine_api::KeyState { is_held: true, just_pressed: true, just_released: false });
+        key_states_borrow.insert(event.code(), engine_api::KeyState {
+            is_held: true, just_pressed: true, just_released: false
+        });
         //
         keys_just_changed_borrow.push(event.code());
     });
 
-    window().unwrap().document().unwrap().add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
+    window()
+    .unwrap().document()
+    .unwrap().add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
 
     //
     let event_key_states = Rc::clone(&key_states);
@@ -77,12 +81,16 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
         //
-        key_states_borrow.insert(event.code(), engine_api::KeyState { is_held: false, just_pressed: false, just_released: true });
+        key_states_borrow.insert(event.code(), engine_api::KeyState {
+            is_held: false, just_pressed: false, just_released: true
+        });
         //
         keys_just_changed_borrow.push(event.code());
     });
 
-    window().unwrap().document().unwrap().add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
+    window()
+    .unwrap().document()
+    .unwrap().add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
     
 
     //
@@ -99,8 +107,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
     //
     let (gl, gl_program,
-        program_data,
-        buffer) = create_rendering_components(canvas_width, canvas_height)?;
+    program_data,
+    buffer) = create_rendering_components(canvas_width, canvas_height)?;
     //
     let cur_scene_map = Rc::clone(&cur_scene.map.0);
     //
@@ -109,7 +117,9 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     //
     let draw_init = Rc::clone(&draw_loop);
     //
-    let mut last_draw = window().unwrap().performance().unwrap().now();
+    let mut last_draw = window()
+    .unwrap().performance()
+    .unwrap().now();
     //
     *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
     move |draw_time: f64| -> Result<(), JsValue> {
@@ -125,35 +135,40 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
                 .expect("read_lock cast should succeed")
         )?;
         //
-        window().unwrap().request_animation_frame(draw_loop
+        window()
+        .unwrap().request_animation_frame(draw_loop
             .borrow()
             .as_ref()
             .unwrap()
             .as_ref()
             .unchecked_ref()
-        ).or_else(|js| {
+        )
+        .or_else(|js| {
             //
-            return Err(js
+            Err(js
                 .as_string()
                 .unwrap_or(String::from("Unknown error occurred while rendering the game."))
-            );
+            )
         })?;
         //
         Ok(())
     }));
 
     //
-    window().unwrap().request_animation_frame(draw_init
+    window()
+    .unwrap().request_animation_frame(draw_init
         .borrow()
         .as_ref()
         .unwrap()
         .as_ref()
         .unchecked_ref()
-    ).or_else(|js| {
-        return Err(js
+    )
+    .or_else(|js| {
+        //
+        Err(js
             .as_string()
             .unwrap_or(String::from("Unknown error occurred while rendering the game."))
-        );
+        )
     })?;
 
     //
@@ -207,10 +222,10 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         Ok(())
     });
     //
-    let inter_id = window().unwrap().set_interval_with_callback_and_timeout_and_arguments_0(
-        update_loop.as_ref().unchecked_ref(),
-        1000 / frame_rate
-    ).or_else(|js| {
+    let inter_id = window()
+    .unwrap().set_interval_with_callback_and_timeout_and_arguments_0
+        (update_loop.as_ref().unchecked_ref(), 1000 / frame_rate)
+    .or_else(|js| {
         return Err(js
             .as_string()
             .unwrap_or(String::from("Unknown error occurred while running the game."))
@@ -244,12 +259,14 @@ object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Res
             break;
         }
         //
-        if object_stack.borrow().get(i).unwrap().map.0.borrow()
-        .read_lock::<engine_api::element::Object>().expect("read_lock cast should succeed")
-        .active == true {
+        if object_stack.borrow().get(i)
+        .unwrap().map.0.borrow().read_lock::<engine_api::element::Object>()
+        .expect("read_lock cast should succeed").active == true {
             //
             let object = Rc::clone( 
-                &object_stack.borrow().get(i).unwrap().script
+                &object_stack
+                .borrow().get(i)
+                .unwrap().script
             );
             //
             object.borrow_mut().call_fn(engine, name, args.clone())?;
@@ -293,7 +310,8 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
         //
         for idx in instances.len()..object_stack_borrow.len() {
             //
-            let object_borrow = object_stack_borrow.get(idx).expect("Range was wrong.");
+            let object_borrow = object_stack_borrow.get(idx)
+            .expect("Range was wrong.");
             //
             object_borrow.script.borrow_mut().definition = Default::default();
             //
@@ -386,7 +404,8 @@ HashMap<String, renderer::ProgramDataLocation>, web_sys::WebGlBuffer), String> {
     let gl = renderer::create_context(
         canvas_width as i32, 
         canvas_height as i32
-    ).or_else(|js| {
+    )
+    .or_else(|js| {
         return Err(js
             .as_string()
             .unwrap_or(String::from("Rendering Error: Couldn't create WebGL context."))
@@ -394,8 +413,9 @@ HashMap<String, renderer::ProgramDataLocation>, web_sys::WebGlBuffer), String> {
     })?;
     //
     let (gl_program, 
-        program_data) = renderer::create_scene_rendering_program(&gl
-    ).or_else(|js| {
+    program_data) = 
+        renderer::create_scene_rendering_program(&gl)
+    .or_else(|js| {
         return Err(js
             .as_string()
             .unwrap_or(String::from("Rendering Error: Couldn't create the scene rendering shader program."))

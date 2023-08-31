@@ -114,10 +114,18 @@
                             </ol>
                         </form>
                         <form id="object-config" class="config">
-                            <div class="json-field sprite-reference">
-                                <label>Sprite ID</label>
-                                <input type="number" name="sprite-id"/>
-                            </div>
+                            <ol name="sprites" class="json-array">
+                                <label>Sprites</label>
+                                <div class="li-template">
+                                    <div class="json-field sprite-reference">
+                                        <label>ID:</label>
+                                        <input type="number" value="0"/>
+                                    </div>
+                                    <div class="minus-button"></div>
+                                </div>
+                                <!-- LIST ITEMS GO HERE-->
+                                <div class="plus-button"></div>
+                            </ol>
                             <div name="origin-offset" class="json-object">
                                 <label>Origin Offset</label>
                                 <div class="json-field">

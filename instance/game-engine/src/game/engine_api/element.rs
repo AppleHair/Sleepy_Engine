@@ -2,6 +2,7 @@
 use rhai::{Map, Dynamic};
 
 use super::dynamic_to_number;
+use super::asset::*;
 
 //
 #[derive(Clone)]
@@ -47,7 +48,7 @@ impl CollisionBox {
 //
 #[derive(Clone)]
 pub struct Object {
-    
+    pub sprites: AssetList<Sprite>,
     pub active: bool,
     pub index_in_stack: u32,
     pub index_of_layer: usize,
@@ -66,8 +67,10 @@ impl Object {
     pub fn get_position(&mut self) -> PositionPoint { self.position.clone() }
     pub fn get_origin_offset(&mut self) -> PositionPoint { self.origin_offset.clone() }
     pub fn get_collision_boxes(&mut self) -> Dynamic { self.collision_boxes.clone().into() }
+    pub fn get_sprites(&mut self) -> AssetList<Sprite> { self.sprites.clone() }
 
     pub fn set_position(&mut self, value: PositionPoint) { self.position = value; }
+    pub fn set_sprites(&mut self, value: AssetList<Sprite>) { self.sprites = value; }
 
     pub fn to_string(&mut self) -> String {
         //
@@ -95,7 +98,7 @@ impl Object {
         let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
         //
         for map in config["collision-boxes"].clone().into_typed_array::<Map>()
-        .expect("Every scene's config should contain a 'collision-boxes' array, which should only have object-like members.") {
+        .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
             collision_boxes_vec.push( CollisionBox {
                 point1: PositionPoint { 
@@ -113,7 +116,17 @@ impl Object {
             } );
         }
         //
+        let mut sprites_vec: Vec<Sprite> = Vec::new();
+        //
+        for id in config["sprites"].clone().into_typed_array::<rhai::INT>()
+        .expect("Every object's config should contain a 'sprites' array, which should only have integer members.") {
+            //
+            sprites_vec.push(Sprite::new(id as u32));
+        }
+        //
         Self {
+            //
+            sprites: AssetList::new(sprites_vec),
             //
             active: true,
             //
@@ -142,7 +155,7 @@ impl Object {
         self.collision_boxes.clear();
         //
         for map in config["collision-boxes"].clone().into_typed_array::<Map>()
-        .expect("Every scene's config should contain a 'collision-boxes' array, which should only have object-like members.") {
+        .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
             self.collision_boxes.push( CollisionBox {
                 point1: PositionPoint { 
@@ -159,6 +172,9 @@ impl Object {
                 }
             } );
         }
+        //
+        self.sprites.recycle(config["sprites"].clone().into_typed_array::<rhai::INT>()
+        .expect("Every object's config should contain a 'sprites' array, which should only have integer members."));
         //
         self.active = true;
         //
