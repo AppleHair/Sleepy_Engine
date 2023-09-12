@@ -33,7 +33,6 @@ const modeComponents = {
     'object': ['config', 'preview', 'script'],
     'scene': ['config', 'preview', 'script'],
     'state': ['config', 'script'],
-    'project': ['config'],
     'loading': ['preview'],
     'none': ['preview'],
 }

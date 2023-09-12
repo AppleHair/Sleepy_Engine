@@ -57,24 +57,6 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
         if (event.target.matches(".item-list *, .metadata, .metadata *")) {
             //
             const item = event.target.closest(".element, .asset, .folder, .metadata");
-            // This function makes a new tab open for the 
-            // project configs when it's clicked, and if
-            // it already has a tab opened, the tab will be selected.
-            if (item.matches(".metadata[data-table-id='1']")){
-                let tab = addTab(item);
-                if (tab === null) {
-                    tab = fromItemToTab(item);
-                }
-                if (tab !== null) {
-                    //
-                    const changed = selectTab(tab);
-                    //
-                    if (changed) {
-                        switchMaterial();
-                    }
-                }
-                return;
-            }
             //
             selectItem(item, false);
             // This function makes the switch HTML element open and close the folder

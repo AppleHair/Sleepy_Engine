@@ -1,7 +1,7 @@
 
 use crate::data;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -29,7 +29,7 @@ pub struct KeyState {
 //
 #[derive(Clone, Copy)]
 pub enum TableRow {
-    Metadata(u8),
+    Metadata,
     Element(u32, u8),
     Asset(u32, u8),
 }
@@ -38,17 +38,13 @@ impl TableRow {
     fn to_err_string(&self, err: &str) -> String {
         let self_str = match self.clone() {
             //
-            Self::Metadata(1) => String::from("\non 'Project Configurations'."),
-            //
-            Self::Metadata(2) => String::from("\non 'State Manager'."),
+            Self::Metadata => String::from("\non 'State Manager'."),
             //
             Self::Element(id, kind) => format!("\non the '{}' {kind_str}.", data::get_element_name(id.clone()),
             kind_str = match kind { 1 => "object", 2 => "scene", _ => "element" }),
             //
             Self::Asset(id, kind) => format!("\non the '{}' {kind_str}.", data::get_element_name(id.clone()),
             kind_str = match kind { 1 => "sprite", 2 => "audio", 3 => "font", _ => "asset" }),
-            //
-            _ => String::new(),
         };
         format!("{}{}", err, self_str)
     }
@@ -72,7 +68,7 @@ impl ElementDefinition {
     pub fn new(engine: &Engine, row: TableRow) -> Result<Self, String> {
         //
         let ast = engine.compile(&match row {
-            TableRow::Metadata(id) => data::get_metadata_script(id),
+            TableRow::Metadata => data::get_metadata_script(),
             TableRow::Element(id, _) => data::get_element_script(id),
             TableRow::Asset(_, _) => { return Err("Can't define an asset as an element.".into()) },
         });
@@ -83,7 +79,7 @@ impl ElementDefinition {
         }
         //
         let json = engine.parse_json(&match row {
-            TableRow::Metadata(id) => data::get_metadata_config(id),
+            TableRow::Metadata => data::get_metadata_config(),
             TableRow::Element(id, _) => data::get_element_config(id),
             TableRow::Asset(_, _) => { return Err("Can't define an asset as an element.".into()) },
         }, false);
@@ -108,13 +104,13 @@ impl ElementDefinition {
 
 //
 #[derive(Default)]
-pub struct ElementScript {
+pub struct ElementHandler {
     pub definition: Rc<ElementDefinition>,
     pub scope: Scope<'static>,
 }
 
 //
-impl ElementScript {
+impl ElementHandler {
     //
     pub fn new(engine: &Engine, def: Rc<ElementDefinition>) -> Result<Self, String> {
         //
@@ -163,39 +159,41 @@ impl ElementScript {
     }
 }
 
-pub struct State(pub Rc<RefCell<Dynamic>>);
-pub struct Scene(pub Rc<RefCell<Dynamic>>);
-pub struct Object(pub Rc<RefCell<Dynamic>>);
+pub struct State;
+pub struct Scene;
+pub struct Object;
 
 pub struct Element<T> {
-    pub map: T,
-    pub script: Rc<RefCell<ElementScript>>,
+    pub map: Rc<RefCell<Dynamic>>,
+    pub handler: Rc<RefCell<ElementHandler>>,
+    pub kind: PhantomData<T>,
 }
 
 impl Element<State> {
     pub fn new_state(engine: &Engine, def: Rc<ElementDefinition>) -> Result<Self, String> {
         //
-        let mut script = ElementScript::new(&engine, def)?;
+        let mut handler = ElementHandler::new(&engine, def)?;
         //
-        match script.definition.row {
+        match handler.definition.row {
             //
-            TableRow::Metadata(2) => {
+            TableRow::Metadata => {
                 //
-                let shared_map: State = State(Rc::new(RefCell::new(Dynamic::from_map(Map::default()))));
+                let shared_map = Rc::new(RefCell::new(Dynamic::from_map(Map::default())));
                 //
-                if let Some(map) = script.scope.remove::<Map>("State") {
-                    let _ = shared_map.0.replace(Dynamic::from_map(map));
+                if let Some(map) = handler.scope.remove::<Map>("State") {
+                    let _ = shared_map.replace(Dynamic::from_map(map));
                 }
                 //
-                script.scope.push_dynamic("State", Dynamic::from(Rc::clone(&shared_map.0)));
+                handler.scope.push_dynamic("State", Dynamic::from(Rc::clone(&shared_map)));
                 //
                 Ok(Self {
                     map: shared_map,
-                    script: Rc::new(RefCell::new(script)),
+                    handler: Rc::new(RefCell::new(handler)),
+                    kind: PhantomData,
                 })
             },
             //
-            _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create the",
+            _ => Err(handler.definition.row.to_err_string(concat!("Fatal Error: Tried to create the",
             " state manager with the wrong definition.")))
         }
     }
@@ -205,41 +203,42 @@ impl Element<Scene> {
     //
     pub fn new_scene(engine: &Engine, def: Rc<ElementDefinition>) -> Result<Self, String> {
         //
-        let mut script = ElementScript::new(&engine, def)?;
+        let mut handler = ElementHandler::new(&engine, def)?;
         //
-        match script.definition.row {
+        match handler.definition.row {
             //
             TableRow::Element(_, 2) => {
                 //
-                let shared_map: Scene = Scene(Rc::new(RefCell::new(
-                    Dynamic::from(element::Scene::new(&script.definition.config))
-                )));
+                let shared_map = Rc::new(RefCell::new(
+                    Dynamic::from(element::Scene::new(&handler.definition.config))
+                ));
                 //
-                script.scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&shared_map.0)));
+                handler.scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&shared_map)));
                 //
                 Ok(Self {
                     map: shared_map,
-                    script: Rc::new(RefCell::new(script)),
+                    handler: Rc::new(RefCell::new(handler)),
+                    kind: PhantomData,
                 })
             },
             //
-            _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create a",
+            _ => Err(handler.definition.row.to_err_string(concat!("Fatal Error: Tried to create a",
             " scene with the wrong definition.")))
         }
     }
     //
     pub fn recycle_scene(&self, engine: &Engine, def: Rc<ElementDefinition>) -> Result<(), String> {
         //
-        let script = Rc::clone(&self.script);
+        let handler = Rc::clone(&self.handler);
         //
-        let map = Rc::clone(&self.map.0);
+        let map = Rc::clone(&self.map);
         //
         map.borrow_mut().write_lock::<element::Scene>().expect("write_lock cast should succeed")
         .recycle(&def.config);
         //
-        script.borrow_mut().recycle(&engine, def)?;
+        handler.borrow_mut().recycle(&engine, def)?;
         //
-        script.borrow_mut().scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&map)));
+        handler.borrow_mut().scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&map)));
         //
         Ok(())
     }
@@ -250,29 +249,28 @@ impl Element<Object> {
     pub fn new_object(engine: &Engine, def: Rc<ElementDefinition>,
     object_info: (u32, usize, usize, f32, f32)) -> Result<Self, String> {
         //
-        let mut script = ElementScript::new(&engine, def)?;
+        let mut handler = ElementHandler::new(&engine, def)?;
         //
-        match script.definition.row {
+        match handler.definition.row {
             //
             TableRow::Element(_, 1) => {
                 //
-                let shared_map: Object;
-                //
-                shared_map = Object(Rc::new(RefCell::new(
-                        Dynamic::from(element::Object::new(&script.definition.config,
+                let shared_map = Rc::new(RefCell::new(
+                        Dynamic::from(element::Object::new(&handler.definition.config,
                         object_info.0, object_info.1,
                         object_info.2, object_info.3, object_info.4))
-                )));
+                ));
                 //
-                script.scope.push_dynamic("Object", Dynamic::from(Rc::clone(&shared_map.0)));
+                handler.scope.push_dynamic("Object", Dynamic::from(Rc::clone(&shared_map)));
                 //
                 Ok(Self {
                     map: shared_map,
-                    script: Rc::new(RefCell::new(script)),
+                    handler: Rc::new(RefCell::new(handler)),
+                    kind: PhantomData,
                 })
             },
             //
-            _ => Err(script.definition.row.to_err_string(concat!("Fatal Error: Tried to create an",
+            _ => Err(handler.definition.row.to_err_string(concat!("Fatal Error: Tried to create an",
             " object with the wrong definition.")))
         }
     }
@@ -280,24 +278,24 @@ impl Element<Object> {
     pub fn recycle_object(&self, engine: &Engine, def: Rc<ElementDefinition>,
     object_info: (usize, usize, f32, f32)) -> Result<(), String> {
         //
-        let script = Rc::clone(&self.script);
+        let handler = Rc::clone(&self.handler);
         //
-        let map = Rc::clone(&self.map.0);
+        let map = Rc::clone(&self.map);
         //
         map.borrow_mut().write_lock::<element::Object>().expect("write_lock cast should succeed")
         .recycle(&def.config, object_info.0, object_info.1,
         object_info.2, object_info.3);
         //
-        script.borrow_mut().recycle(&engine, def)?;
+        handler.borrow_mut().recycle(&engine, def)?;
         //
-        script.borrow_mut().scope.push_dynamic("Object", Dynamic::from(Rc::clone(&map)));
+        handler.borrow_mut().scope.push_dynamic("Object", Dynamic::from(Rc::clone(&map)));
         //
         Ok(())
     }
 }
 
 //
-pub fn create_api(object_defs: &mut HashMap<u32,Rc<ElementDefinition>>) -> Result<(Engine, Element<State>, Element<Scene>,
+pub fn create_api(element_defs: &mut HashMap<u32,Rc<ElementDefinition>>) -> Result<(Engine, Element<State>, Element<Scene>,
 Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
     // Create an 'Engine'
     let mut engine = Engine::new_raw();
@@ -327,6 +325,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_get("is_animation_finished", asset::Sprite::get_is_animation_finished)
           .register_fn("play_animation", asset::Sprite::play_animation)
           .register_fn("play_animation", asset::Sprite::play_animation_on_time)
+          .register_fn("to_string", asset::Sprite::to_string)
           .register_type_with_name::<asset::AssetList<asset::Sprite>>("AssetList<Sprite>")
           .register_indexer_get(asset::AssetList::<asset::Sprite>::get_asset)
           .register_indexer_set(asset::AssetList::<asset::Sprite>::set_asset)
@@ -380,7 +379,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     let state_manager = Element::new_state(&engine, 
         Rc::new(
             ElementDefinition::new(&engine, 
-                TableRow::Metadata(2)
+                TableRow::Metadata
             )?
         )
     )?;
@@ -414,7 +413,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
 
     // Receive the rowid of the initial scene from the the state manager's config
     let cur_scene_id = Rc::new(RefCell::new(
-        state_manager.script.borrow().definition.config["initial-scene"].as_int()
+        state_manager.handler.borrow().definition.config["initial-scene"].as_int()
         .expect("The value of 'initial-scene' in the state manager's config should be an integer") as u32
     ));
     //
@@ -432,16 +431,16 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
 
     //
     {
-        let instances = cur_scene.script.borrow().definition.config["object-instances"].clone()
+        let instances = cur_scene.handler.borrow().definition.config["object-instances"].clone()
         .into_typed_array::<Map>().expect(concat!("Every object's config should contain a 'object-instances'",
         " array, which should only have object-like members."));
 
-        object_stack.borrow_mut().resize_with(instances.len(), || { Element { map: Object(Default::default()), script: Default::default() } });
+        object_stack.borrow_mut().resize_with(instances.len(), || { Element { map: Default::default(), handler: Default::default(), kind: PhantomData::<Object> } });
 
         //
         let mut i = 0_usize;
         //
-        for layer in cur_scene.map.0.borrow().read_lock::<element::Scene>()
+        for layer in cur_scene.map.borrow().read_lock::<element::Scene>()
         .expect("read_lock cast should succeed").layers.clone() {
             //
             let mut j = 0_usize;
@@ -463,9 +462,9 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
                     " config should contain an float 'y' attribute.")),
                 );
                 //
-                if !object_defs.contains_key(&ent_id) {
+                if !element_defs.contains_key(&ent_id) {
                     //
-                    object_defs.insert(ent_id, 
+                    element_defs.insert(ent_id, 
                         Rc::new(
                             ElementDefinition::new(&engine, 
                                 TableRow::Element(ent_id, 1)
@@ -478,8 +477,8 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
                 .expect("The indexes specified in every element of every layer's instances array should be correct.") = 
                 Element::new_object(&engine,
                     Rc::clone(
-                        object_defs.get(&ent_id)
-                        .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
+                        element_defs.get(&ent_id)
+                        .expect("element_defs.get(&inst_id_u32) should have had the object's definition by now")
                     ), (idx, i, j, init_x, init_y)
                 )?;
                 //
@@ -490,8 +489,8 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         }
     }
 
-    let api_state_map = Rc::clone(&state_manager.map.0);
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_state_map = Rc::clone(&state_manager.map);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     // Register a variable resolver.
     engine.on_var(move |name, _, context| {
         match name {
@@ -571,7 +570,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     });
 
     //
-    let api_cur_scene_script = Rc::clone(&cur_scene.script);
+    let api_cur_scene_script = Rc::clone(&cur_scene.handler);
     engine.register_fn("is_cur_scene", move |name: &str| -> Result<bool, Box<EvalAltResult>> {
         //
         if let Ok(borrow) = api_cur_scene_script.try_borrow() {
@@ -589,7 +588,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     });
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     engine.register_fn("get_object", move |context: rhai::NativeCallContext,
     idx: rhai::INT| -> Result<element::Object, Box<EvalAltResult>> {
         //
@@ -608,14 +607,14 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            Ok(element.map.0.borrow().clone_cast::<element::Object>())
+            Ok(element.map.borrow().clone_cast::<element::Object>())
         } else {
             //
             Err(Box::new(EvalAltResult::ErrorArrayBounds(objects_len+runtimes_len, idx, context.position())))
         }
     });
     //
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     engine.register_fn("object_is_valid", move |idx: rhai::INT| -> bool {
         //
         let objects_len = api_scene_map.borrow()
@@ -635,7 +634,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            Ok(element.map.0.borrow().read_lock::<element::Object>()
+            Ok(element.map.borrow().read_lock::<element::Object>()
             .expect("read_lock cast should succeed").active)
         } else {
             //
@@ -645,7 +644,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     engine.register_fn("activate_object", move |context: rhai::NativeCallContext,
     idx: rhai::INT| -> Result<(), Box<EvalAltResult>> {
         //
@@ -663,7 +662,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            element.map.0.borrow_mut().write_lock::<element::Object>()
+            element.map.borrow_mut().write_lock::<element::Object>()
             .expect("write_lock cast should succeed").active = true;
             //
             Ok(())
@@ -682,7 +681,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            element.map.0.borrow_mut().write_lock::<element::Object>()
+            element.map.borrow_mut().write_lock::<element::Object>()
             .expect("write_lock cast should succeed").active = false;
             //
             Ok(())
@@ -693,7 +692,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     });
 
     //
-    let api_state_manager_script = Rc::clone(&state_manager.script);
+    let api_state_manager_script = Rc::clone(&state_manager.handler);
     engine.register_fn("message_state_manager", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
@@ -712,7 +711,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     });
 
     //
-    let api_cur_scene_script = Rc::clone(&cur_scene.script);
+    let api_cur_scene_script = Rc::clone(&cur_scene.handler);
     engine.register_fn("message_cur_scene", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
@@ -732,7 +731,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     engine.register_fn("message_object", move |context: rhai::NativeCallContext, idx: rhai::INT, 
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
@@ -756,7 +755,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            if let Ok(mut borrow) = element.script.try_borrow_mut() {
+            if let Ok(mut borrow) = element.handler.try_borrow_mut() {
                 //
                 if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
                     //
@@ -781,7 +780,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     engine.register_fn("instance_switch_layer", move |layer_from: rhai::INT, 
     layer_idx_from: rhai::INT, layer_to: rhai::INT| -> Result<(), Box<EvalAltResult>> {
         //
@@ -851,12 +850,12 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         .instances.push(moving_stack_index as u32);
         //
         let moving_object_map = Rc::clone(&object_stack_borrow.get(moving_stack_index)
-            .expect("The indexes specified in every element of every layer's instances array should be correct.").map.0);
+            .expect("The indexes specified in every element of every layer's instances array should be correct.").map);
         //
         if moving_stack_index != to_update_stack_index {
             //
             let to_update_object_map = Rc::clone(&object_stack_borrow.get(to_update_stack_index)
-                .expect("The indexes specified in every element of every layer's instances array should be correct.").map.0);
+                .expect("The indexes specified in every element of every layer's instances array should be correct.").map);
             //
             to_update_object_map.borrow_mut().write_lock::<element::Object>()
             .expect("write_lock cast should succeed").index_in_layer = layer_idx_from as usize; 
@@ -875,7 +874,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.map.0);
+    let api_scene_map = Rc::clone(&cur_scene.map);
     engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
     idx: rhai::INT, layer_to: rhai::INT, init_x: rhai::FLOAT, init_y: rhai::FLOAT| -> Result<rhai::INT, Box<EvalAltResult>> {
         //
@@ -905,7 +904,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            if let Ok(borrow) = element.script.try_borrow() {
+            if let Ok(borrow) = element.handler.try_borrow() {
                 //
                 def_reference = Rc::clone(&borrow.definition);
             } else {
@@ -951,7 +950,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
             let object = object_stack_borrow.get(object_idx)
             .expect("Shouldn't be out of bounds (scene_map_borrow.clone().stack_len..object_stack_borrow.len()-1).");
             //
-            let object_map =  Rc::clone(&object.map.0);
+            let object_map =  Rc::clone(&object.map);
             //
             if object_map.borrow().read_lock::<element::Object>()
             .expect("read_lock cast should succeed").active == false {

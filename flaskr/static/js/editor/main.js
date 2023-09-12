@@ -54,14 +54,14 @@ function loadEditor() {
     }
     // We empty the explorer item list
     document.querySelectorAll(".explorer > .item-list > *").forEach((item) => item.remove());
+    // We reset the material section
+    DOM.resetMaterial(document.querySelector(".editor > .material-section").dataset['mode']);
     // We empty the editor tab list
     document.querySelectorAll(".editor > .tab-section > .tab-list > *").forEach((tab) => tab.remove());
     // We select tab-filler
     document.querySelector(".editor > .tab-section > .tab-filler").id = "tabSelected";
     // We set the project name span's innerText to the project name.
     document.getElementById("projectName").innerText = projectName;
-    // We reset the material section
-    DOM.resetMaterial(document.querySelector(".editor > .material-section").dataset['mode']);
 
     // We iterate on the names of the
     // tables we want to load items from.
@@ -72,7 +72,7 @@ function loadEditor() {
     }
 
     //
-    loadGameIcon(new Blob([SQLITE.getRow(project, "blobs", SQLITE.getRow(project, "metadata", 1)['data'])['data']]));
+    loadGameIcon(new Blob([SQLITE.getRow(project, "blobs", 3)['data']]));
     //
     document.querySelector("#game-icon-label").onclick = () => {
         document.querySelector("#game-icon-input").value = '';
@@ -82,8 +82,7 @@ function loadEditor() {
         //
         event.target.files[0].arrayBuffer().then((result) => {
             //
-            SQLITE.updateRowValue(project, "blobs",
-                SQLITE.getRow(project, "metadata", 1)['data'],
+            SQLITE.updateRowValue(project, "blobs", 3,
                 'data', new Uint8Array(result));
             //
             loadGameIcon(event.target.files[0]);
@@ -380,12 +379,12 @@ initSQLite().then((loaded) => {
                 //
                 gameTestWindow = window.open("/game-test", "GAME TEST");
                 //
-                gameTestWindow.self.getMetadataData = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "metadata", rowid).data);
+                gameTestWindow.self.getMetadataIcon = function() {
+                    return getBlob(3);
                 };
                 //
-                gameTestWindow.self.getMetadataScript = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "metadata", rowid).data, true);
+                gameTestWindow.self.getMetadataScript = function() {
+                    return getBlob(2, true);
                 };
                 //
                 gameTestWindow.self.getAssetData = function(rowid) {
@@ -396,8 +395,8 @@ initSQLite().then((loaded) => {
                     return getBlob(SQLITE.getRow(project, "element", rowid).script, true);
                 };
                 //
-                gameTestWindow.self.getMetadataConfig = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "metadata", rowid).config, true);
+                gameTestWindow.self.getMetadataConfig = function() {
+                    return getBlob(1, true);
                 };
                 //
                 gameTestWindow.self.getAssetConfig = function(rowid) {
@@ -455,15 +454,7 @@ initSQLite().then((loaded) => {
                     e.target.title = projectName;
                     e.target.querySelector("#game-icon").setAttribute("href", document.querySelector("#game-icon-label > img").src);
                 };
-            },
-            // This function lets the user
-            // undo recent changes he made
-            // in the current tab's material.
-            'undo': () => {console.log("undodo")},
-            // This function lets the user
-            // redo recent changes he made
-            // in the current tab's material.
-            'redo': () => {console.log("redodo")}
+            }
         }, {
 
 
@@ -697,7 +688,7 @@ initSQLite().then((loaded) => {
             //
             'config': (table, rowid) => {
                 //
-                const blobid = SQLITE.getRow(project, table, rowid)['config'];
+                const blobid = (table == 'metadata') ? 1 : SQLITE.getRow(project, table, rowid)['config'];
                 //
                 const text = textDeoder.decode(SQLITE.getRow(project, "blobs", blobid)['data']);
                 //
@@ -707,10 +698,7 @@ initSQLite().then((loaded) => {
             //
             'script': (table, rowid) => {
                 //
-                let blobid = SQLITE.getRow(project, table, rowid)['script'];
-                if (table == "metadata") {
-                    blobid = SQLITE.getRow(project, table, rowid)['data'];
-                }
+                let blobid = (table == 'metadata') ? 2 : SQLITE.getRow(project, table, rowid)['script'];
                 //
                 const text = textDeoder.decode(SQLITE.getRow(project, "blobs", blobid)['data']);
                 //

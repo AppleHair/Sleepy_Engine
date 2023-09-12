@@ -1,6 +1,3 @@
-
-use crate::data;
-
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -35,7 +32,7 @@ impl Drop for ClosuresHandle {
 pub fn run_game() -> Result<ClosuresHandle, JsValue>
 {
     // Create the object definitions hash map.
-    let mut object_defs: HashMap<u32,Rc<engine_api::ElementDefinition>> = HashMap::new();
+    let mut element_defs: HashMap<u32,Rc<engine_api::ElementDefinition>> = HashMap::new();
 
     //
     let keys_just_changed: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
@@ -44,7 +41,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     let (api_engine, state_manager, 
     cur_scene, cur_scene_id,
     prv_scene_id, object_stack,
-    key_states) = engine_api::create_api(&mut object_defs)?;
+    key_states) = engine_api::create_api(&mut element_defs)?;
     
     //
     let event_key_states = Rc::clone(&key_states);
@@ -94,23 +91,23 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     
 
     //
-    call_fn_on_all("create", (), &api_engine, &state_manager.script, 
-    &cur_scene.script, &object_stack)?;
+    call_fn_on_all("create", (), &api_engine, &state_manager.handler, 
+    &cur_scene.handler, &object_stack)?;
 
     //
-    let project_config = api_engine.parse_json(
-    &data::get_metadata_config(1),false).unwrap();
+    let canvas_width = engine_api::dynamic_to_number(&state_manager.handler
+        .borrow().definition.config["canvas-width"]).unwrap() as i32;
     //
-    let canvas_width = engine_api::dynamic_to_number(&project_config["canvas-width"]).unwrap() as i32;
-    //
-    let canvas_height = engine_api::dynamic_to_number(&project_config["canvas-height"]).unwrap() as i32;
+    let canvas_height = engine_api::dynamic_to_number(&state_manager.handler
+        .borrow().definition.config["canvas-height"]).unwrap() as i32;
 
     //
     let (gl, gl_program,
     program_data,
-    buffer) = create_rendering_components(canvas_width, canvas_height)?;
+    vertex_buffer, index_buffer) = 
+        renderer::create_rendering_components(canvas_width, canvas_height)?;
     //
-    let cur_scene_map = Rc::clone(&cur_scene.map.0);
+    let cur_scene_map = Rc::clone(&cur_scene.map);
     //
     let draw_loop = Rc::new(RefCell::new(
     None::<Closure::<dyn FnMut(f64) -> Result<(), JsValue>>>));
@@ -129,8 +126,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
         //
         renderer::render_scene(
-            &gl, &gl_program, &program_data, &buffer,
-            &cur_scene_map.borrow()
+            &gl, &gl_program, &program_data, &vertex_buffer,
+            &index_buffer, &cur_scene_map.borrow()
                 .read_lock::<engine_api::element::Scene>()
                 .expect("read_lock cast should succeed")
         )?;
@@ -142,14 +139,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
             .unwrap()
             .as_ref()
             .unchecked_ref()
-        )
-        .or_else(|js| {
-            //
-            Err(js
-                .as_string()
-                .unwrap_or(String::from("Unknown error occurred while rendering the game."))
-            )
-        })?;
+        )?;
         //
         Ok(())
     }));
@@ -162,17 +152,11 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         .unwrap()
         .as_ref()
         .unchecked_ref()
-    )
-    .or_else(|js| {
-        //
-        Err(js
-            .as_string()
-            .unwrap_or(String::from("Unknown error occurred while rendering the game."))
-        )
-    })?;
+    )?;
 
     //
-    let frame_rate = engine_api::dynamic_to_number(&project_config["fps"]).unwrap() as i32;
+    let frame_rate = engine_api::dynamic_to_number(&state_manager.handler
+        .borrow().definition.config["fps"]).unwrap() as i32;
     //
     let mut last_update = window().unwrap().performance().unwrap().now();
     //
@@ -186,7 +170,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         last_update = update_time;
         //
         call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &api_engine,
-        &state_manager.script, &cur_scene.script, &object_stack)?;
+        &state_manager.handler, &cur_scene.handler, &object_stack)?;
         //
         {
             //
@@ -211,10 +195,10 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         if *prv_scene_id.borrow() != *cur_scene_id.borrow() {
             //
             switch_scene(cur_scene_id.borrow().clone(), &api_engine,
-            &cur_scene, &object_stack, &mut object_defs)?;
+            &cur_scene, &object_stack, &mut element_defs)?;
             //
             call_fn_on_all("create", (), &api_engine,
-            &state_manager.script, &cur_scene.script, &object_stack)?;
+            &state_manager.handler, &cur_scene.handler, &object_stack)?;
             //
             *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
         }
@@ -224,13 +208,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     //
     let inter_id = window()
     .unwrap().set_interval_with_callback_and_timeout_and_arguments_0
-        (update_loop.as_ref().unchecked_ref(), 1000 / frame_rate)
-    .or_else(|js| {
-        return Err(js
-            .as_string()
-            .unwrap_or(String::from("Unknown error occurred while running the game."))
-        );
-    })?;
+        (update_loop.as_ref().unchecked_ref(), 1000 / frame_rate)?;
 
     // Done!
     Ok(ClosuresHandle { 
@@ -245,7 +223,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
 
 //
 fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine,
-manager: &Rc<RefCell<engine_api::ElementScript>>, scene: &Rc<RefCell<engine_api::ElementScript>>,
+manager: &Rc<RefCell<engine_api::ElementHandler>>, scene: &Rc<RefCell<engine_api::ElementHandler>>,
 object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Result<(), String> {
     // Call the function on the state manager instance.
     manager.borrow_mut().call_fn(engine, name, args.clone())?;
@@ -260,13 +238,13 @@ object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Res
         }
         //
         if object_stack.borrow().get(i)
-        .unwrap().map.0.borrow().read_lock::<engine_api::element::Object>()
+        .unwrap().map.borrow().read_lock::<engine_api::element::Object>()
         .expect("read_lock cast should succeed").active == true {
             //
             let object = Rc::clone( 
                 &object_stack
                 .borrow().get(i)
-                .unwrap().script
+                .unwrap().handler
             );
             //
             object.borrow_mut().call_fn(engine, name, args.clone())?;
@@ -281,9 +259,9 @@ object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Res
 //
 fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::Element<engine_api::Scene>,
 object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>,
-object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), String> {
+element_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), String> {
     //
-    object_defs.clear();
+    element_defs.clear();
     //
     scene.recycle_scene(&engine, 
         Rc::new(
@@ -293,7 +271,7 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
         )
     )?;
     //
-    let instances = scene.script.borrow().definition.config["object-instances"].clone()
+    let instances = scene.handler.borrow().definition.config["object-instances"].clone()
     .into_typed_array::<rhai::Map>().expect(concat!("Every object's config should contain a 'object-instances'",
     " array, which should only have object-like members."));
     //
@@ -302,8 +280,9 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
     if instances.len() > object_stack_borrow.len() {
         //
         object_stack_borrow.resize_with(instances.len(), || { engine_api::Element { 
-            map: engine_api::Object(Rc::new(RefCell::new(rhai::Dynamic::UNIT))), script: Default::default() } 
-        });
+            map: Rc::new(RefCell::new(rhai::Dynamic::UNIT)), handler: Default::default(),
+            kind: std::marker::PhantomData::<engine_api::Object>, 
+        }});
     }
     //
     if instances.len() < object_stack_borrow.len() {
@@ -313,9 +292,9 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
             let object_borrow = object_stack_borrow.get(idx)
             .expect("Range was wrong.");
             //
-            object_borrow.script.borrow_mut().definition = Default::default();
+            object_borrow.handler.borrow_mut().definition = Default::default();
             //
-            object_borrow.map.0.borrow_mut().write_lock::<engine_api::element::Object>()
+            object_borrow.map.borrow_mut().write_lock::<engine_api::element::Object>()
             .expect("write_lock cast should succeed").active = false;
         }
     }
@@ -323,10 +302,10 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
     //
     let mut i = 0_usize;
     //
-    let layers_len = scene.map.0.borrow().read_lock::<engine_api::element::Scene>()
+    let layers_len = scene.map.borrow().read_lock::<engine_api::element::Scene>()
     .expect("read_lock cast should succeed").layers_len;
     //
-    for layer in scene.map.0.borrow().read_lock::<engine_api::element::Scene>()
+    for layer in scene.map.borrow().read_lock::<engine_api::element::Scene>()
     .expect("read_lock cast should succeed").layers.clone() {
         //
         if i >= layers_len {
@@ -353,9 +332,9 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
                 " config should contain an float 'y' attribute.")),
             );
             //
-            if !object_defs.contains_key(&ent_id) {
+            if !element_defs.contains_key(&ent_id) {
                 //
-                object_defs.insert(ent_id, 
+                element_defs.insert(ent_id, 
                     Rc::new(
                         engine_api::ElementDefinition::new(&engine, 
                             engine_api::TableRow::Element(ent_id, 1)
@@ -367,12 +346,12 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
             let object_borrow = object_stack_borrow.get_mut(idx as usize)
             .expect("The indexes specified in every element of every layer's instances array should be correct.");
             //
-            if object_borrow.map.0.borrow().is_unit() {
+            if object_borrow.map.borrow().is_unit() {
                 //
                 *object_borrow = engine_api::Element::new_object(&engine,
                     Rc::clone(
-                        object_defs.get(&ent_id)
-                        .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
+                        element_defs.get(&ent_id)
+                        .expect("element_defs.get(&inst_id_u32) should have had the object's definition by now")
                     ), (idx, i, j, init_x, init_y)
                 )?;
                 //
@@ -382,8 +361,8 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
             //
             object_borrow.recycle_object(&engine,
                 Rc::clone(
-                    object_defs.get(&ent_id)
-                    .expect("object_defs.get(&inst_id_u32) should have had the object's definition by now")
+                    element_defs.get(&ent_id)
+                    .expect("element_defs.get(&inst_id_u32) should have had the object's definition by now")
                 ), (i, j, init_x, init_y)
             )?;
             //
@@ -394,37 +373,4 @@ object_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), 
     }
     //
     Ok(())
-}
-
-//
-fn create_rendering_components(canvas_width: i32, canvas_height: i32)
- -> Result<(web_sys::WebGlRenderingContext, web_sys::WebGlProgram,
-HashMap<String, renderer::ProgramDataLocation>, web_sys::WebGlBuffer), String> {
-    //
-    let gl = renderer::create_context(
-        canvas_width as i32, 
-        canvas_height as i32
-    )
-    .or_else(|js| {
-        return Err(js
-            .as_string()
-            .unwrap_or(String::from("Rendering Error: Couldn't create WebGL context."))
-        );
-    })?;
-    //
-    let (gl_program, 
-    program_data) = 
-        renderer::create_scene_rendering_program(&gl)
-    .or_else(|js| {
-        return Err(js
-            .as_string()
-            .unwrap_or(String::from("Rendering Error: Couldn't create the scene rendering shader program."))
-        );
-    })?;
-    // 
-    let buffer = gl
-        .create_buffer()
-        .ok_or(String::from("failed to create buffer"))?;
-    //
-    Ok((gl, gl_program, program_data, buffer))
 }

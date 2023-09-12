@@ -3,17 +3,17 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 extern {
     // data/script getters
-    #[wasm_bindgen(js_name=getMetadataData)]
-    pub fn get_metadata_data(rowid: u8) -> Box<[u8]>;
+    #[wasm_bindgen(js_name=getMetadataIcon)]
+    pub fn get_metadata_icon() -> Box<[u8]>;
     #[wasm_bindgen(js_name=getMetadataScript)]
-    pub fn get_metadata_script(rowid: u8) -> String;
+    pub fn get_metadata_script() -> String;
     #[wasm_bindgen(js_name=getAssetData)]
     pub fn get_asset_data(rowid: u32) -> Box<[u8]>;
     #[wasm_bindgen(js_name=getElementScript)]
     pub fn get_element_script(rowid: u32) -> String;
     // config getters
     #[wasm_bindgen(js_name=getMetadataConfig)]
-    pub fn get_metadata_config(rowid: u8) -> String;
+    pub fn get_metadata_config() -> String;
     #[wasm_bindgen(js_name=getAssetConfig)]
     pub fn get_asset_config(rowid: u32) -> String;
     #[wasm_bindgen(js_name=getElementConfig)]

@@ -2,117 +2,107 @@ use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
+use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlBuffer};
 
 use super::engine_api::element;
+
+const MAX_QUAD_COUNT: i32 = 1000;
+const INDCIES_PER_QUAD: i32 = 6;
+const VERTICES_PER_QUAD: i32 = 4;
 
 pub enum ProgramDataLocation {
     Attribute(u32),
     Uniform(web_sys::WebGlUniformLocation),
 }
 
-pub fn create_context(width: i32, height: i32)  -> Result<WebGlRenderingContext, JsValue> {
-    // Get the page's document.
-    let document = web_sys::window().unwrap().document().unwrap();
-    // Get to canvas from the document.
-    let canvas = document.get_element_by_id("canvas").unwrap();
-    // Convert the canvas element into an HTMLCanvasElement object.
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
-    // Set the desired width and height of the canvas,
-    // which is the size the canvas will be rendered
-    // at regardless of how CSS displays it.
-    canvas.set_attribute("width", &format!("{width}"))?;
-    canvas.set_attribute("height", &format!("{height}"))?;
-
-    // Get the WebGL context
-    // from the canvas.
-    let context = canvas
-    .get_context("webgl")?
-    .unwrap()
-    .dyn_into::<WebGlRenderingContext>()?;
+//
+pub fn create_rendering_components(canvas_width: i32, canvas_height: i32)
+ -> Result<(WebGlRenderingContext, WebGlProgram,
+HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
+    //
+    let gl = create_context(
+        canvas_width, 
+        canvas_height
+    )?;
+    //
+    let (gl_program, 
+    program_data) = 
+        create_scene_rendering_program(&gl)?;
+    // 
+    let vertex_buffer = gl
+        .create_buffer()
+        .ok_or("failed to create buffer")?;
+    //
+    gl.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
+    //
+    gl.buffer_data_with_i32(
+        WebGlRenderingContext::ARRAY_BUFFER,
+        MAX_QUAD_COUNT * VERTICES_PER_QUAD * 8,
+        WebGlRenderingContext::DYNAMIC_DRAW,
+    );
 
     //
-    Ok(context)
-}
-
-pub fn create_scene_rendering_program(context: &WebGlRenderingContext)
- -> Result<(WebGlProgram,HashMap<String,ProgramDataLocation>), JsValue> {
-    // Create the vertex shader
-    let vert_shader = compile_shader(
-        &context,
-        WebGlRenderingContext::VERTEX_SHADER,
-        r#"
-        attribute vec2 a_position;
-        uniform vec2 u_resolution;
-        uniform vec2 u_camera;
-        void main() {
-            vec2 camRelative = a_position - u_camera;
-            vec2 clipSpace = camRelative * 2.0 / u_resolution;
-            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-        }
-    "#,
-    )?;
-
-    // Create the fragment shader
-    let frag_shader = compile_shader(
-        &context,
-        WebGlRenderingContext::FRAGMENT_SHADER,
-        r#"
-        precision mediump float;
-        uniform vec3 u_incolor;
-        void main() {
-            gl_FragColor = vec4(u_incolor, 1);
-        }
-    "#,
-    )?;
-
-    // Create the shader program using
-    // the vertex and fragment shaders.
-    let program = link_program(&context, &vert_shader, &frag_shader)?;
+    let index_buffer = gl
+        .create_buffer()
+        .ok_or("failed to create buffer")?;
+    //
+    gl.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
+    //
+    gl.buffer_data_with_i32(
+        WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+        MAX_QUAD_COUNT * INDCIES_PER_QUAD * 2,
+        WebGlRenderingContext::DYNAMIC_DRAW,
+    );
 
     //
-    let mut data_locations: HashMap<String,ProgramDataLocation> = HashMap::new();
-
-    // Look up position attribute location.
-    data_locations.insert(String::from("a_position"), ProgramDataLocation::Attribute(context
-        .get_attrib_location(&program, "a_position") as u32
-    ));
-
-    // Look up uniform locations.
-    data_locations.insert(String::from("u_resolution"), ProgramDataLocation::Uniform(context
-        .get_uniform_location(&program, "u_resolution")
-        .ok_or("Unable to get uniform location (u_resolution)")?
-    ));
-    data_locations.insert(String::from("u_camera"), ProgramDataLocation::Uniform(context
-        .get_uniform_location(&program, "u_camera")
-        .ok_or("Unable to get uniform location (u_camera)")?
-    ));
-    data_locations.insert(String::from("u_incolor"), ProgramDataLocation::Uniform(context
-        .get_uniform_location(&program, "u_incolor")
-        .ok_or("Unable to get uniform location (u_incolor)")?
-    ));
-
-    Ok((program, data_locations))
+    let mut indcies: js_sys::Uint16Array;
+    for i in 0..MAX_QUAD_COUNT {
+        // Create a new Uint16Array with the size of 6 elements.
+        indcies = js_sys::Uint16Array::new(
+            &JsValue::from_f64(INDCIES_PER_QUAD as f64));
+        // Copy data into the Uint16Array
+        // from the rust slice which includes
+        // the indcies which represent the order
+        // of the vertices' rendering.
+        indcies.copy_from(&[
+            (0 + VERTICES_PER_QUAD * i) as u16,
+            (1 + VERTICES_PER_QUAD * i) as u16,
+            (2 + VERTICES_PER_QUAD * i) as u16,
+            (2 + VERTICES_PER_QUAD * i) as u16,
+            (1 + VERTICES_PER_QUAD * i) as u16,
+            (3 + VERTICES_PER_QUAD * i) as u16,
+        ]);
+        //
+        gl.buffer_sub_data_with_i32_and_array_buffer(
+            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            INDCIES_PER_QUAD * i * 2,
+            &indcies.buffer(),
+        );
+    }
+    //
+    Ok((gl, gl_program, program_data, vertex_buffer, index_buffer))
 }
 
+//
 pub fn render_scene(context: &WebGlRenderingContext, program: &WebGlProgram,
-data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsValue> {
+data_locations: &HashMap<String,ProgramDataLocation>, vertex_buffer: &web_sys::WebGlBuffer,
+index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     context.use_program(Some(&program));
 
+    // Create a vertex and index arrays for the scene rectangle.
+    let (vertices, _) = generate_rectangle(0.0, 0.0, scene.width.floor(), scene.height.floor());
+
     // Bind the vertex buffer
     // to the WebGL context.
-    context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buffer));
-
-    // Create a vertex array for the scene rectangle.
-    let vertices = generate_rectangle(0.0, 0.0, scene.width.floor(), scene.height.floor());
+    context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
 
     // Copy the data form the vertex array
     // into the vertex array buffer.
-    context.buffer_data_with_opt_array_buffer(
+    context.buffer_sub_data_with_i32_and_array_buffer(
         WebGlRenderingContext::ARRAY_BUFFER,
-        Some(&vertices.buffer()),
-        WebGlRenderingContext::STATIC_DRAW,
+        0,
+        &vertices.buffer(),
     );
 
     //
@@ -190,23 +180,109 @@ data_locations: &HashMap<String,ProgramDataLocation>, buffer: &web_sys::WebGlBuf
     // Clear the canvas
     context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
     // Draw the scene rectangle on the canvas
-    context.draw_arrays(
+    context.draw_elements_with_i32(
         WebGlRenderingContext::TRIANGLES,
+        (vertices.length() as i32 * INDCIES_PER_QUAD) / VERTICES_PER_QUAD * 2,
+        WebGlRenderingContext::UNSIGNED_SHORT,
         0,
-        (vertices.length() / 2) as i32,
     );
 
     // The Rendering is Done!
     Ok(())
 }
 
-// Creates a Float32Array with the vertices which
-// should represent a desired rectangle, while only
-// using 4 arguments: x, y, width and height.
-fn generate_rectangle(x: f32, y: f32, width: f32, height: f32) -> js_sys::Float32Array {
-    // Create a new Float32Array with the size of 12 elements.
+fn create_context(width: i32, height: i32)  -> Result<WebGlRenderingContext, JsValue> {
+    // Get the page's document.
+    let document = web_sys::window().unwrap().document().unwrap();
+    // Get to canvas from the document.
+    let canvas = document.get_element_by_id("canvas").unwrap();
+    // Convert the canvas element into an HTMLCanvasElement object.
+    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
+    // Set the desired width and height of the canvas,
+    // which is the size the canvas will be rendered
+    // at regardless of how CSS displays it.
+    canvas.set_attribute("width", &format!("{width}"))?;
+    canvas.set_attribute("height", &format!("{height}"))?;
+
+    // Get the WebGL context
+    // from the canvas.
+    let context = canvas
+    .get_context("webgl")?
+    .unwrap()
+    .dyn_into::<WebGlRenderingContext>()?;
+
+    //
+    Ok(context)
+}
+
+fn create_scene_rendering_program(context: &WebGlRenderingContext)
+ -> Result<(WebGlProgram,HashMap<String,ProgramDataLocation>), JsValue> {
+    // Create the vertex shader
+    let vert_shader = compile_shader(
+        &context,
+        WebGlRenderingContext::VERTEX_SHADER,
+        r#"
+        attribute vec2 a_position;
+        uniform vec2 u_resolution;
+        uniform vec2 u_camera;
+        void main() {
+            vec2 camRelative = a_position - u_camera;
+            vec2 clipSpace = camRelative * 2.0 / u_resolution;
+            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+        }
+    "#,
+    )?;
+
+    // Create the fragment shader
+    let frag_shader = compile_shader(
+        &context,
+        WebGlRenderingContext::FRAGMENT_SHADER,
+        r#"
+        precision mediump float;
+        uniform vec3 u_incolor;
+        void main() {
+            gl_FragColor = vec4(u_incolor, 1);
+        }
+    "#,
+    )?;
+
+    // Create the shader program using
+    // the vertex and fragment shaders.
+    let program = link_program(&context, &vert_shader, &frag_shader)?;
+
+    //
+    let mut data_locations: HashMap<String,ProgramDataLocation> = HashMap::new();
+
+    // Look up position attribute location.
+    data_locations.insert(String::from("a_position"), ProgramDataLocation::Attribute(context
+        .get_attrib_location(&program, "a_position") as u32
+    ));
+
+    // Look up uniform locations.
+    data_locations.insert(String::from("u_resolution"), ProgramDataLocation::Uniform(context
+        .get_uniform_location(&program, "u_resolution")
+        .ok_or("Unable to get uniform location (u_resolution)")?
+    ));
+    data_locations.insert(String::from("u_camera"), ProgramDataLocation::Uniform(context
+        .get_uniform_location(&program, "u_camera")
+        .ok_or("Unable to get uniform location (u_camera)")?
+    ));
+    data_locations.insert(String::from("u_incolor"), ProgramDataLocation::Uniform(context
+        .get_uniform_location(&program, "u_incolor")
+        .ok_or("Unable to get uniform location (u_incolor)")?
+    ));
+
+    Ok((program, data_locations))
+}
+
+// Creates a Float32Array and a Uint32Array with the 
+// vertices and indcies which should represent a 
+// desired rectangle, while only using 4 arguments: 
+// x, y, width and height.
+fn generate_rectangle(x: f32, y: f32, width: f32, height: f32) -> (js_sys::Float32Array, js_sys::Uint16Array) {
+    // Create a new Float32Array with the size of 8 elements.
     let vertices = js_sys::Float32Array::new(
-    &JsValue::from_f64(12.0));
+    &JsValue::from_f64(8.0));
     
     // Copy data into the Float32Array
     // from the rust slice which returns
@@ -218,19 +294,28 @@ fn generate_rectangle(x: f32, y: f32, width: f32, height: f32) -> js_sys::Float3
         let y2 = y + height;
         // The vertices which
         // should represent the
-        // desired rectangle.
+        // rectangle's points.
         [
             x1, y1,
             x2, y1,
             x1, y2,
-            x1, y2,
-            x2, y1,
             x2, y2,
         ]
     });
+
+    // Create a new Uint32Array with the size of 6 elements.
+    let indcies = js_sys::Uint16Array::new(
+        &JsValue::from_f64(6.0));
+    // Copy data into the Uint32Array
+    // from the rust slice which includes
+    // the indcies which represent the order
+    // of the vertices' rendering.
+    indcies.copy_from(&[0, 1, 2, 2, 1, 3]);
+    
     // Return the
     // Float32Array
-    vertices
+    // and Uint32Array
+    (vertices, indcies)
 }
 
 // Receives a string borrow with a
