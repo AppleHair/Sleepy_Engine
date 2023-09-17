@@ -1,12 +1,11 @@
 
-use crate::data;
-
-use std::{collections::HashMap, marker::PhantomData};
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::{collections::HashMap, marker::PhantomData, cell::RefCell, rc::Rc};
 
 use web_sys::console::log_1;
-use rhai::{Engine, Scope, AST, Map, packages::{Package, StandardPackage}, EvalAltResult, Dynamic};
+use rhai::{Engine, Scope, AST, Map, EvalAltResult, Dynamic,
+        packages::{Package, StandardPackage}};
+
+use crate::{data, game::TableRow};
 
 pub mod element;
 pub mod asset;
@@ -27,34 +26,6 @@ pub struct KeyState {
 }
 
 //
-#[derive(Clone, Copy)]
-pub enum TableRow {
-    Metadata,
-    Element(u32, u8),
-    Asset(u32, u8),
-}
-
-impl TableRow {
-    fn to_err_string(&self, err: &str) -> String {
-        let self_str = match self.clone() {
-            //
-            Self::Metadata => String::from("\non 'State Manager'."),
-            //
-            Self::Element(id, kind) => format!("\non the '{}' {kind_str}.", data::get_element_name(id.clone()),
-            kind_str = match kind { 1 => "object", 2 => "scene", _ => "element" }),
-            //
-            Self::Asset(id, kind) => format!("\non the '{}' {kind_str}.", data::get_element_name(id.clone()),
-            kind_str = match kind { 1 => "sprite", 2 => "audio", 3 => "font", _ => "asset" }),
-        };
-        format!("{}{}", err, self_str)
-    }
-}
-
-impl Default for TableRow {
-    fn default() -> Self { Self::Element(Default::default(), Default::default()) }
-}
-
-//
 #[derive(Default)]
 pub struct ElementDefinition {
     pub row: TableRow,
@@ -70,7 +41,7 @@ impl ElementDefinition {
         let ast = engine.compile(&match row {
             TableRow::Metadata => data::get_metadata_script(),
             TableRow::Element(id, _) => data::get_element_script(id),
-            TableRow::Asset(_, _) => { return Err("Can't define an asset as an element.".into()) },
+            TableRow::Asset(_, _) => { return Err("Can't define an asset as an element.".into()); },
         });
         //
         if let Some(err) = ast.as_ref().err() {
@@ -81,7 +52,7 @@ impl ElementDefinition {
         let json = engine.parse_json(&match row {
             TableRow::Metadata => data::get_metadata_config(),
             TableRow::Element(id, _) => data::get_element_config(id),
-            TableRow::Asset(_, _) => { return Err("Can't define an asset as an element.".into()) },
+            TableRow::Asset(_, _) => { return Err("Can't define an asset as an element.".into()); },
         }, false);
         //
         if let Some(err) = json.as_ref().err() {
@@ -163,10 +134,21 @@ pub struct State;
 pub struct Scene;
 pub struct Object;
 
-pub struct Element<T> {
+//
+pub struct Element<T = Object> {
     pub map: Rc<RefCell<Dynamic>>,
     pub handler: Rc<RefCell<ElementHandler>>,
     pub kind: PhantomData<T>,
+}
+
+impl Default for Element {
+    fn default() -> Self {
+        Self {
+            map: Default::default(),
+            handler: Default::default(),
+            kind: Default::default(),
+        }
+    }
 }
 
 impl Element<State> {
@@ -435,7 +417,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
         .into_typed_array::<Map>().expect(concat!("Every object's config should contain a 'object-instances'",
         " array, which should only have object-like members."));
 
-        object_stack.borrow_mut().resize_with(instances.len(), || { Element { map: Default::default(), handler: Default::default(), kind: PhantomData::<Object> } });
+        object_stack.borrow_mut().resize_with(instances.len(), || { Default::default() });
 
         //
         let mut i = 0_usize;

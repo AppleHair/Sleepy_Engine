@@ -1,8 +1,7 @@
 
 use rhai::{Map, Dynamic};
 
-use super::dynamic_to_number;
-use super::asset::*;
+use super::{dynamic_to_number, asset::*};
 
 //
 #[derive(Clone)]

@@ -1,18 +1,133 @@
+
 use std::collections::HashMap;
 
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlBuffer};
 
-use super::engine_api::element;
+use crate::{data, game::TableRow};
+
+use super::engine_api::{element, asset, self};
 
 const MAX_QUAD_COUNT: i32 = 1000;
 const INDCIES_PER_QUAD: i32 = 6;
 const VERTICES_PER_QUAD: i32 = 4;
+const FLOATS_PER_VERTEX: i32 = 6;
 
 pub enum ProgramDataLocation {
     Attribute(u32),
     Uniform(web_sys::WebGlUniformLocation),
+}
+
+//
+pub enum AssetData {
+    ImageData{width: i32, height: i32, pixels: Vec<u8>},
+}
+
+//
+impl AssetData {
+    pub fn new_image_data(id: u32) -> AssetData {
+        // Use the id to get the image png data.
+        let image_data = data::get_asset_data(id);
+
+        // Extract the image's width and height from the png data.
+        let width = i32::from_be_bytes([image_data[16], image_data[17], image_data[18], image_data[19]]);
+        let height = i32::from_be_bytes([image_data[20], image_data[21], image_data[22], image_data[23]]);
+        // Extract the image's pixel data from the png data using the
+        // 'image' crate, while also flipping the image vertically.
+        let pixels = image::load_from_memory_with_format(&image_data,
+        image::ImageFormat::Png).expect("Couldn't load PNG file.")
+        .flipv().to_rgba8().pixels().map(|p| p.0).collect::<Vec<[u8; 4]>>().concat();
+        // Return the image data.
+        AssetData::ImageData{width, height, pixels}
+    }
+    //
+    pub fn recycle_image(&mut self, id: u32) {
+        //
+        match self {
+            AssetData::ImageData{ width, height, pixels } => {
+                // Use the id to get the new image png data.
+                let new_data = data::get_asset_data(id);
+                // Extract the image's width and height from the png data.
+                *width = i32::from_be_bytes([new_data[16], new_data[17], new_data[18], new_data[19]]);
+                *height = i32::from_be_bytes([new_data[20], new_data[21], new_data[22], new_data[23]]);
+                // Clear the old pixel data.
+                pixels.clear();
+                // Extract the image's pixel data from the png data using the
+                // 'image' crate, while also flipping the image vertically.
+                pixels.extend(image::load_from_memory_with_format(&new_data,
+                image::ImageFormat::Png).expect("Couldn't load PNG file.")
+                .flipv().to_rgba8().pixels().map(|p| p.0).collect::<Vec<[u8; 4]>>().concat().into_iter());
+            },
+            //_ => (),
+        }
+    }
+}
+
+//
+pub struct AssetDefinition {
+    pub row: TableRow,
+    pub asset_data: AssetData,
+    pub config: rhai::Map,
+}
+
+//
+impl AssetDefinition {
+    //
+    pub fn new(engine: &rhai::Engine, row: TableRow) -> Result<Self, String> {
+        //
+        let asset_data = match row {
+            TableRow::Asset(id, 1) => AssetData::new_image_data(id),
+            TableRow::Asset(_, _) => { return Err(concat!("Audio / Font asset definitions are not implemented in",
+                " this version of the engine. Please remove any use of them from your project.").into()); },
+            _ => { return Err("Can't define an element as an asset.".into()); },
+        };
+        //
+        let json = engine.parse_json(&match row {
+            TableRow::Asset(id, _) => data::get_asset_config(id),
+            _ => { return Err("Can't define an element as an asset.".into()); },
+        }, false);
+        //
+        if let Some(err) = json.as_ref().err() {
+            //
+            return Err(row.to_err_string(&err.to_string()));
+        }
+        //
+        Ok(
+            Self {
+                //
+                row,
+                //
+                asset_data,
+                //
+                config: json.expect("This Err should have been caught by this function beforehand"),
+            }
+        )
+    }
+    //
+    pub fn recycle(&mut self, engine: &rhai::Engine, row: TableRow) -> Result<(), String> {
+        self.row = row;
+        //
+        match self.row {
+            TableRow::Asset(id, 1) => self.asset_data.recycle_image(id),
+            TableRow::Asset(_, _) => { return Err(concat!("Audio / Font asset definitions are not implemented in",
+                " this version of the engine. Please remove any use of them from your project.").into()); },
+            _ => { return Err("Can't define an element as an asset.".into()); },
+        };
+        //
+        let json = engine.parse_json(&match row {
+            TableRow::Asset(id, _) => data::get_asset_config(id),
+            _ => { return Err("Can't define an element as an asset.".into()); },
+        }, false);
+        //
+        if let Some(err) = json.as_ref().err() {
+            //
+            return Err(row.to_err_string(&err.to_string()));
+        }
+        //
+        self.config = json.expect("This Err should have been caught by this function beforehand");
+        //
+        Ok(())
+    }
 }
 
 //
@@ -37,7 +152,7 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
     //
     gl.buffer_data_with_i32(
         WebGlRenderingContext::ARRAY_BUFFER,
-        MAX_QUAD_COUNT * VERTICES_PER_QUAD * 8,
+        MAX_QUAD_COUNT * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * 4,
         WebGlRenderingContext::DYNAMIC_DRAW,
     );
 
@@ -47,24 +162,15 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
         .ok_or("failed to create buffer")?;
     //
     gl.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
-    //
-    gl.buffer_data_with_i32(
-        WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
-        MAX_QUAD_COUNT * INDCIES_PER_QUAD * 2,
-        WebGlRenderingContext::DYNAMIC_DRAW,
-    );
 
     //
-    let mut indcies: js_sys::Uint16Array;
+    let mut indcies: Vec<u16> = Vec::new();
     for i in 0..MAX_QUAD_COUNT {
-        // Create a new Uint16Array with the size of 6 elements.
-        indcies = js_sys::Uint16Array::new(
-            &JsValue::from_f64(INDCIES_PER_QUAD as f64));
-        // Copy data into the Uint16Array
-        // from the rust slice which includes
-        // the indcies which represent the order
-        // of the vertices' rendering.
-        indcies.copy_from(&[
+        // Copy data into the Vec<u16> 
+        // from the slice which includes
+        // the indcies which represent 
+        // the order of the vertices' rendering.
+        indcies.extend_from_slice(&[
             (0 + VERTICES_PER_QUAD * i) as u16,
             (1 + VERTICES_PER_QUAD * i) as u16,
             (2 + VERTICES_PER_QUAD * i) as u16,
@@ -72,11 +178,23 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
             (1 + VERTICES_PER_QUAD * i) as u16,
             (3 + VERTICES_PER_QUAD * i) as u16,
         ]);
+    }
+    // Note that `Uint16Array::view` is somewhat dangerous (hence the
+    // `unsafe`!). This is creating a raw view into our module's
+    // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
+    // (aka do a memory allocation in Rust) it'll cause the buffer to change,
+    // causing the `Uint16Array` to be invalid.
+    //
+    // As a result, after `Uint16Array::view` we have to be very careful not to
+    // do any memory allocations before it's dropped.
+    unsafe {
         //
-        gl.buffer_sub_data_with_i32_and_array_buffer(
+        let indcies_array = js_sys::Uint16Array::view(indcies.as_slice());
+        //
+        gl.buffer_data_with_array_buffer_view(
             WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
-            INDCIES_PER_QUAD * i * 2,
-            &indcies.buffer(),
+            &indcies_array,
+            WebGlRenderingContext::STATIC_DRAW,
         );
     }
     //
@@ -86,16 +204,21 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
 //
 pub fn render_scene(context: &WebGlRenderingContext, program: &WebGlProgram,
 data_locations: &HashMap<String,ProgramDataLocation>, vertex_buffer: &web_sys::WebGlBuffer,
-index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsValue> {
+index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene, asset_defs: &HashMap<u32, AssetDefinition>,
+object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     context.use_program(Some(&program));
 
-    // Create a vertex and index arrays for the scene rectangle.
-    let (vertices, _) = generate_rectangle(0.0, 0.0, scene.width.floor(), scene.height.floor());
+    // Create a vertex array for the scene rectangle.
+    let vertices = generate_colored_rectangle_vertex(0.0, 0.0,
+    scene.width.floor(), scene.height.floor(), hex_color_to_rgba(&scene.in_color));
 
     // Bind the vertex buffer
     // to the WebGL context.
     context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
+    // Bind the index buffer
+    // to the WebGL context.
+    context.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
 
     // Copy the data form the vertex array
     // into the vertex array buffer.
@@ -117,11 +240,29 @@ index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsVal
         //
         return Err("Couldn't find attribute 'a_position'".into());
     }
-    // Tell the GPU how to read the vertex buffer by attributes
-    context.vertex_attrib_pointer_with_i32(position_attribute_location, 
-    2, WebGlRenderingContext::FLOAT, false, 0, 0);
     // Enable the attribute-reading method
     context.enable_vertex_attrib_array(position_attribute_location);
+    // Tell the GPU how to read the vertex buffer by attributes
+    context.vertex_attrib_pointer_with_i32(position_attribute_location, 
+    2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 0);
+
+    //
+    let color_attribute_location: u32;
+    //
+    if let ProgramDataLocation::Attribute(idx) = data_locations
+    .get("a_color")
+    .ok_or("Couldn't find attribute 'a_color'")? {
+        //
+        color_attribute_location = idx.clone();
+    } else {
+        //
+        return Err("Couldn't find attribute 'a_color'".into());
+    }
+    // Enable the attribute-reading method
+    context.enable_vertex_attrib_array(color_attribute_location);
+    // Tell the GPU how to read the vertex buffer by attributes
+    context.vertex_attrib_pointer_with_i32(color_attribute_location, 
+    4, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 8);
     
     //
     let resolution_uniform_location: web_sys::WebGlUniformLocation;
@@ -155,26 +296,11 @@ index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsVal
     //
     context.uniform2f(Some(&camera_uniform_location), scene.camera.position.x.round(), scene.camera.position.y.round());
 
-    //
-    let incolor_uniform_location: web_sys::WebGlUniformLocation;
-    //
-    if let ProgramDataLocation::Uniform(loc) = data_locations
-    .get("u_incolor")
-    .ok_or("Couldn't find uniform 'u_incolor'")? {
-        //
-        incolor_uniform_location = loc.clone();
-    } else {
-        //
-        return Err("Couldn't find uniform 'u_incolor'".into());
-    }
-    //
-    context.uniform3fv_with_f32_array(Some(&incolor_uniform_location), &hex_color_to_rgb(&scene.in_color));
-
     {
         // Get the outside-color of the stage.
-        let outcolor = hex_color_to_rgb(&scene.out_color);
+        let outcolor = hex_color_to_rgba(&scene.out_color);
         // Set the clear color to the outside color.
-        context.clear_color(outcolor[0], outcolor[1], outcolor[2], 1.0);
+        context.clear_color(outcolor[0], outcolor[1], outcolor[2], outcolor[3]);
     }// 'outcolor' drops here
 
     // Clear the canvas
@@ -182,7 +308,7 @@ index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene) -> Result<(), JsVal
     // Draw the scene rectangle on the canvas
     context.draw_elements_with_i32(
         WebGlRenderingContext::TRIANGLES,
-        (vertices.length() as i32 * INDCIES_PER_QUAD) / VERTICES_PER_QUAD * 2,
+        (vertices.length() as i32 * INDCIES_PER_QUAD) / (VERTICES_PER_QUAD * FLOATS_PER_VERTEX),
         WebGlRenderingContext::UNSIGNED_SHORT,
         0,
     );
@@ -223,9 +349,17 @@ fn create_scene_rendering_program(context: &WebGlRenderingContext)
         WebGlRenderingContext::VERTEX_SHADER,
         r#"
         attribute vec2 a_position;
+        attribute vec4 a_color;
+
         uniform vec2 u_resolution;
         uniform vec2 u_camera;
+
+        varying vec4 v_color;
+
         void main() {
+
+            v_color = a_color;
+
             vec2 camRelative = a_position - u_camera;
             vec2 clipSpace = camRelative * 2.0 / u_resolution;
             gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
@@ -239,9 +373,11 @@ fn create_scene_rendering_program(context: &WebGlRenderingContext)
         WebGlRenderingContext::FRAGMENT_SHADER,
         r#"
         precision mediump float;
-        uniform vec3 u_incolor;
+
+        varying vec4 v_color;
+
         void main() {
-            gl_FragColor = vec4(u_incolor, 1);
+            gl_FragColor = v_color;
         }
     "#,
     )?;
@@ -253,9 +389,12 @@ fn create_scene_rendering_program(context: &WebGlRenderingContext)
     //
     let mut data_locations: HashMap<String,ProgramDataLocation> = HashMap::new();
 
-    // Look up position attribute location.
+    // Look up attribute locations.
     data_locations.insert(String::from("a_position"), ProgramDataLocation::Attribute(context
         .get_attrib_location(&program, "a_position") as u32
+    ));
+    data_locations.insert(String::from("a_color"), ProgramDataLocation::Attribute(context
+        .get_attrib_location(&program, "a_color") as u32
     ));
 
     // Look up uniform locations.
@@ -267,22 +406,18 @@ fn create_scene_rendering_program(context: &WebGlRenderingContext)
         .get_uniform_location(&program, "u_camera")
         .ok_or("Unable to get uniform location (u_camera)")?
     ));
-    data_locations.insert(String::from("u_incolor"), ProgramDataLocation::Uniform(context
-        .get_uniform_location(&program, "u_incolor")
-        .ok_or("Unable to get uniform location (u_incolor)")?
-    ));
 
     Ok((program, data_locations))
 }
 
-// Creates a Float32Array and a Uint32Array with the 
-// vertices and indcies which should represent a 
-// desired rectangle, while only using 4 arguments: 
-// x, y, width and height.
-fn generate_rectangle(x: f32, y: f32, width: f32, height: f32) -> (js_sys::Float32Array, js_sys::Uint16Array) {
+// Creates a Float32Array with the 
+// vertices which should represent a 
+// desired colored rectangle, while only using
+// 5 arguments: x, y, width, height and color.
+fn generate_colored_rectangle_vertex(x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) -> js_sys::Float32Array {
     // Create a new Float32Array with the size of 8 elements.
     let vertices = js_sys::Float32Array::new(
-    &JsValue::from_f64(8.0));
+    &JsValue::from_f64((VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as f64));
     
     // Copy data into the Float32Array
     // from the rust slice which returns
@@ -296,36 +431,26 @@ fn generate_rectangle(x: f32, y: f32, width: f32, height: f32) -> (js_sys::Float
         // should represent the
         // rectangle's points.
         [
-            x1, y1,
-            x2, y1,
-            x1, y2,
-            x2, y2,
+            x1, y1, color[0], color[1], color[2], color[3],
+            x2, y1, color[0], color[1], color[2], color[3],
+            x1, y2, color[0], color[1], color[2], color[3],
+            x2, y2, color[0], color[1], color[2], color[3],
         ]
     });
-
-    // Create a new Uint32Array with the size of 6 elements.
-    let indcies = js_sys::Uint16Array::new(
-        &JsValue::from_f64(6.0));
-    // Copy data into the Uint32Array
-    // from the rust slice which includes
-    // the indcies which represent the order
-    // of the vertices' rendering.
-    indcies.copy_from(&[0, 1, 2, 2, 1, 3]);
     
     // Return the
     // Float32Array
-    // and Uint32Array
-    (vertices, indcies)
+    vertices
 }
 
 // Receives a string borrow with a
-// hex color code (#RRGGBB), and
-// converts it into a slice of floats,
+// hex color code (#RRGGBBAA / #RRGGBB),
+// and converts it into a slice of floats,
 // for use with the WebGL context.
-fn hex_color_to_rgb(hex: &str) -> [f32; 3] {
+fn hex_color_to_rgba(hex: &str) -> [f32; 4] {
     // Result slice with
     // place-holder values
-    let mut result: [f32; 3] = [0.0, 0.0, 0.0];
+    let mut result: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
     // Result slice index counter
     let mut i = 0;
     // Hex color string
