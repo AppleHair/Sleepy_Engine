@@ -243,12 +243,16 @@ function getMap(db, table, keycolumn, valuecolumn) {
 // the order of the values in the array
 // should match to the order and amount
 // of columns in the received table (not
-// including the rowid column). 
+// including the rowid column). The table also
+// needs to have a INTEGER PRIMARY KEY AUTOINCREMENT
+// column as a requirement for using this function.
 function addRow(db, table, values) {
     // if the length of the table
     // doesn't match the length of 
     // the values array, we return null.
-    if (getTableLength(db, table) != values.length) {
+    // (the '+ 1' in the end is for the 
+    // INTEGER PRIMARY KEY AUTOINCREMENT column)
+    if (getTableLength(db, table) != values.length + 1) {
         return null;
     }
     // We use the length of
@@ -261,7 +265,7 @@ function addRow(db, table, values) {
     
     // We try to insert the received
     // values to the received table.
-    db.exec(`INSERT INTO ${table} VALUES(${str});`, values);
+    db.exec(`INSERT INTO ${table} VALUES(NULL,${str});`, values);
     
     // if an error didn't occur,
     // we can continue and return
@@ -270,7 +274,7 @@ function addRow(db, table, values) {
     // We use SQLite's built-in last_insert_rowid()
     // function to find the last inserted row in the
     // received table, which is the one we just inserted.
-    let stmt = db.prepare(`SELECT rowid, * FROM ${table} WHERE rowid=last_insert_rowid();`);
+    let stmt = db.prepare(`SELECT * FROM ${table} WHERE rowid=last_insert_rowid();`);
     stmt.step();
     let res = stmt.getAsObject();
     stmt.free();

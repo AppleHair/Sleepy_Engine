@@ -23,6 +23,9 @@ import initSQLite, * as SQLITE from "./SQLcontrol.js";
 let gameTestWindow = undefined;
 
 //
+let assetsToLoad = [];
+
+//
 onpagehide = (e) => {
     //
     if (gameTestWindow !== undefined && !e.persisted) {
@@ -379,6 +382,14 @@ initSQLite().then((loaded) => {
                 //
                 gameTestWindow = window.open("/game-test", "GAME TEST");
                 //
+                let allAssets = [];
+                //
+                SQLITE.forEachInTable(project, "asset", (row) => {
+                    allAssets.push(row["rowid"]);
+                });
+                //
+                assetsToLoad = allAssets;
+                //
                 gameTestWindow.self.getMetadataIcon = function() {
                     return getBlob(3);
                 };
@@ -439,6 +450,12 @@ initSQLite().then((loaded) => {
                 //
                 gameTestWindow.self.getAssetType = function(rowid) {
                     return SQLITE.getRow(project, "asset", rowid).type;
+                };
+                //
+                gameTestWindow.self.assetsToLoad = function() {
+                    let toLoad = assetsToLoad;
+                    assetsToLoad = [];
+                    return toLoad;
                 };
 
                 //

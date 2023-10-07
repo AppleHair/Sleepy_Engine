@@ -13,17 +13,18 @@ mod renderer;
 //
 #[wasm_bindgen]
 pub struct ClosuresHandle {
-    interval_id: i32,
-    _interval: Closure::<dyn FnMut() -> Result<(), JsValue>>,
     _keydown: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
 }
 
 //
-impl Drop for ClosuresHandle {
-    fn drop(&mut self) {
-        window().unwrap().clear_interval_with_handle(self.interval_id);
-    }
+#[wasm_bindgen(catch)]
+extern "C" {
+    #[wasm_bindgen(js_name = setTimeout)]
+    fn set_timeout_with_callback_and_f64(
+        handler: &::js_sys::Function,
+        timeout: f64,
+    ) -> i32;
 }
 
 //
@@ -60,7 +61,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     // Create the element definitions hash map.
     let mut element_defs: HashMap<u32,Rc<engine_api::ElementDefinition>> = HashMap::new();
     //  Create the asset definitions hash map.
-    let asset_defs: Rc<RefCell<HashMap<u32,renderer::AssetDefinition>>> = Rc::new(RefCell::new(HashMap::new()));
+    let asset_defs: Rc<RefCell<HashMap<u32,Result<renderer::AssetDefinition, JsValue>>>> = Rc::new(RefCell::new(HashMap::new()));
     // Create the API 'Engine', and the state manager instance.
     let (engine, state_manager, 
     cur_scene, cur_scene_id,
@@ -79,22 +80,19 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     &cur_scene.handler, &object_stack)?;
 
     //
-    reload_assets(&engine, &mut asset_defs.borrow_mut(),
-    &object_stack.borrow(), &cur_scene.map.borrow()
-    .read_lock::<engine_api::element::Scene>()
-    .expect("read_lock cast should succeed"))?;
-
-    //
     let canvas_width = engine_api::dynamic_to_number(&state_manager.handler
         .borrow().definition.config["canvas-width"]).unwrap() as i32;
     //
     let canvas_height = engine_api::dynamic_to_number(&state_manager.handler
         .borrow().definition.config["canvas-height"]).unwrap() as i32;
     //
-    let (gl, gl_program,
+    let (gl_context, gl_program,
     program_data,
     vertex_buffer, index_buffer) = 
         renderer::create_rendering_components(canvas_width, canvas_height)?;
+
+    //
+    load_assets(&engine, &mut asset_defs.borrow_mut(), &gl_context);
     
     //
     let draw_loop = Rc::new(RefCell::new(
@@ -112,6 +110,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     //
     let renderer_object_stack = Rc::clone(&object_stack);
     //
+    let json_engine = Engine::new_raw();
+    //
     *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
     move |draw_time: f64| -> Result<(), JsValue> {
         //
@@ -119,8 +119,12 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         last_draw = draw_time;
 
         //
+        load_assets(&json_engine,
+        &mut renderer_asset_defs.borrow_mut(), &gl_context);
+
+        //
         renderer::render_scene(
-            &gl, &gl_program, &program_data, &vertex_buffer,
+            &gl_context, &gl_program, &program_data, &vertex_buffer,
             &index_buffer, &cur_scene_map.borrow()
                 .read_lock::<engine_api::element::Scene>()
                 .expect("read_lock cast should succeed"),
@@ -129,36 +133,31 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
             elapsed
         )?;
         //
-        window()
-        .unwrap().request_animation_frame(draw_loop
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unchecked_ref()
+        window().unwrap().request_animation_frame(
+            draw_loop
+                .borrow().as_ref().unwrap()
+                .as_ref().unchecked_ref()
         )?;
         //
         Ok(())
     }));
-    //
-    window()
-    .unwrap().request_animation_frame(draw_init
-        .borrow()
-        .as_ref()
-        .unwrap()
-        .as_ref()
-        .unchecked_ref()
-    )?;
 
     //
+    let update_loop = Rc::new(RefCell::new(
+    None::<Closure::<dyn FnMut() -> Result<(), JsValue>>>));
+    //
+    let update_init = Rc::clone(&update_loop);
+    //
     let frame_rate = engine_api::dynamic_to_number(&state_manager.handler
-        .borrow().definition.config["fps"]).unwrap() as i32;
+        .borrow().definition.config["fps"]).unwrap() as u32;
+    //
+    let frame_rate_init = frame_rate.clone();
     //
     let mut last_update = window().unwrap().performance().unwrap().now();
     //
     *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
     //
-    let update_loop = Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
+    *update_init.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
     move || -> Result<(), JsValue> {
         //
         let update_time = window().unwrap().performance().unwrap().now();
@@ -196,25 +195,37 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
             call_fn_on_all("create", (), &engine,
             &state_manager.handler, &cur_scene.handler, &object_stack)?;
             //
-            reload_assets(&engine, &mut asset_defs.borrow_mut(),
-            &object_stack.borrow(), &cur_scene.map.borrow()
-            .read_lock::<engine_api::element::Scene>()
-            .expect("read_lock cast should succeed"))?;
-            //
             *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
         }
+
+        //
+        set_timeout_with_callback_and_f64(
+            update_loop
+                .borrow().as_ref().unwrap()
+                .as_ref().unchecked_ref(),
+            1000_f64 / (frame_rate as f64)
+        );
         //
         Ok(())
-    });
+    }));
+
     //
-    let inter_id = window()
-    .unwrap().set_interval_with_callback_and_timeout_and_arguments_0
-        (update_loop.as_ref().unchecked_ref(), 1000 / frame_rate)?;
+    set_timeout_with_callback_and_f64(
+        update_init
+            .borrow().as_ref().unwrap()
+            .as_ref().unchecked_ref(),
+        1000_f64 / (frame_rate_init as f64)
+    );
+
+    //
+    window().unwrap().request_animation_frame(
+        draw_init
+            .borrow().as_ref().unwrap()
+            .as_ref().unchecked_ref()
+    )?;
 
     // Done!
-    Ok(ClosuresHandle { 
-        interval_id: inter_id,
-        _interval: update_loop,
+    Ok(ClosuresHandle {
         _keydown: onkeydown,
         _keyup: onkeyup
     })
@@ -309,59 +320,14 @@ object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Res
 }
 
 //
-fn reload_assets(engine: &Engine, asset_defs: &mut HashMap<u32,renderer::AssetDefinition>,
-object_stack: &Vec<engine_api::Element<engine_api::Object>>,
-scene: &engine_api::element::Scene) -> Result<(), String> {
-    //
-    let mut viewed_id: u32;
-    //
-    for object_idx in 0..scene.objects_len {
-        //
-        let object_map_ref = Rc::clone(&object_stack.get(object_idx).unwrap().map);
-        let object_map_ref = object_map_ref.borrow();
-        let object_map_ref = object_map_ref
-        .read_lock::<engine_api::element::Object>()
-        .expect("read_lock cast should succeed");
-        //
-        let sprites = &object_map_ref.sprites;
-        //
-        if sprites.is_locked {
-            //
-            for &sprite_idx in &sprites.locked_on {
-                //
-                viewed_id = sprites.members[sprite_idx].id;
-                //
-                if asset_defs.contains_key(&viewed_id) {
-                    //
-                    asset_defs.get_mut(&viewed_id).unwrap().recycle(&engine, TableRow::Asset(viewed_id, 1))?;
-                    //
-                    continue;
-                }
-                //
-                asset_defs.insert(viewed_id,
-                renderer::AssetDefinition::new(&engine, TableRow::Asset(viewed_id, 1))?);
-            }
-            //
-            continue;
-        }
-        //
-        for sprite in &sprites.members {
-            //
-            viewed_id = sprite.id;
-            //
-            if asset_defs.contains_key(&viewed_id) {
-                //
-                asset_defs.get_mut(&viewed_id).unwrap().recycle(&engine, TableRow::Asset(viewed_id, 1))?;
-                //
-                continue;
-            }
-            //
-            asset_defs.insert(viewed_id,
-            renderer::AssetDefinition::new(&engine, TableRow::Asset(viewed_id, 1))?);
-        }
+fn load_assets(engine: &Engine, asset_defs: &mut HashMap<u32,Result<renderer::AssetDefinition, JsValue>>,
+gl_context: &web_sys::WebGlRenderingContext) {
+    for id in data::assets_to_load().iter() {
+        let int_id = id.as_f64()
+        .expect("The returned JSValue should be a number") as u32;
+        asset_defs.insert(int_id,renderer::AssetDefinition::new(&engine,
+        TableRow::Asset(int_id, 1), gl_context));
     }
-    //
-    Ok(())
 }
 
 //

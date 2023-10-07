@@ -1,4 +1,4 @@
-import os, firebase_admin
+import os
 
 from flask import Flask, render_template
 
@@ -7,7 +7,6 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         SECRET_KEY='dev',
-        FIREBASE_KEY_PATH=os.path.join(app.instance_path, 'key.json'),
         BASE_FILES_PATH=os.path.join(app.static_folder, 'base-files\\'),
     )
 
@@ -25,16 +24,7 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    # certificate firebase credentials
-    from firebase_admin import credentials
-    cred = credentials.Certificate(app.config['FIREBASE_KEY_PATH'])
-    # initialize firebase app with admin credentials
-    FB_Admin = firebase_admin.initialize_app(cred)
-    # receive firestore client
-    from firebase_admin import firestore
-    db = firestore.client()
-
-    # base databases setup
+    # template project files setup
 
     from . import base_dbs
 

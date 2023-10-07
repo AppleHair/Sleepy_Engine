@@ -13,14 +13,10 @@ pub struct PositionPoint {
 //
 impl PositionPoint {
     pub fn get_x(&mut self) -> rhai::FLOAT { self.x.clone() as rhai::FLOAT }
-    pub fn get_x_int(&mut self) -> rhai::INT { self.x.clone() as rhai::INT }
     pub fn get_y(&mut self) -> rhai::FLOAT { self.y.clone() as rhai::FLOAT }
-    pub fn get_y_int(&mut self) -> rhai::INT { self.y.clone() as rhai::INT }
 
     pub fn set_x(&mut self, value: rhai::FLOAT) { self.x = value as f32; }
-    pub fn set_x_int(&mut self, value: rhai::INT) { self.x = value as f32; }
     pub fn set_y(&mut self, value: rhai::FLOAT) { self.y = value as f32; }
-    pub fn set_y_int(&mut self, value: rhai::INT) { self.y = value as f32; }
 
     pub fn to_string(&mut self) -> String { 
         format!("x - {x} y - {y}", x = self.x, y = self.y)
@@ -230,11 +226,9 @@ pub struct Camera {
 impl Camera {
     pub fn get_position(&mut self) -> PositionPoint { self.position.clone() }
     pub fn get_zoom(&mut self) -> rhai::FLOAT { self.zoom.clone() as rhai::FLOAT }
-    pub fn get_zoom_int(&mut self) -> rhai::INT { self.zoom.clone() as rhai::INT }
 
     pub fn set_position(&mut self, value: PositionPoint) { self.position = value; }
     pub fn set_zoom(&mut self, value: rhai::FLOAT) { self.zoom = value as f32; }
-    pub fn set_zoom_int(&mut self, value: rhai::INT) { self.zoom = value as f32; }
 
     pub fn to_string(&mut self) -> String { 
         format!("{position} zoom - {zoom}", position = self.position.to_string(), zoom = self.zoom)
@@ -258,9 +252,7 @@ pub struct Scene {
 //
 impl Scene {
     pub fn get_width(&mut self) -> rhai::FLOAT { self.width.clone() as rhai::FLOAT }
-    pub fn get_width_int(&mut self) -> rhai::INT { self.width.clone() as rhai::INT }
     pub fn get_height(&mut self) -> rhai::FLOAT { self.height.clone() as rhai::FLOAT }
-    pub fn get_height_int(&mut self) -> rhai::INT { self.height.clone() as rhai::INT }
     pub fn get_inside_color(&mut self) -> String { self.in_color.clone() }
     pub fn get_outside_color(&mut self) -> String { self.out_color.clone() }
     pub fn get_layers(&mut self) -> Dynamic { self.layers[0..self.layers_len].to_vec().into() }
@@ -269,9 +261,7 @@ impl Scene {
     pub fn get_camera(&mut self) -> Camera { self.camera.clone() }
 
     pub fn set_width(&mut self, value: rhai::FLOAT) { self.width = value as f32; }
-    pub fn set_width_int(&mut self, value: rhai::INT) { self.width = value as f32; }
     pub fn set_height(&mut self, value: rhai::FLOAT) { self.height = value as f32; }
-    pub fn set_height_int(&mut self, value: rhai::INT) { self.height = value as f32; }
     pub fn set_inside_color(&mut self, value: &str) { self.in_color.clear(); self.in_color.push_str(value); }
     pub fn set_outside_color(&mut self, value: &str) { self.out_color.clear(); self.out_color.push_str(value); }
     pub fn set_camera(&mut self, value: Camera) { self.camera = value; }

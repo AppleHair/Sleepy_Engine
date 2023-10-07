@@ -1,3 +1,2 @@
 SECRET_KEY='dev'
-FIREBASE_KEY_PATH='instance\key.json'
 BASE_FILES_PATH='flaskr\static\base-files\'

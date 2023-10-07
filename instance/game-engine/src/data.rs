@@ -2,7 +2,7 @@
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-extern {
+extern "C" {
     // data/script getters
     #[wasm_bindgen(js_name=getMetadataIcon)]
     pub fn get_metadata_icon() -> Box<[u8]>;
@@ -33,4 +33,7 @@ extern {
     pub fn get_element_type(id: u32) -> u8;
     #[wasm_bindgen(js_name=getAssetType)]
     pub fn get_asset_type(id: u32) -> u8;
+    // IDs to load getters
+    #[wasm_bindgen(js_name=assetsToLoad)]
+    pub fn assets_to_load() -> Box<[JsValue]>;
 }

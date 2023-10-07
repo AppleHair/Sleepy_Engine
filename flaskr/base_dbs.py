@@ -22,9 +22,9 @@ def create_project_template_db():
     db = sqlite3.connect(os.path.join(current_app.config['BASE_FILES_PATH'], 'new-project.sqlite'))
     cur = db.cursor()
     cur.executescript(current_app.open_resource('new-project.sql').read().decode('utf8'))
-    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("stateConfig.json"),))
-    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("stateScript.rhai"),))
-    cur.execute("INSERT INTO blobs VALUES (?)", (import_basefile("gameIcon.ico"),))
+    cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("stateConfig.json"),))
+    cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("stateScript.rhai"),))
+    cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("gameIcon.ico"),))
 
     db.commit()
     cur.close()
