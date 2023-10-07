@@ -312,6 +312,9 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
     let mut unit_id: f32;
     let mut vert_width: f32;
     let mut vert_height: f32;
+    let mut texcoord_1: [f32; 2] = [0.0, 0.0];
+    let mut texcoord_2: [f32; 2] = [0.0, 0.0];
+    let mut origin_plus_offset: [f32; 2] = [0.0, 0.0];
     //
     for &index in scene.layers[0..scene.layers_len].iter()
     .flat_map(|layer| { layer.instances.iter() }) {
@@ -361,6 +364,84 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                     }
                     //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
                 }
+
+                //
+                let fps = engine_api::dynamic_to_number(&texture_asset.config["fps"])
+                .expect("") as i32;
+                //
+                let mut found_anim = false;
+
+                //
+                for anim in texture_asset.config["animations"]
+                .clone().into_typed_array::<rhai::Map>().expect("") {
+                    //
+                    if anim["name"].clone().into_string().expect("") != object_or_sprite.cur_animation {
+                        continue;
+                    }
+                    //
+                    found_anim = true;
+                    //
+                    let frames = anim["frames"]
+                    .clone().into_typed_array::<rhai::Map>().expect("");
+                    //
+                    if !object_or_sprite.is_animation_finished {
+                        //
+                        object_or_sprite.animation_time += elapsed;
+                        object_or_sprite.cur_frame = ((fps as f64) * object_or_sprite.animation_time * 0.001).floor() as u32;
+                        //
+                        if object_or_sprite.cur_frame >= frames.len() as u32 {
+                            //
+                            object_or_sprite.cur_frame = (frames.len() - 1) as u32;
+                            //
+                            if !object_or_sprite.repeat {
+                                object_or_sprite.is_animation_finished = true;
+                            } else {
+                                object_or_sprite.cur_frame = 0;
+                                object_or_sprite.animation_time = 0.0;
+                            }
+                        }
+                    }
+                    //
+                    let area = frames[object_or_sprite.cur_frame as usize]["area"]
+                    .clone().try_cast::<rhai::Map>().expect("");
+                    //
+                    let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
+                    .clone().try_cast::<rhai::Map>().expect("");
+                    //
+                    texcoord_1 = [engine_api::dynamic_to_number(&area["x1"])
+                    .expect("") / vert_width, engine_api::dynamic_to_number(&area["y1"])
+                    .expect("") / vert_height];
+                    //
+                    texcoord_2 = [1.0 - (engine_api::dynamic_to_number(&area["x2"])
+                    .expect("") / vert_width), 1.0 - (engine_api::dynamic_to_number(&area["y2"])
+                    .expect("") / vert_height)];
+                    //
+                    vert_width = vert_width - (engine_api::dynamic_to_number(&area["x1"])
+                    .expect("") + engine_api::dynamic_to_number(&area["x2"])
+                    .expect(""));
+                    //
+                    vert_height = vert_height - (engine_api::dynamic_to_number(&area["y1"])
+                    .expect("") + engine_api::dynamic_to_number(&area["y2"])
+                    .expect(""));
+                    //
+                    let origin = texture_asset.config["origin"]
+                    .clone().try_cast::<rhai::Map>().expect("");
+                    //
+                    origin_plus_offset = [engine_api::dynamic_to_number(&origin["x"])
+                    .expect("") + engine_api::dynamic_to_number(&offset["x"])
+                    .expect(""), engine_api::dynamic_to_number(&origin["y"])
+                    .expect("") + engine_api::dynamic_to_number(&offset["y"])
+                    .expect("")];
+                    //
+                    break;
+                }
+
+                //
+                if !found_anim {
+                    //
+                    continue;
+                }
+
                 //
                 if let Some((idx, _)) = texture_slots.iter()
                 .enumerate().find(|&slot| { object_or_sprite.id == *slot.1 }) {
@@ -391,8 +472,9 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
             }// Here the sprite switches back to being an object.
 
             //
-            vertices.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor(),
-            object_or_sprite.position.y.floor(), vert_width, vert_height, unit_id));
+            vertices.extend_from_slice(&generate_animated_quad(object_or_sprite.position.x.floor() - 
+            origin_plus_offset[0], object_or_sprite.position.y.floor() - origin_plus_offset[1],
+            vert_width, vert_height, texcoord_1, texcoord_2, unit_id));
         }
     }
     //
@@ -609,6 +691,27 @@ width: f32, height: f32, texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_P
         x2, y1, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, texunit_id,
         x1, y2, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, texunit_id,
         x2, y2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, texunit_id,
+    ]
+}
+
+// Creates an array of f32 floats with
+// the vertices which should represent a 
+// desired animated rectangle, while only using
+// 7 arguments: x, y, width, height, texpoint_1,
+// texpoint_2 and texture unit id.
+fn generate_animated_quad(x: f32, y: f32,
+width: f32, height: f32, texpoint_1: [f32; 2],
+texpoint_2: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
+    let x1 = x;
+    let x2 = x + width;
+    let y1 = y;
+    let y2 = y + height;
+    //  x, y. red, green, blue, alpha, texture_x(0-1), texture_y(0-1), texture_unit_id
+    [
+        x1, y1, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_1[1], texunit_id,
+        x2, y1, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_1[1], texunit_id,
+        x1, y2, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_2[1], texunit_id,
+        x2, y2, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_2[1], texunit_id,
     ]
 }
 

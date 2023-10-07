@@ -314,7 +314,6 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_type_with_name::<element::Object>("Object")
           .register_get_set("position", element::Object::get_position, element::Object::set_position)
           .register_get_set("sprites", element::Object::get_sprites, element::Object::set_sprites)
-          .register_get("origin_offset", element::Object::get_origin_offset)
           .register_get("collision_boxes", element::Object::get_collision_boxes)
           .register_get("active", element::Object::get_active)
           .register_get("index_in_stack", element::Object::get_index_in_stack)

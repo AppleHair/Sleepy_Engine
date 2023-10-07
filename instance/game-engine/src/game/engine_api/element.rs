@@ -49,7 +49,6 @@ pub struct Object {
     pub index_of_layer: usize,
     pub index_in_layer: usize,
     pub position: PositionPoint,
-    pub origin_offset: PositionPoint,
     pub collision_boxes: Vec<CollisionBox>,
 }
 
@@ -60,7 +59,6 @@ impl Object {
     pub fn get_index_of_layer(&mut self) -> rhai::INT { self.index_of_layer.clone() as rhai::INT }
     pub fn get_index_in_stack(&mut self) -> rhai::INT { self.index_in_stack.clone() as rhai::INT }
     pub fn get_position(&mut self) -> PositionPoint { self.position.clone() }
-    pub fn get_origin_offset(&mut self) -> PositionPoint { self.origin_offset.clone() }
     pub fn get_collision_boxes(&mut self) -> Dynamic { self.collision_boxes.clone().into() }
     pub fn get_sprites(&mut self) -> AssetList<Sprite> { self.sprites.clone() }
 
@@ -81,8 +79,8 @@ impl Object {
             collision_boxes_str.push_str(&s);
         }
         //       
-        format!("Position:\n\t{pos}\nOrigin Offset:\n\t{orig_off}\nCollision Box:{colli}", 
-            pos = self.position.to_string(), orig_off = self.origin_offset.to_string(), 
+        format!("Position:\n\t{pos}\nCollision Box:{colli}", 
+            pos = self.position.to_string(), 
             colli = collision_boxes_str)
     }
 
@@ -133,13 +131,6 @@ impl Object {
             //
             position: PositionPoint { x: init_x, y: init_y },
             //
-            origin_offset: PositionPoint { 
-                x: dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
-                .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes."), 
-                y: dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
-                .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.") 
-            },
-            //
             collision_boxes: collision_boxes_vec,
         }
     }
@@ -180,12 +171,6 @@ impl Object {
         self.position.x = init_x;
         //
         self.position.y = init_y;
-        //
-        self.origin_offset.x = dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["x"])
-        .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.");
-        //
-        self.origin_offset.y = dynamic_to_number(&config["origin-offset"].clone_cast::<Map>()["y"])
-        .expect("Every object's config should contain a 'origin-offset' object with 'x' and 'y' float attributes.");
     }
 }
 
