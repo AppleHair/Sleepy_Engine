@@ -489,6 +489,29 @@ initSQLite().then((loaded) => {
                     e.target.title = projectName;
                     e.target.querySelector("#game-icon").setAttribute("href", document.querySelector("#game-icon-label > img").src);
                 };
+            },
+            //
+            'export-game': async () => {
+                // We get the document's save "a" HTML element
+                const a = document.querySelector("#export-save");
+                // We create a FormData object
+                let data = new FormData();
+                // We append the project file into the form data object
+                data.append("gameData", new Blob([project.export()]))
+                // We request an game export from the server,
+                // create a new URL for it and give it to the a HTML element.
+                a.href = URL.createObjectURL(await fetch('/export', { method: "POST", body: data }).then((res) => res.blob()));
+                // We define the a HTML element as a download link and
+                // tell it to download the file with the name of the project.
+                a.download = projectName + ".zip";
+                // We set the target to _black, which will
+                // make the download happen on a new window/tab.
+                a.target = '_blank';
+                // We "click" the a HTML element to tell the
+                // browser we want to download the file.
+                a.click();
+                // We revoke the URL after the download.
+                URL.revokeObjectURL(a.href);
             }
         }, {
 
