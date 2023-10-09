@@ -104,6 +104,7 @@ impl Sprite {
 }
 
 //
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Audio {
     pub id: u32,
@@ -117,6 +118,7 @@ pub struct Audio {
     pub audio_time: f64,
 }
 
+#[allow(dead_code)]
 impl Audio {
     pub fn new(new_id: u32) -> Self { Self {
         id: new_id, tag: String::new(),
@@ -171,12 +173,14 @@ impl Audio {
 }
 
 //
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Font {
     pub id: u32,
     pub text: String,
 }
 
+#[allow(dead_code)]
 impl Font {
     pub fn new(new_id: u32) -> Self {
         Self { id: new_id, text: String::new() }
@@ -302,6 +306,7 @@ impl AssetList<Sprite> {
     }
 }
 
+#[allow(dead_code)]
 impl AssetList<Audio> {
     //
     pub fn contains(&mut self, id: rhai::INT) -> Dynamic {
@@ -346,6 +351,7 @@ impl AssetList<Audio> {
     }
 }
 
+#[allow(dead_code)]
 impl AssetList<Font> {
     //
     pub fn contains(&mut self, id: rhai::INT) -> Dynamic {

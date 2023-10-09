@@ -24,6 +24,8 @@ let gameTestWindow = undefined;
 
 //
 let assetsToLoad = [];
+//
+let elementsToLoad = [];
 
 //
 onpagehide = (e) => {
@@ -385,10 +387,20 @@ initSQLite().then((loaded) => {
                 let allAssets = [];
                 //
                 SQLITE.forEachInTable(project, "asset", (row) => {
-                    allAssets.push(row["rowid"]);
+                    allAssets.push([row["rowid"], row["type"]]);
                 });
                 //
                 assetsToLoad = allAssets;
+
+                //
+                let allElements = [];
+                //
+                SQLITE.forEachInTable(project, "element", (row) => {
+                    allElements.push([row["rowid"], row["type"]]);
+                });
+                //
+                elementsToLoad = allElements;
+
                 //
                 gameTestWindow.self.getMetadataIcon = function() {
                     return getBlob(3);
@@ -455,6 +467,12 @@ initSQLite().then((loaded) => {
                 gameTestWindow.self.assetsToLoad = function() {
                     let toLoad = assetsToLoad;
                     assetsToLoad = [];
+                    return toLoad;
+                };
+                //
+                gameTestWindow.self.elementsToLoad = function() {
+                    let toLoad = elementsToLoad;
+                    elementsToLoad = [];
                     return toLoad;
                 };
 
@@ -561,9 +579,18 @@ initSQLite().then((loaded) => {
                         // the config blob's rowid and the
                         // script blob's rowid into the results array
                         results.push(container.dataset['tableId'], blobConfig['rowid'], blobScript['rowid']);
+                        //
+                        let newElementRow = SQLITE.addRow(project, "element", results);
                         // We use the results array to add the element
                         // to the project file and the document
-                        DOM.addItem("element", SQLITE.addRow(project, "element", results), types, true);
+                        DOM.addItem("element", newElementRow, types, true);
+                        //
+                        elementsToLoad.push([newElementRow['rowid'], newElementRow['type']]);
+                        // We also switch the
+                        // material so the user
+                        // could see the contents
+                        // of the new item they created
+                        DOM.switchMaterial();
                     }, 
                     types.get("element")
                 );
@@ -631,9 +658,13 @@ initSQLite().then((loaded) => {
                         // the config blob's rowid and the
                         // data blob's rowid into the results array
                         results.push(container.dataset['tableId'], blobConfig['rowid'], blobData['rowid']);
+                        //
+                        let newAssetRow = SQLITE.addRow(project, "asset", results);
                         // We use the results array to add the asset
                         // to the project file and the document
-                        DOM.addItem("asset", SQLITE.addRow(project, "asset", results), types, true);
+                        DOM.addItem("asset", newAssetRow, types, true);
+                        //
+                        assetsToLoad.push([newAssetRow['rowid'], newAssetRow['type']]);
                         // We also switch the
                         // material so the user
                         // could see the contents
@@ -737,11 +768,57 @@ initSQLite().then((loaded) => {
                 const blob = textEncoder.encode(JSON.stringify(configInfo.JSON));
                 //
                 SQLITE.updateRowValue(project, "blobs", blobid, "data", blob);
+                //
+                const curTab = document.querySelector("#tabSelected");
+                //
+                if (curTab.dataset['table'] == "metadata") {
+                    return;
+                }
+                //
+                if (curTab.dataset['table'] == "element") {
+                    //
+                    let toLoad = [Number(curTab.dataset['tableId']),
+                    SQLITE.getRow(project, "element", Number(curTab.dataset['tableId']))['type']];
+                    //
+                    if (elementsToLoad.indexOf(toLoad) == -1) {
+                        elementsToLoad.push(toLoad);
+                    }
+                    return;
+                }
+                //
+                if (curTab.dataset['table'] == "asset") {
+                    //
+                    let toLoad = [Number(curTab.dataset['tableId']),
+                    SQLITE.getRow(project, "asset", Number(curTab.dataset['tableId']))['type']];
+                    //
+                    if (assetsToLoad.indexOf(toLoad) == -1) {
+                        assetsToLoad.push(toLoad);
+                    }
+                    return;
+                }
             },
 
             //
             'script': (text, blobid) => {
+                //
                 SQLITE.updateRowValue(project, "blobs", blobid, "data", textEncoder.encode(text));
+                //
+                const curTab = document.querySelector("#tabSelected");
+                //
+                if (curTab.dataset['table'] == "metadata") {
+                    return;
+                }
+                //
+                if (curTab.dataset['table'] == "element") {
+                    //
+                    let toLoad = [Number(curTab.dataset['tableId']),
+                    SQLITE.getRow(project, "element", Number(curTab.dataset['tableId']))['type']];
+                    //
+                    if (elementsToLoad.indexOf(toLoad) == -1) {
+                        elementsToLoad.push(toLoad);
+                    }
+                    return;
+                }
             }
         }
     );

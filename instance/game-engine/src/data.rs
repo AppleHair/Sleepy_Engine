@@ -36,4 +36,6 @@ extern "C" {
     // IDs to load getters
     #[wasm_bindgen(js_name=assetsToLoad)]
     pub fn assets_to_load() -> Box<[JsValue]>;
+    #[wasm_bindgen(js_name=elementsToLoad)]
+    pub fn elements_to_load() -> Box<[JsValue]>;
 }

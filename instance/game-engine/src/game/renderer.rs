@@ -1,12 +1,12 @@
 
-use std::{rc::Rc, cell::RefCell, collections::HashMap};
+use std::{rc::Rc, collections::HashMap};
 
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlBuffer, WebGlTexture, WebGlContextAttributes};
 
 use crate::{data, game::TableRow};
 
-use super::engine_api::{element, asset, self};
+use super::engine_api::{element, self};
 
 const MAX_QUAD_COUNT: i32 = 1000;
 const INDCIES_PER_QUAD: i32 = 6;
@@ -101,7 +101,11 @@ impl AssetDefinition {
         }
         //
         Ok(Self{row,asset_data,
-        config: json.expect("This Err should have been caught by this function beforehand")})
+        config: json.expect(
+            concat!("This Err should",
+            " have been caught by this",
+            " function beforehand")
+        )})
     }
 }
 
@@ -314,7 +318,7 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
     let mut vert_height: f32;
     let mut texcoord_1: [f32; 2] = [0.0, 0.0];
     let mut texcoord_2: [f32; 2] = [0.0, 0.0];
-    let mut origin_plus_offset: [f32; 2] = [0.0, 0.0];
+    let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
     //
     for &index in scene.layers[0..scene.layers_len].iter()
     .flat_map(|layer| { layer.instances.iter() }) {
@@ -347,7 +351,7 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                 // Get the object's current sprite asset's id.
                 let cur_sprite_asset_id = object_or_sprite.sprites.cur_asset;
                 // Receive a mutable borrow of the active sprite.
-                let mut object_or_sprite = object_or_sprite.sprites.members
+                let object_or_sprite = object_or_sprite.sprites.members
                 .get_mut(cur_sprite_asset_id)
                 .expect("the cur_asset index should exist in the members array of an AssetList.");
                 //
@@ -367,22 +371,27 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
 
                 //
                 let fps = engine_api::dynamic_to_number(&texture_asset.config["fps"])
-                .expect("") as i32;
+                .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
+                
                 //
                 let mut found_anim = false;
-
                 //
                 for anim in texture_asset.config["animations"]
-                .clone().into_typed_array::<rhai::Map>().expect("") {
+                .clone().into_typed_array::<rhai::Map>().expect(concat!("Every sprite's config",
+                " should have an 'animations' array, which contains object-like members.")) {
                     //
-                    if anim["name"].clone().into_string().expect("") != object_or_sprite.cur_animation {
+                    if anim["name"].clone().into_string().expect(concat!("Every",
+                    " member of the 'animations' array in a sprite's config should",
+                    " have a 'name' property with a string.")) != object_or_sprite.cur_animation {
                         continue;
                     }
                     //
                     found_anim = true;
                     //
                     let frames = anim["frames"]
-                    .clone().into_typed_array::<rhai::Map>().expect("");
+                    .clone().into_typed_array::<rhai::Map>().expect(concat!("Every",
+                    " member of the 'animations' array in a sprite's config should",
+                    " have a 'frames' array, which contains object-like members."));
                     //
                     if !object_or_sprite.is_animation_finished {
                         //
@@ -403,35 +412,53 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                     }
                     //
                     let area = frames[object_or_sprite.cur_frame as usize]["area"]
-                    .clone().try_cast::<rhai::Map>().expect("");
+                    .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'area' object-like property");
                     //
                     let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
-                    .clone().try_cast::<rhai::Map>().expect("");
+                    .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'offset' object-like property");
                     //
-                    texcoord_1 = [engine_api::dynamic_to_number(&area["x1"])
-                    .expect("") / vert_width, engine_api::dynamic_to_number(&area["y1"])
-                    .expect("") / vert_height];
+                    texcoord_1 = [
+                        engine_api::dynamic_to_number(&area["x1"])
+                        .expect("x1 should be a number.") / vert_width, 
+                        engine_api::dynamic_to_number(&area["y1"])
+                        .expect("y1 should be a number.") / vert_height
+                    ];
                     //
-                    texcoord_2 = [1.0 - (engine_api::dynamic_to_number(&area["x2"])
-                    .expect("") / vert_width), 1.0 - (engine_api::dynamic_to_number(&area["y2"])
-                    .expect("") / vert_height)];
+                    texcoord_2 = [
+                        1.0 - (engine_api::dynamic_to_number(&area["x2"])
+                        .expect("x2 should be a number.") / vert_width),
+                        1.0 - (engine_api::dynamic_to_number(&area["y2"])
+                        .expect("y2 should be a number.") / vert_height)
+                    ];
                     //
-                    vert_width = vert_width - (engine_api::dynamic_to_number(&area["x1"])
-                    .expect("") + engine_api::dynamic_to_number(&area["x2"])
-                    .expect(""));
+                    vert_width = vert_width - (
+                        engine_api::dynamic_to_number(&area["x1"])
+                        .expect("x1 should be a number.") +
+                        engine_api::dynamic_to_number(&area["x2"])
+                        .expect("x2 should be a number.")
+                    );
                     //
-                    vert_height = vert_height - (engine_api::dynamic_to_number(&area["y1"])
-                    .expect("") + engine_api::dynamic_to_number(&area["y2"])
-                    .expect(""));
+                    vert_height = vert_height - (
+                        engine_api::dynamic_to_number(&area["y1"])
+                        .expect("y1 should be a number.") +
+                        engine_api::dynamic_to_number(&area["y2"])
+                        .expect("y2 should be a number.")
+                    );
                     //
                     let origin = texture_asset.config["origin"]
-                    .clone().try_cast::<rhai::Map>().expect("");
+                    .clone().try_cast::<rhai::Map>().expect(concat!("Every sprite's config should",
+                    " have a 'origin' object-like property"));
                     //
-                    origin_plus_offset = [engine_api::dynamic_to_number(&origin["x"])
-                    .expect("") + engine_api::dynamic_to_number(&offset["x"])
-                    .expect(""), engine_api::dynamic_to_number(&origin["y"])
-                    .expect("") + engine_api::dynamic_to_number(&offset["y"])
-                    .expect("")];
+                    origin_minus_offset = [
+                        engine_api::dynamic_to_number(&origin["x"])
+                        .expect("origin.x should be a number") -
+                        engine_api::dynamic_to_number(&offset["x"])
+                        .expect("offset.x should be a number"),
+                        engine_api::dynamic_to_number(&origin["y"])
+                        .expect("origin.y should be a number") -
+                        engine_api::dynamic_to_number(&offset["y"])
+                        .expect("offset.y should be a number")
+                    ];
                     //
                     break;
                 }
@@ -472,9 +499,11 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
             }// Here the sprite switches back to being an object.
 
             //
-            vertices.extend_from_slice(&generate_animated_quad(object_or_sprite.position.x.floor() - 
-            origin_plus_offset[0], object_or_sprite.position.y.floor() - origin_plus_offset[1],
-            vert_width, vert_height, texcoord_1, texcoord_2, unit_id));
+            vertices.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor() - 
+            (origin_minus_offset[0] * object_or_sprite.scale.x), object_or_sprite.position.y.floor() - 
+            (origin_minus_offset[1] * object_or_sprite.scale.y), vert_width * object_or_sprite.scale.x,
+            vert_height * object_or_sprite.scale.y, texcoord_1, texcoord_2,
+             unit_id));
         }
     }
     //
@@ -678,28 +707,9 @@ width: f32, height: f32, color: [f32; 4]) -> [f32; (VERTICES_PER_QUAD * FLOATS_P
 // Creates an array of f32 floats with
 // the vertices which should represent a 
 // desired textured rectangle, while only using
-// 5 arguments: x, y, width, height and texture unit id.
-fn generate_textured_quad(x: f32, y: f32,
-width: f32, height: f32, texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
-    let x1 = x;
-    let x2 = x + width;
-    let y1 = y;
-    let y2 = y + height;
-    //  x, y. red, green, blue, alpha, texture_x(0-1), texture_y(0-1), texture_unit_id
-    [
-        x1, y1, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, texunit_id,
-        x2, y1, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, texunit_id,
-        x1, y2, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, texunit_id,
-        x2, y2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, texunit_id,
-    ]
-}
-
-// Creates an array of f32 floats with
-// the vertices which should represent a 
-// desired animated rectangle, while only using
 // 7 arguments: x, y, width, height, texpoint_1,
 // texpoint_2 and texture unit id.
-fn generate_animated_quad(x: f32, y: f32,
+fn generate_textured_quad(x: f32, y: f32,
 width: f32, height: f32, texpoint_1: [f32; 2],
 texpoint_2: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
     let x1 = x;

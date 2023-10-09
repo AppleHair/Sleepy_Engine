@@ -59,15 +59,18 @@ impl Default for TableRow {
 pub fn run_game() -> Result<ClosuresHandle, JsValue>
 {
     // Create the element definitions hash map.
-    let mut element_defs: HashMap<u32,Rc<engine_api::ElementDefinition>> = HashMap::new();
+    let mut element_defs: HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>> = HashMap::new();
     //  Create the asset definitions hash map.
     let asset_defs: Rc<RefCell<HashMap<u32,Result<renderer::AssetDefinition, JsValue>>>> = Rc::new(RefCell::new(HashMap::new()));
+
     // Create the API 'Engine', and the state manager instance.
     let (engine, state_manager, 
     cur_scene, cur_scene_id,
     prv_scene_id, object_stack,
     key_states) = engine_api::create_api(&mut element_defs)?;
-    
+    //
+    load_elements(&engine, &mut element_defs, true);
+
     //
     let keys_just_changed: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     //
@@ -190,13 +193,16 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         if *prv_scene_id.borrow() != *cur_scene_id.borrow() {
             //
             switch_scene(cur_scene_id.borrow().clone(), &engine,
-            &cur_scene, &object_stack, &mut element_defs)?;
+            &cur_scene, &object_stack, &element_defs)?;
             //
             call_fn_on_all("create", (), &engine,
             &state_manager.handler, &cur_scene.handler, &object_stack)?;
             //
             *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
         }
+
+        //
+        load_elements(&engine, &mut element_defs, false);
 
         //
         set_timeout_with_callback_and_f64(
@@ -322,26 +328,50 @@ object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>) -> Res
 //
 fn load_assets(engine: &Engine, asset_defs: &mut HashMap<u32,Result<renderer::AssetDefinition, JsValue>>,
 gl_context: &web_sys::WebGlRenderingContext) {
-    for id in data::assets_to_load().iter() {
-        let int_id = id.as_f64()
-        .expect("The returned JSValue should be a number") as u32;
-        asset_defs.insert(int_id,renderer::AssetDefinition::new(&engine,
-        TableRow::Asset(int_id, 1), gl_context));
+    for asset in data::assets_to_load().iter() {
+        //
+        let int_id = js_sys::Reflect::get_u32(&asset, 0)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u32;
+        //
+        let int_type = js_sys::Reflect::get_u32(&asset, 1)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u8;
+        //
+        asset_defs.insert(int_id, renderer::AssetDefinition::new(&engine,
+        TableRow::Asset(int_id, int_type), gl_context));
+    }
+}
+
+//
+fn load_elements(engine: &Engine, element_defs: &mut HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>
+, init: bool) {
+    for element in data::elements_to_load().iter() {
+        //
+        let int_id = js_sys::Reflect::get_u32(&element, 0)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u32;
+        //
+        let int_type = js_sys::Reflect::get_u32(&element, 1)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u8;
+        //
+        if element_defs.contains_key(&int_id) && init { continue; }
+        //
+        element_defs.insert(int_id, engine_api::ElementDefinition::new(&engine,
+        TableRow::Element(int_id, int_type)));
     }
 }
 
 //
 fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::Element<engine_api::Scene>,
 object_stack: &Rc<RefCell<Vec<engine_api::Element<engine_api::Object>>>>,
-element_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(), String> {
-    //
-    element_defs.clear();
+element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -> Result<(), String> {
     //
     scene.recycle_scene(&engine, 
-        Rc::new(
-            engine_api::ElementDefinition::new(&engine, 
-                TableRow::Element(scene_id, 2)
-            )?
+        Rc::clone(
+            element_defs.get(&scene_id)
+            .expect("element_defs.get(&scene_id) should have had the scene's definition by now").as_ref()?
         )
     )?;
     //
@@ -403,17 +433,6 @@ element_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(),
                 " config should contain an float 'y' attribute.")),
             );
             //
-            if !element_defs.contains_key(&ent_id) {
-                //
-                element_defs.insert(ent_id, 
-                    Rc::new(
-                        engine_api::ElementDefinition::new(&engine, 
-                            TableRow::Element(ent_id, 1)
-                        )?
-                    )
-                );
-            }
-            //
             let object_borrow = object_stack_borrow.get_mut(idx as usize)
             .expect("The indexes specified in every element of every layer's instances array should be correct.");
             //
@@ -422,7 +441,7 @@ element_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(),
                 *object_borrow = engine_api::Element::new_object(&engine,
                     Rc::clone(
                         element_defs.get(&ent_id)
-                        .expect("element_defs.get(&inst_id_u32) should have had the object's definition by now")
+                        .expect("element_defs.get(&ent_id) should have had the object's definition by now").as_ref()?
                     ), (idx, i, j, init_x, init_y)
                 )?;
                 //
@@ -433,7 +452,7 @@ element_defs: &mut HashMap<u32,Rc<engine_api::ElementDefinition>>) -> Result<(),
             object_borrow.recycle_object(&engine,
                 Rc::clone(
                     element_defs.get(&ent_id)
-                    .expect("element_defs.get(&inst_id_u32) should have had the object's definition by now")
+                    .expect("element_defs.get(&ent_id) should have had the object's definition by now").as_ref()?
                 ), (i, j, init_x, init_y)
             )?;
             //

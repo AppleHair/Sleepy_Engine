@@ -5,13 +5,13 @@ use super::{dynamic_to_number, asset::*};
 
 //
 #[derive(Clone)]
-pub struct PositionPoint {
+pub struct ElmPoint {
     pub x: f32,
     pub y: f32,
 }
 
 //
-impl PositionPoint {
+impl ElmPoint {
     pub fn get_x(&mut self) -> rhai::FLOAT { self.x.clone() as rhai::FLOAT }
     pub fn get_y(&mut self) -> rhai::FLOAT { self.y.clone() as rhai::FLOAT }
 
@@ -26,14 +26,14 @@ impl PositionPoint {
 //
 #[derive(Clone)]
 pub struct CollisionBox {
-    pub point1: PositionPoint,
-    pub point2: PositionPoint,
+    pub point1: ElmPoint,
+    pub point2: ElmPoint,
 }
 
 //
 impl CollisionBox {
-    pub fn get_point1(&mut self) -> PositionPoint { self.point1.clone() }
-    pub fn get_point2(&mut self) -> PositionPoint { self.point2.clone() }
+    pub fn get_point1(&mut self) -> ElmPoint { self.point1.clone() }
+    pub fn get_point2(&mut self) -> ElmPoint { self.point2.clone() }
 
     pub fn to_string(&mut self) -> String { 
         format!("Point 1: {p1}\nPoint 2:{p2}", p1 = self.point1.to_string(), p2 = self.point2.to_string())
@@ -48,7 +48,8 @@ pub struct Object {
     pub index_in_stack: u32,
     pub index_of_layer: usize,
     pub index_in_layer: usize,
-    pub position: PositionPoint,
+    pub position: ElmPoint,
+    pub scale: ElmPoint,
     pub collision_boxes: Vec<CollisionBox>,
 }
 
@@ -58,11 +59,13 @@ impl Object {
     pub fn get_index_in_layer(&mut self) -> rhai::INT { self.index_in_layer.clone() as rhai::INT }
     pub fn get_index_of_layer(&mut self) -> rhai::INT { self.index_of_layer.clone() as rhai::INT }
     pub fn get_index_in_stack(&mut self) -> rhai::INT { self.index_in_stack.clone() as rhai::INT }
-    pub fn get_position(&mut self) -> PositionPoint { self.position.clone() }
+    pub fn get_position(&mut self) -> ElmPoint { self.position.clone() }
+    pub fn get_scale(&mut self) -> ElmPoint { self.scale.clone() }
     pub fn get_collision_boxes(&mut self) -> Dynamic { self.collision_boxes.clone().into() }
     pub fn get_sprites(&mut self) -> AssetList<Sprite> { self.sprites.clone() }
 
-    pub fn set_position(&mut self, value: PositionPoint) { self.position = value; }
+    pub fn set_position(&mut self, value: ElmPoint) { self.position = value; }
+    pub fn set_scale(&mut self, value: ElmPoint) { self.scale = value; }
     pub fn set_sprites(&mut self, value: AssetList<Sprite>) { self.sprites = value; }
 
     pub fn to_string(&mut self) -> String {
@@ -94,13 +97,13 @@ impl Object {
         .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
             collision_boxes_vec.push( CollisionBox {
-                point1: PositionPoint { 
+                point1: ElmPoint { 
                     x: dynamic_to_number(&map["x1"])
                     .expect("Every collision box should contain an float 'x1' attribute."), 
                     y: dynamic_to_number(&map["y1"])
                     .expect("Every collision box should contain an float 'y1' attribute.") 
                 },
-                point2: PositionPoint { 
+                point2: ElmPoint { 
                     x: dynamic_to_number(&map["x2"])
                     .expect("Every collision box should contain an float 'x2' attribute."), 
                     y: dynamic_to_number(&map["y2"])
@@ -129,7 +132,9 @@ impl Object {
             //
             index_in_layer: idx_in_layer,
             //
-            position: PositionPoint { x: init_x, y: init_y },
+            position: ElmPoint { x: init_x, y: init_y },
+            //
+            scale: ElmPoint { x: 1.0, y: 1.0 },
             //
             collision_boxes: collision_boxes_vec,
         }
@@ -144,13 +149,13 @@ impl Object {
         .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
             self.collision_boxes.push( CollisionBox {
-                point1: PositionPoint { 
+                point1: ElmPoint { 
                     x: dynamic_to_number(&map["x1"])
                     .expect("Every collision box should contain an float 'x1' attribute."), 
                     y: dynamic_to_number(&map["y1"])
                     .expect("Every collision box should contain an float 'y1' attribute.") 
                 },
-                point2: PositionPoint { 
+                point2: ElmPoint { 
                     x: dynamic_to_number(&map["x2"])
                     .expect("Every collision box should contain an float 'x2' attribute."), 
                     y: dynamic_to_number(&map["y2"])
@@ -171,6 +176,10 @@ impl Object {
         self.position.x = init_x;
         //
         self.position.y = init_y;
+        //
+        self.scale.x = 1.0;
+        //
+        self.scale.y = 1.0;
     }
 }
 
@@ -203,16 +212,16 @@ impl Layer {
 //
 #[derive(Clone)]
 pub struct Camera {
-    pub position: PositionPoint,
+    pub position: ElmPoint,
     pub zoom: f32,
 }
 
 //
 impl Camera {
-    pub fn get_position(&mut self) -> PositionPoint { self.position.clone() }
+    pub fn get_position(&mut self) -> ElmPoint { self.position.clone() }
     pub fn get_zoom(&mut self) -> rhai::FLOAT { self.zoom.clone() as rhai::FLOAT }
 
-    pub fn set_position(&mut self, value: PositionPoint) { self.position = value; }
+    pub fn set_position(&mut self, value: ElmPoint) { self.position = value; }
     pub fn set_zoom(&mut self, value: rhai::FLOAT) { self.zoom = value as f32; }
 
     pub fn to_string(&mut self) -> String { 
@@ -321,7 +330,7 @@ impl Scene {
             //
             camera: Camera {
                 //
-                position: PositionPoint { 
+                position: ElmPoint { 
                     x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
                     .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
                     y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
@@ -409,7 +418,7 @@ impl Scene {
         //
         self.camera = Camera {
             //
-            position: PositionPoint { 
+            position: ElmPoint { 
                 x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
                 .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
                 y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])

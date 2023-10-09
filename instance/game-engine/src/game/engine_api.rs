@@ -36,7 +36,7 @@ pub struct ElementDefinition {
 //
 impl ElementDefinition {
     //
-    pub fn new(engine: &Engine, row: TableRow) -> Result<Self, String> {
+    pub fn new(engine: &Engine, row: TableRow) -> Result<Rc<Self>, String> {
         //
         let ast = engine.compile(&match row {
             TableRow::Metadata => data::get_metadata_script(),
@@ -60,16 +60,16 @@ impl ElementDefinition {
             return Err(row.to_err_string(&err.to_string()));
         }
         //
-        Ok(
-            Self {
-                //
-                row,
-                //
-                ast: ast.expect("This Err should have been caught by this function beforehand"),
-                //
-                config: json.expect("This Err should have been caught by this function beforehand"),
-            }
-        )
+        Ok(Rc::new(Self {row, 
+            ast: ast.expect(
+            concat!("This Err should",
+            " have been caught by this function",
+            " beforehand")),
+            config: json.expect(
+            concat!("This Err should",
+            " have been caught by this function",
+            " beforehand")),
+        }))
     }
 }
 
@@ -277,17 +277,17 @@ impl Element<Object> {
 }
 
 //
-pub fn create_api(element_defs: &mut HashMap<u32,Rc<ElementDefinition>>) -> Result<(Engine, Element<State>, Element<Scene>,
+pub fn create_api(element_defs: &mut HashMap<u32,Result<Rc<ElementDefinition>, String>>) -> Result<(Engine, Element<State>, Element<Scene>,
 Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
     // Create an 'Engine'
     let mut engine = Engine::new_raw();
 
     // Register API features to the 'Engine'
     engine.on_print(|text| { log_1(&wasm_bindgen::JsValue::from_str(text)); })
-          .register_type_with_name::<element::PositionPoint>("Position")
-          .register_get_set("x", element::PositionPoint::get_x, element::PositionPoint::set_x)
-          .register_get_set("y", element::PositionPoint::get_y, element::PositionPoint::set_y)
-          .register_fn("to_string", element::PositionPoint::to_string)
+          .register_type_with_name::<element::ElmPoint>("Position")
+          .register_get_set("x", element::ElmPoint::get_x, element::ElmPoint::set_x)
+          .register_get_set("y", element::ElmPoint::get_y, element::ElmPoint::set_y)
+          .register_fn("to_string", element::ElmPoint::to_string)
           .register_type_with_name::<element::CollisionBox>("CollisionBox")
           .register_get("point1", element::CollisionBox::get_point1)
           .register_get("point2", element::CollisionBox::get_point2)
@@ -313,6 +313,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
           .register_fn("contains", asset::AssetList::<asset::Sprite>::contains)
           .register_type_with_name::<element::Object>("Object")
           .register_get_set("position", element::Object::get_position, element::Object::set_position)
+          .register_get_set("scale", element::Object::get_scale, element::Object::set_scale)
           .register_get_set("sprites", element::Object::get_sprites, element::Object::set_sprites)
           .register_get("collision_boxes", element::Object::get_collision_boxes)
           .register_get("active", element::Object::get_active)
@@ -350,11 +351,9 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     // This instance will borrow its definition and contain
     // the element's 'Scope'.
     let state_manager = Element::new_state(&engine, 
-        Rc::new(
-            ElementDefinition::new(&engine, 
-                TableRow::Metadata
-            )?
-        )
+        ElementDefinition::new(&engine, 
+            TableRow::Metadata
+        )?
     )?;
 
     // Register a variable definition filter.
@@ -392,11 +391,15 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
     //
     let prv_scene_id = Rc::new(RefCell::new(0_u32));
     //
+    element_defs.insert(cur_scene_id.borrow().clone(), 
+        ElementDefinition::new(&engine,
+        TableRow::Element(cur_scene_id.borrow().clone(), 2)
+    ));
+    //
     let cur_scene = Element::new_scene(&engine, 
-        Rc::new(
-            ElementDefinition::new(&engine, 
-                TableRow::Element(cur_scene_id.borrow().clone(), 2)
-            )?
+        Rc::clone(
+            element_defs.get(&cur_scene_id.borrow())
+            .expect("element_defs.get(&cur_scene_id) should have had the scene's definition by now").as_ref()?
         )
     )?;
     //
@@ -437,13 +440,10 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
                 //
                 if !element_defs.contains_key(&ent_id) {
                     //
-                    element_defs.insert(ent_id, 
-                        Rc::new(
-                            ElementDefinition::new(&engine, 
-                                TableRow::Element(ent_id, 1)
-                            )?
-                        )
-                    );
+                    element_defs.insert(ent_id,
+                        ElementDefinition::new(&engine,
+                            TableRow::Element(ent_id, 1)
+                    ));
                 }
                 //
                 *object_stack.borrow_mut().get_mut(idx as usize)
@@ -451,7 +451,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Element<Object>>>>, Rc<RefCel
                 Element::new_object(&engine,
                     Rc::clone(
                         element_defs.get(&ent_id)
-                        .expect("element_defs.get(&inst_id_u32) should have had the object's definition by now")
+                        .expect("element_defs.get(&ent_id) should have had the object's definition by now").as_ref()?
                     ), (idx, i, j, init_x, init_y)
                 )?;
                 //
