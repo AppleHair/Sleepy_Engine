@@ -11,7 +11,7 @@ use super::engine_api::{element, self};
 const MAX_QUAD_COUNT: i32 = 1000;
 const INDCIES_PER_QUAD: i32 = 6;
 const VERTICES_PER_QUAD: i32 = 4;
-const FLOATS_PER_VERTEX: i32 = 9;
+const FLOATS_PER_VERTEX: i32 = 13;
 
 pub enum ProgramDataLocation {
     Attribute(u32),
@@ -160,12 +160,32 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
     } else { return Err("Couldn't find attribute 'a_texcoord'".into()); }
 
     //
+    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_texsize") {
+        // Enable the attribute-reading method
+        gl_context.enable_vertex_attrib_array(*location);
+        // Tell the GPU how to read the vertex buffer by attributes
+        gl_context.vertex_attrib_pointer_with_i32(*location, 
+        2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 32);
+
+    } else { return Err("Couldn't find attribute 'a_texsize'".into()); }
+
+    //
+    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_scale") {
+        // Enable the attribute-reading method
+        gl_context.enable_vertex_attrib_array(*location);
+        // Tell the GPU how to read the vertex buffer by attributes
+        gl_context.vertex_attrib_pointer_with_i32(*location, 
+        2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 40);
+
+    } else { return Err("Couldn't find attribute 'a_scale'".into()); }
+
+    //
     if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_texindex") {
         // Enable the attribute-reading method
         gl_context.enable_vertex_attrib_array(*location);
         // Tell the GPU how to read the vertex buffer by attributes
         gl_context.vertex_attrib_pointer_with_i32(*location, 
-        1, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 32);
+        1, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 48);
 
     } else { return Err("Couldn't find attribute 'a_texindex'".into()); }
 
@@ -287,14 +307,21 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
     gl_context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
     // Set the blending method the alpha of the images will control
     gl_context.enable(WebGlRenderingContext::BLEND);
-    gl_context.blend_func(WebGlRenderingContext::SRC_ALPHA, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
+    gl_context.blend_func(WebGlRenderingContext::ONE, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
 
     //
     if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_camera") {
         //
-        gl_context.uniform2f(Some(location), scene.camera.position.x.round(), scene.camera.position.y.round());
+        gl_context.uniform2f(Some(location), scene.camera.position.x.floor(), scene.camera.position.y.floor());
 
     } else { return Err("Couldn't find uniform 'u_camera'".into()); }
+
+    //
+    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_zoom") {
+        //
+        gl_context.uniform1f(Some(location), scene.camera.zoom);
+
+    } else { return Err("Couldn't find uniform 'u_zoom'".into()); }
     
     //
     let mut vertices: Vec<f32> = Vec::new();
@@ -314,8 +341,10 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
 
     //
     let mut unit_id: f32;
-    let mut vert_width: f32;
-    let mut vert_height: f32;
+    let mut quad_width: f32;
+    let mut quad_height: f32;
+    let mut tex_width: f32;
+    let mut tex_height: f32;
     let mut texcoord_1: [f32; 2] = [0.0, 0.0];
     let mut texcoord_2: [f32; 2] = [0.0, 0.0];
     let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
@@ -362,8 +391,10 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                 //
                 match &texture_asset.asset_data {
                     AssetData::ImageData { width, height, texture } => {
-                        vert_width = *width as f32;
-                        vert_height = *height as f32;
+                        quad_width = *width as f32;
+                        quad_height = *height as f32;
+                        tex_width = *width as f32;
+                        tex_height = *height as f32;
                         gl_texture = texture;
                     }
                     //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
@@ -419,26 +450,26 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                     //
                     texcoord_1 = [
                         engine_api::dynamic_to_number(&area["x1"])
-                        .expect("x1 should be a number.") / vert_width, 
+                        .expect("x1 should be a number.") / quad_width, 
                         engine_api::dynamic_to_number(&area["y1"])
-                        .expect("y1 should be a number.") / vert_height
+                        .expect("y1 should be a number.") / quad_height
                     ];
                     //
                     texcoord_2 = [
                         1.0 - (engine_api::dynamic_to_number(&area["x2"])
-                        .expect("x2 should be a number.") / vert_width),
+                        .expect("x2 should be a number.") / quad_width),
                         1.0 - (engine_api::dynamic_to_number(&area["y2"])
-                        .expect("y2 should be a number.") / vert_height)
+                        .expect("y2 should be a number.") / quad_height)
                     ];
                     //
-                    vert_width = vert_width - (
+                    quad_width = quad_width - (
                         engine_api::dynamic_to_number(&area["x1"])
                         .expect("x1 should be a number.") +
                         engine_api::dynamic_to_number(&area["x2"])
                         .expect("x2 should be a number.")
                     );
                     //
-                    vert_height = vert_height - (
+                    quad_height = quad_height - (
                         engine_api::dynamic_to_number(&area["y1"])
                         .expect("y1 should be a number.") +
                         engine_api::dynamic_to_number(&area["y2"])
@@ -501,9 +532,10 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
             //
             vertices.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor() - 
             (origin_minus_offset[0] * object_or_sprite.scale.x), object_or_sprite.position.y.floor() - 
-            (origin_minus_offset[1] * object_or_sprite.scale.y), vert_width * object_or_sprite.scale.x,
-            vert_height * object_or_sprite.scale.y, texcoord_1, texcoord_2,
-             unit_id));
+            (origin_minus_offset[1] * object_or_sprite.scale.y), quad_width * object_or_sprite.scale.x,
+            quad_height * object_or_sprite.scale.y, texcoord_1, texcoord_2,
+            [tex_width, tex_height], [object_or_sprite.scale.x, object_or_sprite.scale.y],
+            unit_id));
         }
     }
     //
@@ -572,11 +604,13 @@ fn create_context(width: i32, height: i32)  -> Result<WebGlRenderingContext, JsV
     .get_context_with_context_options("webgl",
         WebGlContextAttributes::new()
         .alpha(false)
-        .premultiplied_alpha(false)
+        .premultiplied_alpha(true)
         .dyn_ref::<JsValue>().unwrap()
     )?
     .unwrap()
     .dyn_into::<WebGlRenderingContext>()?;
+    //
+    context.pixel_storei(WebGlRenderingContext::UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
 
     //
     Ok(context)
@@ -584,10 +618,6 @@ fn create_context(width: i32, height: i32)  -> Result<WebGlRenderingContext, JsV
 
 fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
  -> Result<(WebGlProgram,HashMap<String,ProgramDataLocation>), JsValue> {
-    //
-    let max_texture_units = gl_context
-    .get_parameter(WebGlRenderingContext::MAX_TEXTURE_IMAGE_UNITS)
-    .unwrap().as_f64().unwrap() as u32;
     // Create the vertex shader
     let vert_shader = compile_shader(
         &gl_context,
@@ -596,23 +626,30 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
         attribute vec2 a_position;
         attribute vec4 a_color;
         attribute vec2 a_texcoord;
+        attribute vec2 a_texsize;
+        attribute vec2 a_scale;
         attribute float a_texindex;
 
         uniform vec2 u_resolution;
         uniform vec2 u_camera;
+        uniform float u_zoom;
 
         varying vec4 v_color;
         varying vec2 v_texcoord;
+        varying vec2 v_texsize;
+        varying vec2 v_scale;
         varying float v_texindex;
 
         void main() {
 
             v_color = a_color;
-            v_texcoord = a_texcoord;
+            v_texcoord = a_texcoord * a_texsize;
+            v_texsize = a_texsize;
+            v_scale = a_scale;
             v_texindex = a_texindex;
 
             vec2 camRelative = a_position - u_camera;
-            vec2 clipSpace = camRelative * 2.0 / u_resolution;
+            vec2 clipSpace = camRelative * abs(u_zoom) * 2.0 / u_resolution;
             gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
         }
     "#,
@@ -622,29 +659,43 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
     let frag_shader = compile_shader(
         &gl_context,
         WebGlRenderingContext::FRAGMENT_SHADER,
-        &format!(r#"
-        precision mediump float;
+        r#"
+        precision highp float;
 
         varying vec4 v_color;
         varying vec2 v_texcoord;
+        varying vec2 v_texsize;
+        varying vec2 v_scale;
         varying float v_texindex;
 
-        const int maxTextures = {};
-        uniform sampler2D u_textures[maxTextures];
+        uniform float u_zoom;
+        uniform sampler2D u_textures[gl_MaxTextureImageUnits];
 
-        void main() {{
+        void main() {
+
+            vec2 texcoord = v_texcoord;
+
+            vec2 pixPerTex = abs(v_scale) * abs(u_zoom);
+
+            vec2 pixoffset = clamp(fract(v_texcoord) * pixPerTex, 0.0, 0.5) - clamp((1.0 - fract(v_texcoord)) * pixPerTex, 0.0, 0.5);
+
+            if (v_texsize != vec2(0.0,0.0)) {
+                
+                texcoord = (floor(v_texcoord) + 0.5 + pixoffset) / v_texsize;
+            }
+
             int index = int(v_texindex);
 
-            // gl_FragColor = texture2D(u_textures[index], v_texcoord) * v_color;
+            // gl_FragColor = texture2D(u_textures[index], texcoord) * v_color;
             // ERROR: '[]' : Index expression must be constant
 
-            for (int i=0; i<maxTextures; i++) {{
-                if (index == i) {{
-                    gl_FragColor = texture2D(u_textures[i], v_texcoord) * v_color;
-                }}
-            }}
-        }}
-    "#, max_texture_units)
+            for (int i=0; i<gl_MaxTextureImageUnits; i++) {
+                if (index == i) {
+                    gl_FragColor = texture2D(u_textures[i], texcoord) * v_color;
+                }
+            }
+        }
+    "#,
     )?;
 
     // Create the shader program using
@@ -664,6 +715,12 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
     data_locations.insert(String::from("a_texcoord"), ProgramDataLocation::Attribute(gl_context
         .get_attrib_location(&gl_program, "a_texcoord") as u32
     ));
+    data_locations.insert(String::from("a_texsize"), ProgramDataLocation::Attribute(gl_context
+        .get_attrib_location(&gl_program, "a_texsize") as u32
+    ));
+    data_locations.insert(String::from("a_scale"), ProgramDataLocation::Attribute(gl_context
+        .get_attrib_location(&gl_program, "a_scale") as u32
+    ));
     data_locations.insert(String::from("a_texindex"), ProgramDataLocation::Attribute(gl_context
         .get_attrib_location(&gl_program, "a_texindex") as u32
     ));
@@ -676,6 +733,10 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
     data_locations.insert(String::from("u_camera"), ProgramDataLocation::Uniform(gl_context
         .get_uniform_location(&gl_program, "u_camera")
         .ok_or("Unable to get uniform location (u_camera)")?
+    ));
+    data_locations.insert(String::from("u_zoom"), ProgramDataLocation::Uniform(gl_context
+        .get_uniform_location(&gl_program, "u_zoom")
+        .ok_or("Unable to get uniform location (u_zoom)")?
     ));
     data_locations.insert(String::from("u_textures"), ProgramDataLocation::Uniform(gl_context
         .get_uniform_location(&gl_program, "u_textures")
@@ -695,12 +756,12 @@ width: f32, height: f32, color: [f32; 4]) -> [f32; (VERTICES_PER_QUAD * FLOATS_P
     let x2 = x + width;
     let y1 = y;
     let y2 = y + height;
-    //  x, y, red, green, blue, alpha, texture_x(0-1), texture_y(0-1), texture_unit_id
+    //  x, y, red, green, blue, alpha, texture_x(0-1), texture_y(0-1), tex_width, tex_height, scale_x, scale_y, texture_unit_id
     [
-        x1, y1, color[0], color[1], color[2], color[3], 0.0, 0.0, 0.0,
-        x2, y1, color[0], color[1], color[2], color[3], 1.0, 0.0, 0.0,
-        x1, y2, color[0], color[1], color[2], color[3], 0.0, 1.0, 0.0,
-        x2, y2, color[0], color[1], color[2], color[3], 1.0, 1.0, 0.0,
+        x1, y1, color[0], color[1], color[2], color[3], 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+        x2, y1, color[0], color[1], color[2], color[3], 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+        x1, y2, color[0], color[1], color[2], color[3], 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
+        x2, y2, color[0], color[1], color[2], color[3], 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
     ]
 }
 
@@ -711,17 +772,18 @@ width: f32, height: f32, color: [f32; 4]) -> [f32; (VERTICES_PER_QUAD * FLOATS_P
 // texpoint_2 and texture unit id.
 fn generate_textured_quad(x: f32, y: f32,
 width: f32, height: f32, texpoint_1: [f32; 2],
-texpoint_2: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
+texpoint_2: [f32; 2], tex_size: [f32; 2],
+scale: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
     let x1 = x;
     let x2 = x + width;
     let y1 = y;
     let y2 = y + height;
-    //  x, y. red, green, blue, alpha, texture_x(0-1), texture_y(0-1), texture_unit_id
+    //  x, y, red, green, blue, alpha, texture_x(0-1), texture_y(0-1), tex_width, tex_height, scale_x, scale_y, texture_unit_id
     [
-        x1, y1, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_1[1], texunit_id,
-        x2, y1, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_1[1], texunit_id,
-        x1, y2, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_2[1], texunit_id,
-        x2, y2, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_2[1], texunit_id,
+        x1, y1, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_1[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x2, y1, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_1[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x1, y2, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_2[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x2, y2, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_2[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
     ]
 }
 
