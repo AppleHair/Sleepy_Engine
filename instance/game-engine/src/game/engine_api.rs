@@ -78,10 +78,54 @@ impl ElementDefinition {
 }
 
 //
+pub struct ElementResources {
+    pub definition: Rc<ElementDefinition>,
+    scope: Scope<'static>
+}
+
+impl ElementResources {
+    //
+    fn new(engine: &Engine, mut scope: Scope<'static>, definition: Rc<ElementDefinition>) -> Result<Self, String> {
+        //
+        if let Some(err) = engine.run_ast_with_scope
+        (&mut scope, &definition.script).err() {
+            //
+            return Err(definition.row.to_err_string(&err.to_string()));
+        }
+        //
+        Ok(Self { definition, scope })
+    }
+    //
+    fn recycle(&mut self, engine: &Engine, definition: Rc<ElementDefinition>) -> Result<(), String> {
+        //
+        self.definition = definition;
+        self.scope.clear();
+        //
+        if let Some(err) = engine.run_ast_with_scope
+        (&mut self.scope, &self.definition.script).err() {
+            //
+            return Err(self.definition.row.to_err_string(&err.to_string()));
+        }
+        //
+        Ok(())
+    }
+    //
+    pub fn call_fn(&mut self, engine: &Engine, name: &str, args: impl rhai::FuncArgs) -> Result<(), String> {
+        //
+        if let Some(err) = engine.call_fn::<()>
+        (&mut self.scope, &self.definition.script, name, args).err() {
+            //
+            return Err(self.definition.row.to_err_string(&err.to_string()));
+        }
+        //
+        Ok(())
+    }
+}
+
+//
 pub struct ElementHandler {
     pub properties: Rc<RefCell<Dynamic>>,
-    pub definition: Rc<ElementDefinition>,
-    scope: Scope<'static>,
+    pub resources: Rc<RefCell<ElementResources>>,
 }
 
 impl ElementHandler {
@@ -90,29 +134,27 @@ impl ElementHandler {
         //
         let mut element_handler = Self {
             properties: Default::default(),
-            definition: Rc::clone(def),
-            scope: Scope::new(),
+            resources: Rc::new(RefCell::new(
+                ElementResources::new(&engine, 
+                Scope::new(),Rc::clone(def))?
+            ))
         };
-
         //
-        if let Some(err) = engine.run_ast_with_scope
-        (&mut element_handler.scope, &element_handler.definition.script).err() {
-            //
-            return Err(element_handler.definition.row.to_err_string(&err.to_string()));
-        }
-
+        let row_copy = element_handler.resources.borrow().definition.row;
         //
-        match element_handler.definition.row {
+        match row_copy {
             //
             TableRow::Metadata => {
                 //
                 let shared_map = Rc::new(RefCell::new(Dynamic::from_map(Map::default())));
                 //
-                if let Some(map) = element_handler.scope.remove::<Map>("State") {
+                if let Some(map) = element_handler.resources
+                .borrow_mut().scope.remove::<Map>("State") {
                     let _ = shared_map.replace(Dynamic::from_map(map));
                 }
                 //
-                element_handler.scope.push_dynamic("State", Dynamic::from(Rc::clone(&shared_map)));
+                element_handler.resources.borrow_mut().scope
+                .push_dynamic("State", Dynamic::from(Rc::clone(&shared_map)));
                 element_handler.properties = shared_map;
                 //
                 Ok(element_handler)
@@ -121,10 +163,11 @@ impl ElementHandler {
             TableRow::Element(_, 2) => {
                 //
                 let shared_map = Rc::new(RefCell::new(
-                    Dynamic::from(element::Scene::new(&element_handler.definition.config))
+                    Dynamic::from(element::Scene::new(&element_handler.resources.borrow().definition.config))
                 ));
                 //
-                element_handler.scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&shared_map)));
+                element_handler.resources.borrow_mut().scope
+                .push_dynamic("Scene", Dynamic::from(Rc::clone(&shared_map)));
                 element_handler.properties = shared_map;
                 //
                 Ok(element_handler)
@@ -135,12 +178,13 @@ impl ElementHandler {
                 if let Some(info) = object_info {
                     //
                     let shared_map = Rc::new(RefCell::new(
-                        Dynamic::from(element::Object::new(&element_handler.definition.config,
+                        Dynamic::from(element::Object::new(&element_handler.resources.borrow().definition.config,
                             info.0, info.1,
                             info.2))
                     ));
                     //
-                    element_handler.scope.push_dynamic("Object", Dynamic::from(Rc::clone(&shared_map)));
+                    element_handler.resources.borrow_mut().scope
+                    .push_dynamic("Object", Dynamic::from(Rc::clone(&shared_map)));
                     element_handler.properties = shared_map;
                     //
                     Ok(element_handler)
@@ -163,26 +207,23 @@ impl ElementHandler {
         }
     }
 
-    pub fn recycle(&mut self, engine: &Engine, def: &Rc<ElementDefinition>,
+    pub fn recycle(&self, engine: &Engine, def: &Rc<ElementDefinition>,
     object_info: Option<(f32, f32)>) -> Result<(), String> {
         //
-        self.definition = Rc::clone(&def);
-        self.scope.clear();
+        self.resources.borrow_mut().recycle(&engine, Rc::clone(def))?;
         //
-        if let Some(err) = engine.run_ast_with_scope
-        (&mut self.scope, &self.definition.script).err() {
-            //
-            return Err(self.definition.row.to_err_string(&err.to_string()));
-        }
+        let row_copy = self.resources.borrow().definition.row;
         //
-        match self.definition.row {
+        match row_copy {
             //
             TableRow::Element(_, 2) => {
                 //
-                self.properties.borrow_mut().write_lock::<element::Scene>().expect("write_lock cast should succeed")
-                .recycle(&self.definition.config);
+                self.properties.borrow_mut().write_lock::<element::Scene>()
+                .expect("write_lock cast should succeed")
+                .recycle(&self.resources.borrow().definition.config);
                 //
-                self.scope.push_dynamic("Scene", Dynamic::from(Rc::clone(&self.properties)));
+                self.resources.borrow_mut().scope
+                .push_dynamic("Scene", Dynamic::from(Rc::clone(&self.properties)));
                 //
                 Ok(())
             },
@@ -191,10 +232,12 @@ impl ElementHandler {
                 //
                 if let Some(info) = object_info {
                     //
-                    self.properties.borrow_mut().write_lock::<element::Object>().expect("write_lock cast should succeed")
-                    .recycle(&self.definition.config, info.0, info.1);
+                    self.properties.borrow_mut().write_lock::<element::Object>()
+                    .expect("write_lock cast should succeed")
+                    .recycle(&self.resources.borrow().definition.config, info.0, info.1);
                     //
-                    self.scope.push_dynamic("Object", Dynamic::from(Rc::clone(&self.properties)));
+                    self.resources.borrow_mut().scope
+                    .push_dynamic("Object", Dynamic::from(Rc::clone(&self.properties)));
                     //
                     Ok(())
                 } else {
@@ -222,22 +265,11 @@ impl ElementHandler {
             },
         }
     }
-
-    pub fn call_fn(&mut self, engine: &Engine, name: &str, args: impl rhai::FuncArgs) -> Result<(), String> {
-        //
-        if let Some(err) = engine.call_fn::<()>
-        (&mut self.scope, &self.definition.script, name, args).err() {
-            //
-            return Err(self.definition.row.to_err_string(&err.to_string()));
-        }
-        //
-        Ok(())
-    }
 }
 
 //
-pub fn create_api(element_defs: &mut HashMap<u32,Result<Rc<ElementDefinition>, String>>) -> Result<(Engine, Rc<RefCell<ElementHandler>>, Rc<RefCell<ElementHandler>>,
-Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
+pub fn create_api(element_defs: &mut HashMap<u32,Result<Rc<ElementDefinition>, String>>) -> Result<(Engine, ElementHandler, ElementHandler,
+Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
     // Create an 'Engine'
     let mut engine = Engine::new_raw();
 
@@ -315,10 +347,10 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
     // Create a new element instance for the state manager.
     // This instance will borrow its definition and contain
     // the element's 'Scope'.
-    let state_manager = Rc::new(RefCell::new(ElementHandler::new(&engine,
+    let state_manager = ElementHandler::new(&engine,
         element_defs.get(&0).unwrap().as_ref()?,
         None
-    )?));
+    )?;
 
     // Register a variable definition filter.
     engine.on_def_var(|is_runtime, info, context| {
@@ -360,17 +392,17 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
         TableRow::Element(cur_scene_id.borrow().clone(), 2)
     ));
     //
-    let cur_scene = Rc::new(RefCell::new(ElementHandler::new(&engine,
+    let cur_scene = ElementHandler::new(&engine,
         element_defs.get(&cur_scene_id.borrow()).unwrap().as_ref()?,
         None
-    )?));
+    )?;
     //
-    let object_stack: Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>> = Rc::new(RefCell::new(Vec::new()));
+    let object_stack: Rc<RefCell<Vec<ElementHandler>>> = Rc::new(RefCell::new(Vec::new()));
 
     //
     {
         //
-        let instances = cur_scene.borrow().definition
+        let instances = cur_scene.resources.borrow().definition
         .config["object-instances"].clone().into_typed_array::<Map>().expect(concat!("Every object's",
         " config should contain a 'object-instances' array, which should only have object-like members."));
         //
@@ -402,15 +434,15 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
                 ));
             }
             //
-            object_stack_borrow.push(Rc::new(RefCell::new(ElementHandler::new(&engine,
+            object_stack_borrow.push(ElementHandler::new(&engine,
                 element_defs.get(&rowid).unwrap().as_ref()?,
                 Some((idx, init_x, init_y))
-            )?)));
+            )?);
         }
     }
 
-    let api_state_map = Rc::clone(&state_manager.borrow().properties);
-    let api_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let api_state_map = Rc::clone(&state_manager.properties);
+    let api_scene_map = Rc::clone(&cur_scene.properties);
     // Register a variable resolver.
     engine.on_var(move |name, _, context| {
         match name {
@@ -490,10 +522,10 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
     });
 
     //
-    let api_cur_scene_script = Rc::clone(&cur_scene);
+    let cur_scene_res = Rc::clone(&cur_scene.resources);
     engine.register_fn("is_cur_scene", move |name: &str| -> Result<bool, Box<EvalAltResult>> {
         //
-        if let Ok(borrow) = api_cur_scene_script.try_borrow() {
+        if let Ok(borrow) = cur_scene_res.try_borrow() {
             //
             Ok(if let TableRow::Element(id, 2) = borrow.definition.row {
                 //
@@ -508,50 +540,50 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
     });
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("get_object", move |context: rhai::NativeCallContext,
     idx: rhai::INT| -> Result<element::Object, Box<EvalAltResult>> {
         //
-        let api_scene_map_borrow = api_scene_map.borrow();
-        let api_scene_map_borrow = api_scene_map_borrow
+        let scene_props_borrow = cur_scene_props.borrow();
+        let scene_props_borrow = scene_props_borrow
         .read_lock::<element::Scene>().expect("read_lock cast should succeed");
         //
-        if idx >= (api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) as rhai::INT {
+        if idx >= (scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as rhai::INT {
             //
-            return Err(Box::new(EvalAltResult::ErrorArrayBounds(api_scene_map_borrow.objects_len+
-            api_scene_map_borrow.runtimes_len, idx, context.position())));
+            return Err(Box::new(EvalAltResult::ErrorArrayBounds(scene_props_borrow.objects_len+
+            scene_props_borrow.runtimes_len, idx, context.position())));
         }
         //
         let object_stack_borrow = api_object_stack.borrow();
         //
         if let Some(element) = object_stack_borrow.get(idx as usize) {
             //
-            Ok(element.borrow().properties.borrow().clone_cast::<element::Object>())
+            Ok(element.properties.borrow().clone_cast::<element::Object>())
         } else {
             //
-            Err(Box::new(EvalAltResult::ErrorArrayBounds(api_scene_map_borrow.objects_len+
-            api_scene_map_borrow.runtimes_len, idx, context.position())))
+            Err(Box::new(EvalAltResult::ErrorArrayBounds(scene_props_borrow.objects_len+
+            scene_props_borrow.runtimes_len, idx, context.position())))
         }
     });
     //
-    let api_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("object_is_valid", move |idx: rhai::INT| -> bool {
         //
-        let api_scene_map_borrow = api_scene_map.borrow();
-        let api_scene_map_borrow = api_scene_map_borrow
+        let scene_props_borrow = cur_scene_props.borrow();
+        let scene_props_borrow = scene_props_borrow
         .read_lock::<element::Scene>().expect("read_lock cast should succeed");
         //
-        idx < (api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) as rhai::INT && idx > -1
+        idx < (scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as rhai::INT && idx > -1
     });
     //
-    let api_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("object_is_active", move |idx: rhai::INT| -> rhai::INT {
         //
-        let api_scene_map_borrow = api_scene_map.borrow();
-        let api_scene_map_borrow = api_scene_map_borrow
+        let scene_props_borrow = cur_scene_props.borrow();
+        let scene_props_borrow = scene_props_borrow
         .read_lock::<element::Scene>().expect("read_lock cast should succeed");
         //
-        api_scene_map_borrow.layers[0..api_scene_map_borrow.layers_len]
+        scene_props_borrow.layers[0..scene_props_borrow.layers_len]
         .iter().enumerate().flat_map(|(layer_idx, layer)| {
             layer.instances.iter().map(move |&index| {
                 (index as rhai::INT, layer_idx as rhai::INT)
@@ -560,11 +592,11 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
     });
 
     //
-    let api_state_manager_script = Rc::clone(&state_manager);
+    let state_manager_res = Rc::clone(&state_manager.resources);
     engine.register_fn("message_state_manager", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
-        if let Ok(mut borrow) = api_state_manager_script.try_borrow_mut() {
+        if let Ok(mut borrow) = state_manager_res.try_borrow_mut() {
             //
             if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
                 //
@@ -579,11 +611,11 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
     });
 
     //
-    let api_cur_scene_script = Rc::clone(&cur_scene);
+    let cur_scene_res = Rc::clone(&cur_scene.resources);
     engine.register_fn("message_cur_scene", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
-        if let Ok(mut borrow) = api_cur_scene_script.try_borrow_mut() {
+        if let Ok(mut borrow) = cur_scene_res.try_borrow_mut() {
             //
             if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
                 //
@@ -599,7 +631,7 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("message_object", move |context: rhai::NativeCallContext, idx: rhai::INT, 
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
         //
@@ -608,12 +640,12 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
         //
         {
             //
-            let api_scene_map_borrow = api_scene_map.borrow();
-            let api_scene_map_borrow = api_scene_map_borrow
+            let scene_props_borrow = cur_scene_props.borrow();
+            let scene_props_borrow = scene_props_borrow
             .read_lock::<element::Scene>().expect("read_lock cast should succeed");
             //
-            objects_len = api_scene_map_borrow.objects_len;
-            runtimes_len = api_scene_map_borrow.runtimes_len;
+            objects_len = scene_props_borrow.objects_len;
+            runtimes_len = scene_props_borrow.runtimes_len;
         }//
 
         //
@@ -627,19 +659,19 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
             return Err(full_s.into());
         }
         //
-        let mut element_rc_clone: Option<Rc<RefCell<ElementHandler>>> = None;
+        let mut element_res_clone: Option<Rc<RefCell<ElementResources>>> = None;
         {
             //
             let object_stack_borrow = api_object_stack.borrow();
             //
             if let Some(element) = object_stack_borrow.get(idx as usize) {
                 //
-                element_rc_clone = Some(Rc::clone(element));
+                element_res_clone = Some(Rc::clone(&element.resources));
             }
         }//
 
         //
-        if let Some(element) = element_rc_clone {
+        if let Some(element) = element_res_clone {
             //
             if let Ok(mut borrow) = element.try_borrow_mut() {
                 //
@@ -666,31 +698,31 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
 
     //
     let api_object_stack = Rc::clone(&object_stack);
-    let api_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("add_object_to_stack", move |context: rhai::NativeCallContext,
     idx_source: rhai::INT, init_x: rhai::FLOAT, init_y: rhai::FLOAT| -> Result<rhai::INT, Box<EvalAltResult>> {
         //
-        let api_scene_map_borrow = api_scene_map.borrow();
-        let api_scene_map_borrow = api_scene_map_borrow
+        let scene_props_borrow = cur_scene_props.borrow();
+        let scene_props_borrow = scene_props_borrow
         .read_lock::<element::Scene>().expect("read_lock cast should succeed");
         //
-        if idx_source >= (api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) as rhai::INT {
+        if idx_source >= (scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as rhai::INT {
             //
             let info = "Argument 'idx_source' was out of bounds in call to 'add_object_to_stack'.";
             //
             let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
-            info, idx_source, api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len);
+            info, idx_source, scene_props_borrow.objects_len+scene_props_borrow.runtimes_len);
             //
             return Err(full_s.into());
         }
         //
-        let object_stack_borrow = api_object_stack.borrow();
+        let mut object_stack_borrow = api_object_stack.borrow_mut();
         //
         let def_rc_clone: Rc<ElementDefinition>;
         //
         if let Some(element) = object_stack_borrow.get(idx_source as usize) {
             //
-            if let Ok(borrow) = element.try_borrow() {
+            if let Ok(borrow) = element.resources.try_borrow() {
                 //
                 def_rc_clone = Rc::clone(&borrow.definition);
             } else {
@@ -706,17 +738,17 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
             let info = "Argument 'idx_source' was out of bounds in call to 'add_object_to_stack'.";
             //
             let full_s = &format!("{}.\nTried to find index {} on the object stack, when it only had {} elements.",
-            info, idx_source, api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len);
+            info, idx_source, scene_props_borrow.objects_len+scene_props_borrow.runtimes_len);
             //
             return Err(full_s.into());
         }
         //
-        if let Some(&vacant_index) = api_scene_map_borrow.runtime_vacants.iter().min() {
+        if let Some(&vacant_index) = scene_props_borrow.runtime_vacants.iter().min() {
             //
             let object = object_stack_borrow
-            .get(vacant_index as usize).expect("Shouldn't be out of bounds.");
+            .get_mut(vacant_index as usize).expect("Shouldn't be out of bounds.");
             //
-            if let Err(err) = object.borrow_mut().recycle(context.engine(),
+            if let Err(err) = object.recycle(context.engine(),
             &def_rc_clone, Some((init_x, init_y))) {
                 //
                 return Err(format!("{}\nas a result of a call to 'add_object_to_stack'", err).into());
@@ -726,24 +758,22 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
         }
         //
         if let Some(object_ref) = object_stack_borrow
-        .get(api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) {
+        .get_mut(scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) {
             //
-            if let Err(err) = object_ref.borrow_mut().recycle(context.engine(),
+            if let Err(err) = object_ref.recycle(context.engine(),
             &def_rc_clone,Some((init_x, init_y))) {
                 //
                 return Err(format!("{}\nas a result of a call to 'add_object_to_stack'", err).into());
             }
             //
-            return Ok((api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) as rhai::INT);
+            return Ok((scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as rhai::INT);
         }
-        //
-        let mut object_stack_borrow = api_object_stack.borrow_mut();
         //
         object_stack_borrow.push(
             {
                 //
                 let element = ElementHandler::new(context.engine(),
-                &def_rc_clone, Some(((api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) as u32,
+                &def_rc_clone, Some(((scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as u32,
                 init_x as f32, init_y as f32)));
                 //
                 if element.is_err() {
@@ -751,11 +781,11 @@ Rc<RefCell<u32>>, Rc<RefCell<u32>>, Rc<RefCell<Vec<Rc<RefCell<ElementHandler>>>>
                     return Err(format!("{}\nas a result of a call to 'add_object_to_stack'", element.err().unwrap()).into());
                 }
                 //
-                Rc::new(RefCell::new(element.unwrap()))
+                element.unwrap()
             }
         );
         //
-        Ok((api_scene_map_borrow.objects_len+api_scene_map_borrow.runtimes_len) as rhai::INT)
+        Ok((scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as rhai::INT)
     });
 
     //

@@ -75,15 +75,15 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         create_keyboard_listeners(&key_states, &keys_just_changed)?;
 
     //
-    call_fn_on_all("create", (), &engine, &state_manager,
-    &cur_scene, &object_stack)?;
+    call_fn_on_all("create", (), &engine,
+    &state_manager.resources,&cur_scene, &object_stack)?;
 
     //
     let canvas_width = engine_api::dynamic_to_number(&state_manager
-        .borrow().definition.config["canvas-width"]).unwrap() as i32;
+        .resources.borrow().definition.config["canvas-width"]).unwrap() as i32;
     //
     let canvas_height = engine_api::dynamic_to_number(&state_manager
-        .borrow().definition.config["canvas-height"]).unwrap() as i32;
+        .resources.borrow().definition.config["canvas-height"]).unwrap() as i32;
     //
     let (gl_context, gl_program,
     program_data,
@@ -103,7 +103,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     .unwrap().performance()
     .unwrap().now();
     //
-    let cur_scene_map = Rc::clone(&cur_scene.borrow().properties);
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
     //
     let renderer_object_stack = Rc::clone(&object_stack);
     //
@@ -122,7 +122,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         renderer::render_scene(
             &gl_context, &gl_program, &program_data, &vertex_buffer,
-            &index_buffer, &cur_scene_map.borrow()
+            &index_buffer, &cur_scene_props.borrow()
                 .read_lock::<engine_api::element::Scene>()
                 .expect("read_lock cast should succeed"),
             &asset_defs,
@@ -146,7 +146,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     let update_init = Rc::clone(&update_loop);
     //
     let frame_rate = engine_api::dynamic_to_number(
-    &state_manager.borrow().definition.config["fps"]).unwrap() as u32;
+    &state_manager.resources.borrow().definition.config["fps"]).unwrap() as u32;
     //
     let frame_rate_init = frame_rate.clone();
     //
@@ -162,7 +162,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         last_update = update_time;
         //
         call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &engine,
-        &state_manager, &cur_scene, &object_stack)?;
+        &state_manager.resources, &cur_scene, &object_stack)?;
         //
         {
             //
@@ -190,7 +190,7 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
             &cur_scene, &object_stack, &element_defs)?;
             //
             call_fn_on_all("create", (), &engine,
-            &state_manager, &cur_scene, &object_stack)?;
+            &state_manager.resources, &cur_scene, &object_stack)?;
             //
             *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
         }
@@ -243,6 +243,10 @@ Closure<dyn Fn(web_sys::KeyboardEvent)>), JsValue> {
     let onkeydown = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
     move |event: web_sys::KeyboardEvent| {
         //
+        if event.repeat() {
+            return;
+        }
+        //
         let mut key_states_borrow = event_key_states.borrow_mut();
         //
         let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
@@ -286,20 +290,19 @@ Closure<dyn Fn(web_sys::KeyboardEvent)>), JsValue> {
 
 //
 fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine,
-state_manager: &Rc<RefCell<engine_api::ElementHandler>>, scene: &Rc<RefCell<engine_api::ElementHandler>>,
-object_stack: &Rc<RefCell<Vec<Rc<RefCell<engine_api::ElementHandler>>>>>) -> Result<(), String> {
+state_manager: &Rc<RefCell<engine_api::ElementResources>>, scene: &engine_api::ElementHandler,
+object_stack: &Rc<RefCell<Vec<engine_api::ElementHandler>>>) -> Result<(), String> {
     // Call the function on the state manager instance.
     state_manager.borrow_mut().call_fn(engine, name, args.clone())?;
     //
-    scene.borrow_mut().call_fn(engine, name, args.clone())?;
+    scene.resources.borrow_mut().call_fn(engine, name, args.clone())?;
     //
     let mut i = 0_usize;
     loop {
         //
         {
             //
-            let scene_map_borrow = scene.borrow();
-            let scene_map_borrow = scene_map_borrow.properties.borrow();
+            let scene_map_borrow = scene.properties.borrow();
             let scene_map_borrow = scene_map_borrow
             .read_lock::<engine_api::element::Scene>().expect("read_lock cast should succeed");
             //
@@ -317,19 +320,19 @@ object_stack: &Rc<RefCell<Vec<Rc<RefCell<engine_api::ElementHandler>>>>>) -> Res
         }//
 
         //
-        let mut element_rc_clone: Option<Rc<RefCell<engine_api::ElementHandler>>> = None;
+        let mut element_res_clone: Option<Rc<RefCell<engine_api::ElementResources>>> = None;
         {
             //
             let object_stack_borrow = object_stack.borrow();
             //
             if let Some(element) = object_stack_borrow.get(i) {
                 //
-                element_rc_clone = Some(Rc::clone(element));
+                element_res_clone = Some(Rc::clone(&element.resources));
             }
         }//
 
         //
-        if let Some(element) = element_rc_clone {
+        if let Some(element) = element_res_clone {
             //
             if let Ok(mut borrow) = element.try_borrow_mut() {
                 //
@@ -338,6 +341,56 @@ object_stack: &Rc<RefCell<Vec<Rc<RefCell<engine_api::ElementHandler>>>>>) -> Res
         }
         //
         i += 1;
+    }
+    //
+    Ok(())
+}
+
+//
+fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::ElementHandler,
+object_stack: &Rc<RefCell<Vec<engine_api::ElementHandler>>>,
+element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -> Result<(), String> {
+    //
+    scene.recycle(&engine,
+        element_defs.get(&scene_id).unwrap().as_ref()?,
+        None
+    )?;
+    //
+    let instances = scene.resources.borrow().definition
+    .config["object-instances"].clone().into_typed_array::<rhai::Map>().expect(concat!("Every object's",
+    " config should contain a 'object-instances' array, which should only have object-like members."));
+    //
+    let mut object_stack_borrow = object_stack.borrow_mut();
+    //
+    for (idx, init_x, init_y, rowid) in instances.iter().enumerate()
+    .map(|(map_index, map)| {(
+        //
+        map_index,
+        //
+        engine_api::dynamic_to_number(&map["x"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an object's config should contain an float 'x' attribute.")),
+        //
+        engine_api::dynamic_to_number(&map["y"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an object's config should contain an float 'y' attribute.")),
+        //
+        engine_api::dynamic_to_number(&map["id"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an object's config should contain an integer 'id' attribute.")) as u32,
+    )}) {
+        //
+        if idx < object_stack_borrow.len() {
+            //
+            object_stack_borrow[idx].recycle(&engine,
+            element_defs.get(&rowid).unwrap().as_ref()?,
+            Some((init_x, init_y)))?;
+        }
+        //
+        object_stack_borrow.push(engine_api::ElementHandler::new(&engine,
+            element_defs.get(&rowid).unwrap().as_ref()?,
+            Some((idx as u32, init_x, init_y))
+        )?);
     }
     //
     Ok(())
@@ -379,54 +432,4 @@ fn load_elements(engine: &Engine, element_defs: &mut HashMap<u32,Result<Rc<engin
         element_defs.insert(int_id, engine_api::ElementDefinition::new(&engine,
         TableRow::Element(int_id, int_type)));
     }
-}
-
-//
-fn switch_scene(scene_id: u32, engine: &Engine, scene: &Rc<RefCell<engine_api::ElementHandler>>,
-object_stack: &Rc<RefCell<Vec<Rc<RefCell<engine_api::ElementHandler>>>>>,
-element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -> Result<(), String> {
-    //
-    scene.borrow_mut().recycle(&engine, 
-        element_defs.get(&scene_id).unwrap().as_ref()?,
-        None
-    )?;
-    //
-    let instances = scene.borrow().definition
-    .config["object-instances"].clone().into_typed_array::<rhai::Map>().expect(concat!("Every object's",
-    " config should contain a 'object-instances' array, which should only have object-like members."));
-    //
-    let mut object_stack_borrow = object_stack.borrow_mut();
-    //
-    for (idx, init_x, init_y, rowid) in instances.iter().enumerate()
-    .map(|(map_index, map)| {(
-        //
-        map_index,
-        //
-        engine_api::dynamic_to_number(&map["x"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an float 'x' attribute.")),
-        //
-        engine_api::dynamic_to_number(&map["y"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an float 'y' attribute.")),
-        //
-        engine_api::dynamic_to_number(&map["id"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an integer 'id' attribute.")) as u32,
-    )}) {
-        //
-        if idx < object_stack_borrow.len() {
-            //
-            object_stack_borrow[idx].borrow_mut().recycle(&engine,
-            element_defs.get(&rowid).unwrap().as_ref()?,
-            Some((init_x, init_y)))?;
-        }
-        //
-        object_stack_borrow.push(Rc::new(RefCell::new(engine_api::ElementHandler::new(&engine,
-            element_defs.get(&rowid).unwrap().as_ref()?,
-            Some((idx as u32, init_x, init_y))
-        )?)));
-    }
-    //
-    Ok(())
 }

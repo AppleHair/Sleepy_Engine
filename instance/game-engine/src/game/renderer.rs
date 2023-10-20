@@ -1,5 +1,5 @@
 
-use std::{rc::Rc, cell::RefCell, collections::HashMap};
+use std::{rc::Rc, collections::HashMap};
 
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlBuffer, WebGlTexture, WebGlContextAttributes};
@@ -291,14 +291,14 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
 //
 pub fn render_scene(gl_context: &WebGlRenderingContext, gl_program: &WebGlProgram,
 data_locations: &HashMap<String,ProgramDataLocation>, vertex_buffer: &web_sys::WebGlBuffer,
-index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene, asset_defs: &HashMap<u32,Result<AssetDefinition, JsValue>>,
-object_stack: &Vec<Rc<RefCell<engine_api::ElementHandler>>>, elapsed: f64) -> Result<(), JsValue> {
+index_buffer: &web_sys::WebGlBuffer, scene_props: &element::Scene, asset_defs: &HashMap<u32,Result<AssetDefinition, JsValue>>,
+object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     gl_context.use_program(Some(&gl_program));
 
     {
         // Get the outside-color of the stage.
-        let outcolor = hex_color_to_rgba(&scene.out_color);
+        let outcolor = hex_color_to_rgba(&scene_props.out_color);
         // Set the clear color to the outside color.
         gl_context.clear_color(outcolor[0], outcolor[1], outcolor[2], outcolor[3]);
     }// 'outcolor' drops here
@@ -312,14 +312,14 @@ object_stack: &Vec<Rc<RefCell<engine_api::ElementHandler>>>, elapsed: f64) -> Re
     //
     if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_camera") {
         //
-        gl_context.uniform2f(Some(location), scene.camera.position.x.floor(), scene.camera.position.y.floor());
+        gl_context.uniform2f(Some(location), scene_props.camera.position.x.floor(), scene_props.camera.position.y.floor());
 
     } else { return Err("Couldn't find uniform 'u_camera'".into()); }
 
     //
     if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_zoom") {
         //
-        gl_context.uniform1f(Some(location), scene.camera.zoom);
+        gl_context.uniform1f(Some(location), scene_props.camera.zoom);
 
     } else { return Err("Couldn't find uniform 'u_zoom'".into()); }
     
@@ -327,8 +327,8 @@ object_stack: &Vec<Rc<RefCell<engine_api::ElementHandler>>>, elapsed: f64) -> Re
     let mut vertices: Vec<f32> = Vec::new();
     // Add a quad for the scene.
     vertices.extend_from_slice(&generate_colored_quad(0.0, 0.0,
-    scene.width.floor(), scene.height.floor(),
-    hex_color_to_rgba(&scene.in_color)));
+    scene_props.width.floor(), scene_props.height.floor(),
+    hex_color_to_rgba(&scene_props.in_color)));
 
     // Get the maximun texture units we can use on the fragment shader
     let max_texture_units = gl_context
@@ -349,7 +349,7 @@ object_stack: &Vec<Rc<RefCell<engine_api::ElementHandler>>>, elapsed: f64) -> Re
     let mut texcoord_2: [f32; 2] = [0.0, 0.0];
     let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
     //
-    for &index in scene.layers[0..scene.layers_len].iter()
+    for &index in scene_props.layers[0..scene_props.layers_len].iter()
     .flat_map(|layer| { layer.instances.iter() }) {
         //
         if (vertices.len() as i32) / (FLOATS_PER_VERTEX * VERTICES_PER_QUAD * MAX_QUAD_COUNT) >= 1 {
@@ -361,8 +361,8 @@ object_stack: &Vec<Rc<RefCell<engine_api::ElementHandler>>>, elapsed: f64) -> Re
         if let Some(object) = object_stack.get(index as usize) {
             // Get a mutable borrow of the object,
             // which will later switch to the sprite of the object.
-            let object_or_sprite = object.borrow();
-            let mut object_or_sprite = object_or_sprite.properties.borrow_mut();
+            let object_or_sprite = Rc::clone(&object.properties);
+            let mut object_or_sprite = object_or_sprite.borrow_mut();
             let mut object_or_sprite = object_or_sprite
                 .write_lock::<element::Object>()
                 .expect("write lock should succeed.");
