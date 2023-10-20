@@ -42,10 +42,14 @@ import { addItem, removeItem, selectItem,
 // pre-defined HTML elements to be
 // interactive and call different functions
 // according to the users activity on the page.
-// It receives to objects: the first contains
-// function defenitions for the drop down menus
-// and the second contains function defenitions
-// for the context menu.
+// It receives four objects: the first contains
+// callbacks for the drop down menus, the second
+// contains callbacks for the context menu, the 
+// third contains callbacks for when the material
+// mode is switched, aka the user switches from
+// one editor tab to another, and the fourth contains
+// callbacks for whenthe contents of the displayed
+// material are changed, aka the user edits the game.
 function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}, changeFn = {}) {
 
     //

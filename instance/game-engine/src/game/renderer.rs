@@ -1,5 +1,5 @@
 
-use std::{rc::Rc, collections::HashMap};
+use std::{rc::Rc, cell::RefCell, collections::HashMap};
 
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlBuffer, WebGlTexture, WebGlContextAttributes};
@@ -258,11 +258,11 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
         );
     }
     // Create webgl white texture object
-    let white_texture = gl_context.create_texture().unwrap();
+    let white_texture = gl_context.create_texture();
     // Activate texture unit 0 with this white texture
     gl_context.active_texture(WebGlRenderingContext::TEXTURE0);
     // bind the white texture to the webgl context
-    gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(&white_texture));
+    gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, white_texture.as_ref());
     // Set Parameters
     gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
         WebGlRenderingContext::TEXTURE_MIN_FILTER,
@@ -292,7 +292,7 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
 pub fn render_scene(gl_context: &WebGlRenderingContext, gl_program: &WebGlProgram,
 data_locations: &HashMap<String,ProgramDataLocation>, vertex_buffer: &web_sys::WebGlBuffer,
 index_buffer: &web_sys::WebGlBuffer, scene: &element::Scene, asset_defs: &HashMap<u32,Result<AssetDefinition, JsValue>>,
-object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Result<(), JsValue> {
+object_stack: &Vec<Rc<RefCell<engine_api::ElementHandler>>>, elapsed: f64) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     gl_context.use_program(Some(&gl_program));
 
@@ -341,10 +341,10 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
 
     //
     let mut unit_id: f32;
-    let mut quad_width: f32;
-    let mut quad_height: f32;
     let mut tex_width: f32;
     let mut tex_height: f32;
+    let mut quad_width: f32 = 1.0;
+    let mut quad_height: f32 = 1.0;
     let mut texcoord_1: [f32; 2] = [0.0, 0.0];
     let mut texcoord_2: [f32; 2] = [0.0, 0.0];
     let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
@@ -361,15 +361,11 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
         if let Some(object) = object_stack.get(index as usize) {
             // Get a mutable borrow of the object,
             // which will later switch to the sprite of the object.
-            let object_or_sprite = Rc::clone(&object.map);
-            let mut object_or_sprite = object_or_sprite.borrow_mut();
+            let object_or_sprite = object.borrow();
+            let mut object_or_sprite = object_or_sprite.properties.borrow_mut();
             let mut object_or_sprite = object_or_sprite
                 .write_lock::<element::Object>()
                 .expect("write lock should succeed.");
-            //
-            if object_or_sprite.active == false {
-                continue;
-            }
 
             // Here the object will switch to a sprite.
             // This needs to be done because the sprite is
@@ -391,8 +387,6 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                 //
                 match &texture_asset.asset_data {
                     AssetData::ImageData { width, height, texture } => {
-                        quad_width = *width as f32;
-                        quad_height = *height as f32;
                         tex_width = *width as f32;
                         tex_height = *height as f32;
                         gl_texture = texture;
@@ -445,36 +439,37 @@ object_stack: &Vec<engine_api::Element<engine_api::Object>>, elapsed: f64) -> Re
                     let area = frames[object_or_sprite.cur_frame as usize]["area"]
                     .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'area' object-like property");
                     //
-                    let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
-                    .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'offset' object-like property");
-                    //
                     texcoord_1 = [
                         engine_api::dynamic_to_number(&area["x1"])
-                        .expect("x1 should be a number.") / quad_width, 
+                        .expect("x1 should be a number.") / tex_width, 
                         engine_api::dynamic_to_number(&area["y1"])
-                        .expect("y1 should be a number.") / quad_height
+                        .expect("y1 should be a number.") / tex_height
                     ];
                     //
                     texcoord_2 = [
                         1.0 - (engine_api::dynamic_to_number(&area["x2"])
-                        .expect("x2 should be a number.") / quad_width),
+                        .expect("x2 should be a number.") / tex_width),
                         1.0 - (engine_api::dynamic_to_number(&area["y2"])
-                        .expect("y2 should be a number.") / quad_height)
+                        .expect("y2 should be a number.") / tex_height)
                     ];
                     //
-                    quad_width = quad_width - (
+                    quad_width = tex_width - (
                         engine_api::dynamic_to_number(&area["x1"])
                         .expect("x1 should be a number.") +
                         engine_api::dynamic_to_number(&area["x2"])
                         .expect("x2 should be a number.")
                     );
                     //
-                    quad_height = quad_height - (
+                    quad_height = tex_height - (
                         engine_api::dynamic_to_number(&area["y1"])
                         .expect("y1 should be a number.") +
                         engine_api::dynamic_to_number(&area["y2"])
                         .expect("y2 should be a number.")
                     );
+                    
+                    //
+                    let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
+                    .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'offset' object-like property");
                     //
                     let origin = texture_asset.config["origin"]
                     .clone().try_cast::<rhai::Map>().expect(concat!("Every sprite's config should",

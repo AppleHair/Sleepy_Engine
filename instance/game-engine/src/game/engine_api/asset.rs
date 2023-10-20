@@ -1,6 +1,12 @@
 
 use rhai::Dynamic;
 
+pub trait Asset {
+    fn get_id(&self) -> u32;
+    fn recycle(&mut self, new_id: u32);
+    fn new(new_id: u32) -> Self;
+}
+
 //
 #[derive(Clone)]
 pub struct Sprite {
@@ -13,17 +19,7 @@ pub struct Sprite {
 }
 
 impl Sprite {
-    pub fn new(new_id: u32) -> Self { Self {
-        id: new_id, cur_animation: String::new(),
-        cur_frame: 0_u32, is_animation_finished: true,
-        animation_time: 0_f64, repeat: false
-    } }
-    pub fn recycle(&mut self, new_id: u32) {
-        self.id = new_id; self.cur_animation.clear();
-        self.cur_frame = 0_u32; self.is_animation_finished = true;
-        self.animation_time = 0_f64; self.repeat = false;
-    }
-    pub fn get_id(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
+    pub fn get_id_rhai(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_cur_animation(&mut self) -> String { self.cur_animation.clone() }
     pub fn get_cur_frame(&mut self) -> rhai::INT { self.cur_frame.clone() as rhai::INT }
     pub fn get_is_animation_finished(&mut self) -> bool { self.is_animation_finished.clone() }
@@ -103,6 +99,20 @@ impl Sprite {
     }
 }
 
+impl Asset for Sprite {
+    fn get_id(&self) -> u32 { self.id }
+    fn recycle(&mut self, new_id: u32) {
+        self.id = new_id; self.cur_animation.clear();
+        self.cur_frame = 0_u32; self.is_animation_finished = true;
+        self.animation_time = 0_f64; self.repeat = false;
+    }
+    fn new(new_id: u32) -> Self { Self {
+        id: new_id, cur_animation: String::new(),
+        cur_frame: 0_u32, is_animation_finished: true,
+        animation_time: 0_f64, repeat: false
+    } }
+}
+
 //
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -120,19 +130,7 @@ pub struct Audio {
 
 #[allow(dead_code)]
 impl Audio {
-    pub fn new(new_id: u32) -> Self { Self {
-        id: new_id, tag: String::new(),
-        audio_time: 0_f64, paused: false,
-        repeat: false, volume: 1_f32, replay: false,
-        repeat_start_time: 0_f64, own_tag: false,
-    } }
-    pub fn recycle(&mut self, new_id: u32) {
-        self.id = new_id; self.tag.clear(); 
-        self.audio_time = 0_f64; self.paused = false;
-        self.repeat = false; self.volume = 1_f32; self.replay = false;
-        self.repeat_start_time = 0_f64; self.own_tag = false;
-    }
-    pub fn get_id(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
+    pub fn get_id_rhai(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_tag(&mut self) -> String { self.tag.clone() }
     pub fn get_audio_time(&mut self) -> rhai::FLOAT { self.audio_time.clone() as rhai::FLOAT }
     pub fn get_paused(&mut self) -> bool { self.paused.clone() }
@@ -172,6 +170,22 @@ impl Audio {
     }
 }
 
+impl Asset for Audio {
+    fn get_id(&self) -> u32 { self.id }
+    fn recycle(&mut self, new_id: u32) {
+        self.id = new_id; self.tag.clear(); 
+        self.audio_time = 0_f64; self.paused = false;
+        self.repeat = false; self.volume = 1_f32; self.replay = false;
+        self.repeat_start_time = 0_f64; self.own_tag = false;
+    }
+    fn new(new_id: u32) -> Self { Self {
+        id: new_id, tag: String::new(),
+        audio_time: 0_f64, paused: false,
+        repeat: false, volume: 1_f32, replay: false,
+        repeat_start_time: 0_f64, own_tag: false,
+    } }
+}
+
 //
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -182,13 +196,7 @@ pub struct Font {
 
 #[allow(dead_code)]
 impl Font {
-    pub fn new(new_id: u32) -> Self {
-        Self { id: new_id, text: String::new() }
-    }
-    pub fn recycle(&mut self, new_id: u32) {
-        self.id = new_id; self.text.clear();
-    }
-    pub fn get_id(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
+    pub fn get_id_rhai(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_text(&mut self) -> String { self.text.clone() }
     pub fn set_text(&mut self, value: &str) { self.text.clear(); self.text.push_str(value); }
 
@@ -199,16 +207,26 @@ impl Font {
     }
 }
 
+impl Asset for Font {
+    fn get_id(&self) -> u32 { self.id }
+    fn recycle(&mut self, new_id: u32) {
+        self.id = new_id; self.text.clear();
+    }
+    fn new(new_id: u32) -> Self {
+        Self { id: new_id, text: String::new() }
+    }
+}
+
 //
 #[derive(Clone)]
-pub struct AssetList<T: Clone> {
+pub struct AssetList<T: Clone + Asset> {
     pub members: Vec<T>,
     pub cur_asset: usize,
     pub len: usize,
 }
 
 //
-impl<T: Clone> AssetList<T> {
+impl<T: Clone + Asset> AssetList<T> {
     //
     pub fn new(vec: Vec<T>) -> Self {
         //
@@ -258,16 +276,16 @@ impl<T: Clone> AssetList<T> {
             (idx as usize).min(self.len)
         };
         //
-        self.members[actual_index] = asset;
+        if self.members[actual_index].get_id() == asset.get_id() {
+            //
+            self.members[actual_index] = asset;
+        }
     }
-}
-
-impl AssetList<Sprite> {
     //
     pub fn contains(&mut self, id: rhai::INT) -> Dynamic {
         //
         if let Some(idx) = self.members.iter()
-        .position(|asset| -> bool { asset.id == id as u32 }) {
+        .position(|asset| -> bool { asset.get_id() == id as u32 }) {
             //
             if idx < self.len {
                 //
@@ -299,97 +317,7 @@ impl AssetList<Sprite> {
                 continue;
             }
             //
-            self.members.push(Sprite::new(id as u32));
-            //
-            i += 1;
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl AssetList<Audio> {
-    //
-    pub fn contains(&mut self, id: rhai::INT) -> Dynamic {
-        //
-        if let Some(idx) = self.members.iter()
-        .position(|asset| -> bool { asset.id == id as u32 }) {
-            //
-            if idx < self.len {
-                //
-                Dynamic::from(idx)
-            } else {
-                //
-                Dynamic::UNIT
-            }
-        } else {
-            //
-            Dynamic::UNIT
-        }
-    }
-    //
-    pub fn recycle(&mut self, vec: Vec<i32>) {
-        //
-        self.cur_asset = 0;
-        //
-        self.len = vec.len();
-        //
-        let mut i = 0_usize;
-        //
-        for id in vec {
-            if i < self.members.len() {
-                //
-                self.members[i].recycle(id as u32);
-                //
-                i += 1;
-                continue;
-            }
-            //
-            self.members.push(Audio::new(id as u32));
-            //
-            i += 1;
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl AssetList<Font> {
-    //
-    pub fn contains(&mut self, id: rhai::INT) -> Dynamic {
-        //
-        if let Some(idx) = self.members.iter()
-        .position(|asset| -> bool { asset.id == id as u32 }) {
-            //
-            if idx < self.len {
-                //
-                Dynamic::from(idx)
-            } else {
-                //
-                Dynamic::UNIT
-            }
-        } else {
-            //
-            Dynamic::UNIT
-        }
-    }
-    //
-    pub fn recycle(&mut self, vec: Vec<i32>) {
-        //
-        self.cur_asset = 0;
-        //
-        self.len = vec.len();
-        //
-        let mut i = 0_usize;
-        //
-        for id in vec {
-            if i < self.members.len() {
-                //
-                self.members[i].recycle(id as u32);
-                //
-                i += 1;
-                continue;
-            }
-            //
-            self.members.push(Font::new(id as u32));
+            self.members.push(T::new(id as u32));
             //
             i += 1;
         }

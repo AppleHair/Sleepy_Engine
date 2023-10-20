@@ -5,13 +5,13 @@ use super::{dynamic_to_number, asset::*};
 
 //
 #[derive(Clone)]
-pub struct ElmPoint {
+pub struct ElemPoint {
     pub x: f32,
     pub y: f32,
 }
 
 //
-impl ElmPoint {
+impl ElemPoint {
     pub fn get_x(&mut self) -> rhai::FLOAT { self.x.clone() as rhai::FLOAT }
     pub fn get_y(&mut self) -> rhai::FLOAT { self.y.clone() as rhai::FLOAT }
 
@@ -26,14 +26,14 @@ impl ElmPoint {
 //
 #[derive(Clone)]
 pub struct CollisionBox {
-    pub point1: ElmPoint,
-    pub point2: ElmPoint,
+    pub point1: ElemPoint,
+    pub point2: ElemPoint,
 }
 
 //
 impl CollisionBox {
-    pub fn get_point1(&mut self) -> ElmPoint { self.point1.clone() }
-    pub fn get_point2(&mut self) -> ElmPoint { self.point2.clone() }
+    pub fn get_point1(&mut self) -> ElemPoint { self.point1.clone() }
+    pub fn get_point2(&mut self) -> ElemPoint { self.point2.clone() }
 
     pub fn to_string(&mut self) -> String { 
         format!("Point 1: {p1}\nPoint 2:{p2}", p1 = self.point1.to_string(), p2 = self.point2.to_string())
@@ -44,29 +44,30 @@ impl CollisionBox {
 #[derive(Clone)]
 pub struct Object {
     pub sprites: AssetList<Sprite>,
-    pub active: bool,
     pub index_in_stack: u32,
-    pub index_of_layer: usize,
-    pub index_in_layer: usize,
-    pub position: ElmPoint,
-    pub scale: ElmPoint,
+    pub position: ElemPoint,
+    pub scale: ElemPoint,
     pub collision_boxes: Vec<CollisionBox>,
 }
 
 //
 impl Object {
-    pub fn get_active(&mut self) -> bool { self.active.clone() }
-    pub fn get_index_in_layer(&mut self) -> rhai::INT { self.index_in_layer.clone() as rhai::INT }
-    pub fn get_index_of_layer(&mut self) -> rhai::INT { self.index_of_layer.clone() as rhai::INT }
     pub fn get_index_in_stack(&mut self) -> rhai::INT { self.index_in_stack.clone() as rhai::INT }
-    pub fn get_position(&mut self) -> ElmPoint { self.position.clone() }
-    pub fn get_scale(&mut self) -> ElmPoint { self.scale.clone() }
+    pub fn get_position(&mut self) -> ElemPoint { self.position.clone() }
+    pub fn get_scale(&mut self) -> ElemPoint { self.scale.clone() }
     pub fn get_collision_boxes(&mut self) -> Dynamic { self.collision_boxes.clone().into() }
     pub fn get_sprites(&mut self) -> AssetList<Sprite> { self.sprites.clone() }
 
-    pub fn set_position(&mut self, value: ElmPoint) { self.position = value; }
-    pub fn set_scale(&mut self, value: ElmPoint) { self.scale = value; }
-    pub fn set_sprites(&mut self, value: AssetList<Sprite>) { self.sprites = value; }
+    pub fn set_position(&mut self, value: ElemPoint) { self.position = value; }
+    pub fn set_scale(&mut self, value: ElemPoint) { self.scale = value; }
+    pub fn set_sprites(&mut self, value: AssetList<Sprite>) {
+        if self.sprites.len == value.len &&
+        self.sprites.members.iter().enumerate().all(
+        |(idx, spr)| {value.members[idx].id == spr.id})
+        {
+            self.sprites = value;
+        }
+    }
 
     pub fn to_string(&mut self) -> String {
         //
@@ -88,8 +89,7 @@ impl Object {
     }
 
     //
-    pub fn new(config: &Map, idx_in_stack: u32, idx_of_layer: usize,
-    idx_in_layer: usize, init_x: f32, init_y: f32) -> Self {
+    pub fn new(config: &Map, idx_in_stack: u32, init_x: f32, init_y: f32) -> Self {
         //
         let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
         //
@@ -97,13 +97,13 @@ impl Object {
         .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
             collision_boxes_vec.push( CollisionBox {
-                point1: ElmPoint { 
+                point1: ElemPoint { 
                     x: dynamic_to_number(&map["x1"])
                     .expect("Every collision box should contain an float 'x1' attribute."), 
                     y: dynamic_to_number(&map["y1"])
                     .expect("Every collision box should contain an float 'y1' attribute.") 
                 },
-                point2: ElmPoint { 
+                point2: ElemPoint { 
                     x: dynamic_to_number(&map["x2"])
                     .expect("Every collision box should contain an float 'x2' attribute."), 
                     y: dynamic_to_number(&map["y2"])
@@ -124,24 +124,17 @@ impl Object {
             //
             sprites: AssetList::new(sprites_vec),
             //
-            active: true,
-            //
             index_in_stack: idx_in_stack,
             //
-            index_of_layer: idx_of_layer,
+            position: ElemPoint { x: init_x, y: init_y },
             //
-            index_in_layer: idx_in_layer,
-            //
-            position: ElmPoint { x: init_x, y: init_y },
-            //
-            scale: ElmPoint { x: 1.0, y: 1.0 },
+            scale: ElemPoint { x: 1.0, y: 1.0 },
             //
             collision_boxes: collision_boxes_vec,
         }
     }
     //
-    pub fn recycle(&mut self, config: &Map, idx_of_layer: usize,
-    idx_in_layer: usize, init_x: f32, init_y: f32) {
+    pub fn recycle(&mut self, config: &Map, init_x: f32, init_y: f32) {
         //
         self.collision_boxes.clear();
         //
@@ -149,13 +142,13 @@ impl Object {
         .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
             //
             self.collision_boxes.push( CollisionBox {
-                point1: ElmPoint { 
+                point1: ElemPoint { 
                     x: dynamic_to_number(&map["x1"])
                     .expect("Every collision box should contain an float 'x1' attribute."), 
                     y: dynamic_to_number(&map["y1"])
                     .expect("Every collision box should contain an float 'y1' attribute.") 
                 },
-                point2: ElmPoint { 
+                point2: ElemPoint { 
                     x: dynamic_to_number(&map["x2"])
                     .expect("Every collision box should contain an float 'x2' attribute."), 
                     y: dynamic_to_number(&map["y2"])
@@ -166,12 +159,6 @@ impl Object {
         //
         self.sprites.recycle(config["sprites"].clone().into_typed_array::<rhai::INT>()
         .expect("Every object's config should contain a 'sprites' array, which should only have integer members."));
-        //
-        self.active = true;
-        //
-        self.index_of_layer = idx_of_layer;
-        //
-        self.index_in_layer = idx_in_layer;
         //
         self.position.x = init_x;
         //
@@ -212,16 +199,16 @@ impl Layer {
 //
 #[derive(Clone)]
 pub struct Camera {
-    pub position: ElmPoint,
+    pub position: ElemPoint,
     pub zoom: f32,
 }
 
 //
 impl Camera {
-    pub fn get_position(&mut self) -> ElmPoint { self.position.clone() }
+    pub fn get_position(&mut self) -> ElemPoint { self.position.clone() }
     pub fn get_zoom(&mut self) -> rhai::FLOAT { self.zoom.clone() as rhai::FLOAT }
 
-    pub fn set_position(&mut self, value: ElmPoint) { self.position = value; }
+    pub fn set_position(&mut self, value: ElemPoint) { self.position = value; }
     pub fn set_zoom(&mut self, value: rhai::FLOAT) { self.zoom = value as f32; }
 
     pub fn to_string(&mut self) -> String { 
@@ -236,6 +223,7 @@ pub struct Scene {
     pub height: f32,
     pub objects_len: usize,
     pub runtimes_len: usize,
+    pub runtime_vacants: Vec<u32>,
     pub layers_len: usize,
     pub in_color: String,
     pub out_color: String,
@@ -252,6 +240,7 @@ impl Scene {
     pub fn get_layers(&mut self) -> Dynamic { self.layers[0..self.layers_len].to_vec().into() }
     pub fn get_objects_len(&mut self) -> rhai::INT { self.objects_len.clone() as rhai::INT }
     pub fn get_runtimes_len(&mut self) -> rhai::INT { self.runtimes_len.clone() as rhai::INT }
+    pub fn get_runtime_vacants(&mut self)  -> Dynamic { self.runtime_vacants.clone().into() }
     pub fn get_camera(&mut self) -> Camera { self.camera.clone() }
 
     pub fn set_width(&mut self, value: rhai::FLOAT) { self.width = value as f32; }
@@ -276,6 +265,65 @@ impl Scene {
         format!("Scene:\n\twidth - {width} height - {height}\n\tinside color - {in_color} outside color - {out_color}\n\tCamera:\n\t\t{camera}\n\tLayers:{layers}", 
             width = self.width, height = self.height, in_color = self.in_color, out_color = self.out_color, 
             camera = &mut self.camera.to_string(), layers = layers_str)
+    }
+
+    pub fn remove_instance(&mut self, idx: rhai::INT) -> bool {
+        // Find the layer in which
+        // the instance is placed
+        if let Some((layer_idx, &_)) = self.layers[0..self.layers_len].iter()
+        .enumerate().find(|&(_, layer)| { layer.instances.contains(&(idx as u32)) }) {
+            // Find the index in which
+            // the instance is placed in the layer
+            if let Some((index_to_remove, &_)) = self.layers[layer_idx].instances.iter()
+            .enumerate().find(|&(_, &instance_index)| { instance_index as rhai::INT == idx }) {
+                //
+                let _ = self.layers[layer_idx].instances.swap_remove(index_to_remove);
+                // Check if the instance 
+                // was a runtime object
+                if (idx as usize) >= self.objects_len && (idx as usize) < self.objects_len+self.runtimes_len {
+                    //
+                    self.runtime_vacants.push(idx as u32);
+                }
+                //
+                return true;
+            }
+        }
+        //
+        false
+    }
+
+    pub fn add_instance(&mut self, idx: rhai::INT, layer_idx: rhai::INT) -> bool {
+        // Check if the layer index received is
+        // in bounds and if the instance index
+        // received isn't already in a layer.
+        if layer_idx < (self.layers_len as rhai::INT) && layer_idx >= 0 &&
+        !self.layers.iter().any(|layer| { layer.instances.contains(&(idx as u32)) }) {
+            //
+            self.layers[layer_idx as usize].instances.push(idx as u32);
+            // Check if the instance index
+            // should extend the pool's bounds
+            if (idx as usize) >= self.objects_len+self.runtimes_len {
+                //
+                self.runtime_vacants.extend_from_slice((
+                ((self.objects_len+self.runtimes_len) as u32)..(idx as u32)
+                ).collect::<Vec<u32>>().as_slice());
+                //
+                self.runtimes_len = ((idx+1) as usize) - self.objects_len;
+                //
+                return true;
+            }
+            // Check if the instance index was
+            // in the "vacant runtime objects list"
+            if let Some((index,&_)) = self.runtime_vacants.iter().enumerate()
+            .find(|(_, &instance_index)| { instance_index as rhai::INT == idx }) {
+                //
+                let _ = self.runtime_vacants.swap_remove(index);
+            }
+            //
+            return true;
+        }
+        //
+        false
     }
 
     //
@@ -322,6 +370,8 @@ impl Scene {
             //
             runtimes_len: 0,
             //
+            runtime_vacants: Vec::new(),
+            //
             in_color: config["background-color"].clone().into_string()
             .expect("Every scene's config should contain a string 'background-color' attribute."),
             //
@@ -330,7 +380,7 @@ impl Scene {
             //
             camera: Camera {
                 //
-                position: ElmPoint { 
+                position: ElemPoint { 
                     x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
                     .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
                     y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
@@ -399,6 +449,8 @@ impl Scene {
         //
         self.runtimes_len = 0;
         //
+        self.runtime_vacants.clear();
+        //
         self.objects_len = config["object-instances"].clone().into_array()
         .expect("Every scene's config should contain an array 'object-instances' attribute.").len();
         //
@@ -418,7 +470,7 @@ impl Scene {
         //
         self.camera = Camera {
             //
-            position: ElmPoint { 
+            position: ElemPoint { 
                 x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
                 .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
                 y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
