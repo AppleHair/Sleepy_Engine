@@ -1,5 +1,8 @@
 
 //
+opener.self.setupTestWindow(window);
+
+//
 import initEngine, * as wasmEngine from "./engine-code/game_engine.js";
 
 //

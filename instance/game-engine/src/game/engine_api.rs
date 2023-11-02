@@ -112,6 +112,11 @@ impl ElementResources {
     //
     pub fn call_fn(&mut self, engine: &Engine, name: &str, args: impl rhai::FuncArgs) -> Result<(), String> {
         //
+        if !self.definition.script.iter_functions()
+        .any(|func| { func.name == name}) {
+            return Ok(());
+        }
+        //
         if let Some(err) = engine.call_fn::<()>
         (&mut self.scope, &self.definition.script, name, args).err() {
             //

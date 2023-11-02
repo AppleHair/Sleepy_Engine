@@ -27,6 +27,117 @@ let assetsToLoad = [];
 //
 let elementsToLoad = [];
 
+self.setupTestWindow = function(new_window) {
+    //
+    let allAssets = [];
+    //
+    SQLITE.forEachInTable(project, "asset", (row) => {
+        allAssets.push([row["rowid"], row["type"]]);
+    });
+    //
+    assetsToLoad = allAssets;
+
+    //
+    let allElements = [];
+    //
+    SQLITE.forEachInTable(project, "element", (row) => {
+        allElements.push([row["rowid"], row["type"]]);
+    });
+    //
+    elementsToLoad = allElements;
+
+    //
+    new_window.self.getMetadataIcon = function() {
+        return getBlob(3);
+    };
+    //
+    new_window.self.getMetadataScript = function() {
+        return getBlob(2, true);
+    };
+    //
+    new_window.self.getAssetData = function(rowid) {
+        return getBlob(SQLITE.getRow(project, "asset", rowid).data);
+    };
+    //
+    new_window.self.getElementScript = function(rowid) {
+        return getBlob(SQLITE.getRow(project, "element", rowid).script, true);
+    };
+    //
+    new_window.self.getMetadataConfig = function() {
+        return getBlob(1, true);
+    };
+    //
+    new_window.self.getAssetConfig = function(rowid) {
+        return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
+    };
+    //
+    new_window.self.getElementConfig = function(rowid) {
+        return getBlob(SQLITE.getRow(project, "element", rowid).config, true);
+    };
+    //
+    new_window.self.getElementID = function(name) {
+        let stmt = project.prepare(`SELECT rowid FROM element WHERE name=?;`, [name]);
+        stmt.step();
+        let res = stmt.get();
+        stmt.free();
+        return res[0];
+    };
+    //
+    new_window.self.getAssetID = function(name) {
+        let stmt = project.prepare(`SELECT rowid FROM asset WHERE name=?;`, [name]);
+        stmt.step();
+        let res = stmt.get();
+        stmt.free();
+        return res[0];
+    };
+    //
+    new_window.self.getElementName = function(rowid) {
+        const result = SQLITE.getRow(project, "element", rowid).name;
+        return ((result === undefined) ? "" : result);
+    };
+    //
+    new_window.self.getAssetName = function(rowid) {
+        const result = SQLITE.getRow(project, "asset", rowid).name;
+        return ((result === undefined) ? "" : result);
+    };
+    //
+    new_window.self.getElementType = function(rowid) {
+        return SQLITE.getRow(project, "element", rowid).type;
+    };
+    //
+    new_window.self.getAssetType = function(rowid) {
+        return SQLITE.getRow(project, "asset", rowid).type;
+    };
+    //
+    new_window.self.assetsToLoad = function() {
+        let toLoad = assetsToLoad;
+        assetsToLoad = [];
+        return toLoad;
+    };
+    //
+    new_window.self.elementsToLoad = function() {
+        let toLoad = elementsToLoad;
+        elementsToLoad = [];
+        return toLoad;
+    };
+
+    //
+    new_window.onbeforeunload = () => {
+        //
+        if (gameTestWindow !== undefined) {
+            //
+            gameTestWindow = undefined;
+        }
+    }
+
+    new_window.onload = (e) => {
+        e.target.title = projectName;
+        e.target.querySelector("#game-icon").setAttribute("href", document.querySelector("#game-icon-label > img").src);
+    };
+
+    gameTestWindow = new_window;
+}
+
 //
 onpagehide = (e) => {
     //
@@ -380,115 +491,11 @@ initSQLite().then((loaded) => {
                 if (gameTestWindow !== undefined) {
                     //
                     gameTestWindow.close();
-                }
-                //
-                gameTestWindow = window.open("/game-test", "GAME TEST");
-                //
-                let allAssets = [];
-                //
-                SQLITE.forEachInTable(project, "asset", (row) => {
-                    allAssets.push([row["rowid"], row["type"]]);
-                });
-                //
-                assetsToLoad = allAssets;
-
-                //
-                let allElements = [];
-                //
-                SQLITE.forEachInTable(project, "element", (row) => {
-                    allElements.push([row["rowid"], row["type"]]);
-                });
-                //
-                elementsToLoad = allElements;
-
-                //
-                gameTestWindow.self.getMetadataIcon = function() {
-                    return getBlob(3);
-                };
-                //
-                gameTestWindow.self.getMetadataScript = function() {
-                    return getBlob(2, true);
-                };
-                //
-                gameTestWindow.self.getAssetData = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "asset", rowid).data);
-                };
-                //
-                gameTestWindow.self.getElementScript = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "element", rowid).script, true);
-                };
-                //
-                gameTestWindow.self.getMetadataConfig = function() {
-                    return getBlob(1, true);
-                };
-                //
-                gameTestWindow.self.getAssetConfig = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
-                };
-                //
-                gameTestWindow.self.getElementConfig = function(rowid) {
-                    return getBlob(SQLITE.getRow(project, "element", rowid).config, true);
-                };
-                //
-                gameTestWindow.self.getElementID = function(name) {
-                    let stmt = project.prepare(`SELECT rowid FROM element WHERE name=?;`, [name]);
-                    stmt.step();
-                    let res = stmt.get();
-                    stmt.free();
-                    return res[0];
-                };
-                //
-                gameTestWindow.self.getAssetID = function(name) {
-                    let stmt = project.prepare(`SELECT rowid FROM asset WHERE name=?;`, [name]);
-                    stmt.step();
-                    let res = stmt.get();
-                    stmt.free();
-                    return res[0];
-                };
-                //
-                gameTestWindow.self.getElementName = function(rowid) {
-                    const result = SQLITE.getRow(project, "element", rowid).name;
-                    return ((result === undefined) ? "" : result);
-                };
-                //
-                gameTestWindow.self.getAssetName = function(rowid) {
-                    const result = SQLITE.getRow(project, "asset", rowid).name;
-                    return ((result === undefined) ? "" : result);
-                };
-                //
-                gameTestWindow.self.getElementType = function(rowid) {
-                    return SQLITE.getRow(project, "element", rowid).type;
-                };
-                //
-                gameTestWindow.self.getAssetType = function(rowid) {
-                    return SQLITE.getRow(project, "asset", rowid).type;
-                };
-                //
-                gameTestWindow.self.assetsToLoad = function() {
-                    let toLoad = assetsToLoad;
-                    assetsToLoad = [];
-                    return toLoad;
-                };
-                //
-                gameTestWindow.self.elementsToLoad = function() {
-                    let toLoad = elementsToLoad;
-                    elementsToLoad = [];
-                    return toLoad;
-                };
-
-                //
-                gameTestWindow.onbeforeunload = () => {
                     //
-                    if (gameTestWindow !== undefined) {
-                        //
-                        gameTestWindow = undefined;
-                    }
+                    gameTestWindow = undefined;
                 }
-
-                gameTestWindow.onload = (e) => {
-                    e.target.title = projectName;
-                    e.target.querySelector("#game-icon").setAttribute("href", document.querySelector("#game-icon-label > img").src);
-                };
+                //
+                window.open("/game-test", "GAME TEST");
             },
             //
             'export-game': async () => {
