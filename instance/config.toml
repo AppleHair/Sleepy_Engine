@@ -1,2 +1,6 @@
-SECRET_KEY='dev'
-BASE_FILES_PATH='flaskr\static\base-files\'
+BASE_FILES_PATH='flask_server\static\base-files\'
+LOAD_BASE_FILES=false
+ENGINE_CORE_PATH='flask_server\static\js\engine-core\'
+EXPORT_PACKAGE_PATH='instance\Export Package.zip'
+JS_LIBRARYS_PATH='flask_server\static\js\libs\'
+LOAD_EXPORT_PACKAGE=false

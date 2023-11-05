@@ -3,7 +3,7 @@
 opener.self.setupTestWindow(window);
 
 //
-import initEngine, * as wasmEngine from "./engine-code/game_engine.js";
+import initEngine, * as wasmEngine from "../engine-core/game_engine.js";
 
 //
 let update_handle;

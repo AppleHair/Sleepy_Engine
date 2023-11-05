@@ -1,39 +1,44 @@
-import os, tempfile, sqlite3, base64, json, zipfile
+import os, tempfile, sqlite3, base64, json, zipfile, tomllib
 
 from flask import Flask, render_template, render_template_string, send_file, current_app, request
 
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
-    app.config.from_mapping(
-        SECRET_KEY='dev',
-        BASE_FILES_PATH=os.path.join(app.static_folder, 'base-files\\'),
-    )
-
-    if test_config is None:
-        # load the instance config, if it exists, when not testing
-        import tomllib
-        app.config.from_file('config.toml', load=tomllib.load, text=False)
-    else:
-        # load the test config if passed in
-        app.config.from_mapping(test_config)
-
-    # ensure the instance folder exists
-    try:
-        os.makedirs(app.instance_path)
-    except OSError:
-        pass
+    app.config.from_file('config.toml', load=tomllib.load, text=False)
 
     # template project files setup
 
-    from . import base_dbs
+    if app.config['LOAD_BASE_FILES']:
 
-    # give the app to the module
-    base_dbs.give_app(app)
-    # project template database file setup
-    base_dbs.create_project_template_db()
-    # item types database file setup
-    base_dbs.create_type_db()
+        from . import base_dbs
+        # give the app to the module
+        base_dbs.give_app(app)
+        # project template database file setup
+        base_dbs.create_project_template_db()
+        # item types database file setup
+        base_dbs.create_type_db()
+
+    # export package setup
+
+    if app.config['LOAD_EXPORT_PACKAGE']:
+        pre_xprt = None
+        xprt_zip = None
+        try:
+            pre_xprt = open(app.config['EXPORT_PACKAGE_PATH'], "wb")
+            xprt_zip = zipfile.ZipFile(pre_xprt, 'w')
+        except FileExistsError:
+            pre_xprt = open(app.config['EXPORT_PACKAGE_PATH'], "xb")
+            xprt_zip = zipfile.ZipFile(pre_xprt, 'x')
+            pass
+        
+        xprt_zip.write('instance\\load-game.js', 'load-game.js')
+        xprt_zip.write(app.config['JS_LIBRARYS_PATH']+'sql-wasm.js', 'sql-wasm.js')
+        xprt_zip.write(app.config['JS_LIBRARYS_PATH']+'sql-wasm.wasm', 'sql-wasm.wasm')
+        xprt_zip.write(app.config['ENGINE_CORE_PATH']+'game_engine.js', 'game_engine.js')
+        xprt_zip.write(app.config['ENGINE_CORE_PATH']+'game_engine_bg.wasm', 'game_engine_bg.wasm')
+        xprt_zip.close()
+        pre_xprt.close()
 
     # base route
     @app.route('/', methods=['GET'])
@@ -58,8 +63,8 @@ def create_app(test_config=None):
         cur.close()
         # copy the pre-structured export package to a temp file
         xprt = tempfile.TemporaryFile()
-        with open("instance\\Export Package.zip", "rb") as prezip:
-            xprt.write(prezip.read())
+        with open(app.config['EXPORT_PACKAGE_PATH'], "rb") as pre_xprt:
+            xprt.write(pre_xprt.read())
         # add the received database and a 
         # rendered web page, with the game
         # icon and title, to the package
