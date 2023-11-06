@@ -11,3 +11,4 @@ INSERT INTO folder VALUES (NULL, 'fonts', '#f0655b', 0);
 INSERT INTO folder VALUES (NULL, 'audio', '#5ce6dd', 0);
 INSERT INTO folder VALUES (NULL, 'objects', '#70e65c', 0);
 INSERT INTO folder VALUES (NULL, 'scenes', '#ede85c', 0);
+INSERT INTO element VALUES (NULL, 'Home', 2, 5, 5, 4);

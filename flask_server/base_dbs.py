@@ -25,6 +25,8 @@ def create_project_template_db():
     cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("stateConfig.json"),))
     cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("stateScript.rhai"),))
     cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("gameIcon.ico"),))
+    cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("sceneScript.rhai"),))
+    cur.execute("INSERT INTO blobs VALUES (NULL, ?)", (import_basefile("sceneConfig.json"),))
 
     db.commit()
     cur.close()

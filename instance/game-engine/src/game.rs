@@ -55,17 +55,17 @@ impl TableRow {
 pub fn run_game() -> Result<ClosuresHandle, JsValue>
 {
     // Create the element definitions hash map.
-    let mut element_defs: HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>> = HashMap::new();
+    let element_defs: Rc<RefCell<HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>>>
+         = Rc::new(RefCell::new(HashMap::new()));
     // Create the asset definitions hash map.
     let mut asset_defs: HashMap<u32,Result<renderer::AssetDefinition, JsValue>> = HashMap::new();
 
     // Create the API 'Engine', and the state manager instance.
     let (engine, state_manager, 
-    cur_scene, cur_scene_id,
-    prv_scene_id, object_stack,
-    key_states) = engine_api::create_api(&mut element_defs)?;
+    cur_scene, object_stack,
+    key_states) = engine_api::create_api(&element_defs)?;
     //
-    load_elements(&engine, &mut element_defs, true);
+    load_elements(&engine, &mut element_defs.borrow_mut(), true);
 
     //
     let keys_just_changed: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
@@ -75,20 +75,16 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         create_keyboard_listeners(&key_states, &keys_just_changed)?;
 
     //
-    call_fn_on_all("create", (), &engine,
+    call_fn_on_all("init", (), &engine,
     &state_manager.resources,&cur_scene, &object_stack)?;
 
-    //
-    let canvas_width = engine_api::dynamic_to_number(&state_manager
-        .resources.borrow().definition.config["canvas-width"]).unwrap() as i32;
-    //
-    let canvas_height = engine_api::dynamic_to_number(&state_manager
-        .resources.borrow().definition.config["canvas-height"]).unwrap() as i32;
     //
     let (gl_context, gl_program,
     program_data,
     vertex_buffer, index_buffer) = 
-        renderer::create_rendering_components(canvas_width, canvas_height)?;
+        renderer::create_rendering_components(&state_manager.properties.borrow()
+        .read_lock::<engine_api::element::Game>()
+        .expect("read_lock cast should succeed"))?;
 
     //
     load_assets(&engine, &mut asset_defs, &gl_context);
@@ -104,6 +100,8 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     .unwrap().now();
     //
     let cur_scene_props = Rc::clone(&cur_scene.properties);
+    //
+    let state_manager_props = Rc::clone(&state_manager.properties);
     //
     let renderer_object_stack = Rc::clone(&object_stack);
     //
@@ -122,9 +120,12 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
         //
         renderer::render_scene(
             &gl_context, &gl_program, &program_data, &vertex_buffer,
-            &index_buffer, &cur_scene_props.borrow()
-                .read_lock::<engine_api::element::Scene>()
-                .expect("read_lock cast should succeed"),
+            &index_buffer, &state_manager_props.borrow()
+            .read_lock::<engine_api::element::Game>()
+            .expect("read_lock cast should succeed"),
+            &cur_scene_props.borrow()
+            .read_lock::<engine_api::element::Scene>()
+            .expect("read_lock cast should succeed"),
             &asset_defs,
             &renderer_object_stack.borrow(),
             elapsed
@@ -145,14 +146,11 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
     //
     let update_init = Rc::clone(&update_loop);
     //
-    let frame_rate = engine_api::dynamic_to_number(
-    &state_manager.resources.borrow().definition.config["fps"]).unwrap() as u32;
-    //
-    let frame_rate_init = frame_rate.clone();
+    let frame_rate_init = state_manager.properties.borrow()
+    .read_lock::<engine_api::element::Game>()
+    .expect("read_lock cast should succeed").fps as u32;
     //
     let mut last_update = window().unwrap().performance().unwrap().now();
-    //
-    *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
     //
     *update_init.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
     move || -> Result<(), JsValue> {
@@ -182,28 +180,42 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
             }
             //
             keys_just_changed_borrow.clear();
-        }        
+        }
         //
-        if *prv_scene_id.borrow() != *cur_scene_id.borrow() {
+        if let TableRow::Element(id, 2) = cur_scene.resources.borrow().definition.row {
             //
-            switch_scene(cur_scene_id.borrow().clone(), &engine,
-            &cur_scene, &object_stack, &element_defs)?;
+            let mut cur_scene_id = state_manager.properties.borrow()
+            .read_lock::<engine_api::element::Game>()
+            .expect("read_lock cast should succeed").cur_scene;
             //
-            call_fn_on_all("create", (), &engine,
-            &state_manager.resources, &cur_scene, &object_stack)?;
+            let mut prv_scene_id = id;
             //
-            *prv_scene_id.borrow_mut() = cur_scene_id.borrow().clone();
+            while cur_scene_id != prv_scene_id {
+                //
+                switch_scene(cur_scene_id, &engine,
+                &cur_scene, &object_stack, &element_defs.borrow())?;
+                //
+                call_fn_on_all("init", (), &engine,
+                &state_manager.resources, &cur_scene, &object_stack)?;
+                //
+                prv_scene_id = cur_scene_id;
+                cur_scene_id = state_manager.properties.borrow()
+                .read_lock::<engine_api::element::Game>()
+                .expect("read_lock cast should succeed").cur_scene;
+            }
         }
 
         //
-        load_elements(&engine, &mut element_defs, false);
+        load_elements(&engine, &mut element_defs.borrow_mut(), false);
 
         //
         set_timeout_with_callback_and_f64(
             update_loop
                 .borrow().as_ref().unwrap()
                 .as_ref().unchecked_ref(),
-            1000_f64 / (frame_rate as f64)
+            1000_f64 / (state_manager.properties.borrow()
+            .read_lock::<engine_api::element::Game>()
+            .expect("read_lock cast should succeed").fps as f64)
         );
         //
         Ok(())
@@ -362,35 +374,41 @@ element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -
     //
     let mut object_stack_borrow = object_stack.borrow_mut();
     //
-    for (idx, init_x, init_y, rowid) in instances.iter().enumerate()
-    .map(|(map_index, map)| {(
+    let scene_props_borrow = Rc::clone(&scene.properties);
+    //
+    for (idx, map, rowid, layer) in instances
+    .iter().enumerate().map(|(inst_index, inst)| {(
         //
-        map_index,
-        //
-        engine_api::dynamic_to_number(&map["x"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an float 'x' attribute.")),
-        //
-        engine_api::dynamic_to_number(&map["y"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an float 'y' attribute.")),
-        //
-        engine_api::dynamic_to_number(&map["id"])
+        inst_index, inst,
+        engine_api::dynamic_to_number(&inst["id"])
         .expect(concat!("Every instance in the 'object-instances' array",
         " of an object's config should contain an integer 'id' attribute.")) as u32,
+        engine_api::dynamic_to_number(&inst["layer"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an object's config should contain an integer 'layer' attribute.")),
     )}) {
+        //
+        {
+            let mut scene_props_borrow = scene_props_borrow.borrow_mut();
+            let mut scene_props_borrow = scene_props_borrow
+            .write_lock::<engine_api::element::Scene>().expect("write_lock cast should succeed");
+            //
+            scene_props_borrow.add_instance(idx as rhai::INT, layer as rhai::INT);
+        } //
         //
         if idx < object_stack_borrow.len() {
             //
             object_stack_borrow[idx].recycle(&engine,
             element_defs.get(&rowid).unwrap().as_ref()?,
-            Some((init_x, init_y)))?;
+            Some(engine_api::element::ObjectInitInfo::new(idx as u32, map)))?;
         }
         //
-        object_stack_borrow.push(engine_api::ElementHandler::new(&engine,
+        object_stack_borrow.push(engine_api::ElementHandler::new(
             element_defs.get(&rowid).unwrap().as_ref()?,
-            Some((idx as u32, init_x, init_y))
+            Some(engine_api::element::ObjectInitInfo::new(idx as u32, map))
         )?);
+        //
+        object_stack_borrow.last().unwrap().resources.borrow_mut().reload(&engine)?;
     }
     //
     Ok(())

@@ -1,7 +1,9 @@
 
 use rhai::{Map, Dynamic};
 
-use super::{dynamic_to_number, asset::*};
+use crate::data::get_element_type;
+
+use super::{dynamic_to_number, hex_color_to_rgba, asset::*};
 
 //
 #[derive(Clone)]
@@ -17,27 +19,64 @@ impl ElemPoint {
 
     pub fn set_x(&mut self, value: rhai::FLOAT) { self.x = value as f32; }
     pub fn set_y(&mut self, value: rhai::FLOAT) { self.y = value as f32; }
-
-    pub fn to_string(&mut self) -> String { 
-        format!("x - {x} y - {y}", x = self.x, y = self.y)
-    }
 }
 
 //
 #[derive(Clone)]
-pub struct CollisionBox {
-    pub point1: ElemPoint,
-    pub point2: ElemPoint,
+pub struct ElemColor {
+    pub r: u8, pub g: u8,
+    pub b: u8, pub a: u8,
 }
 
 //
-impl CollisionBox {
-    pub fn get_point1(&mut self) -> ElemPoint { self.point1.clone() }
-    pub fn get_point2(&mut self) -> ElemPoint { self.point2.clone() }
+impl ElemColor {
+    pub fn get_r(&mut self) -> rhai::INT { self.r.clone() as rhai::INT }
+    pub fn get_g(&mut self) -> rhai::INT { self.g.clone() as rhai::INT }
+    pub fn get_b(&mut self) -> rhai::INT { self.b.clone() as rhai::INT }
+    pub fn get_a(&mut self) -> rhai::INT { self.a.clone() as rhai::INT }
 
-    pub fn to_string(&mut self) -> String { 
-        format!("Point 1: {p1}\nPoint 2:{p2}", p1 = self.point1.to_string(), p2 = self.point2.to_string())
-    }
+    pub fn set_r(&mut self, value: rhai::INT) { self.r = value as u8; }
+    pub fn set_g(&mut self, value: rhai::INT) { self.g = value as u8; }
+    pub fn set_b(&mut self, value: rhai::INT) { self.b = value as u8; }
+    pub fn set_a(&mut self, value: rhai::INT) { self.a = value as u8; }
+}
+
+//
+pub struct ObjectInitInfo {
+    pub idx_in_stack: u32,
+    pub init_x: f32, pub init_y: f32,
+    pub init_scale_x: f32, pub init_scale_y: f32,
+    pub init_color: String, pub init_alpha: u8,
+}
+
+impl ObjectInitInfo {
+    pub fn new(idx: u32, map: &Map) -> Self { Self {
+        idx_in_stack: idx,
+        //
+        init_x: dynamic_to_number(&map["x"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an scene's config should contain an float 'x' attribute.")),
+        //
+        init_y: dynamic_to_number(&map["y"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an scene's config should contain an float 'y' attribute.")),
+        //
+        init_scale_x: dynamic_to_number(&map["scale-x"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an scene's config should contain an float 'scale-x' attribute.")),
+        //
+        init_scale_y: dynamic_to_number(&map["scale-y"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an scene's config should contain an float 'scale-y' attribute.")),
+        //
+        init_color: map["color"].clone().into_string()
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an scene's config should contain an string 'color' attribute.")),
+        //
+        init_alpha: dynamic_to_number(&map["alpha"])
+        .expect(concat!("Every instance in the 'object-instances' array",
+        " of an scene's config should contain an integer 'alpha' attribute.")) as u8,
+    } }
 }
 
 //
@@ -47,7 +86,7 @@ pub struct Object {
     pub index_in_stack: u32,
     pub position: ElemPoint,
     pub scale: ElemPoint,
-    pub collision_boxes: Vec<CollisionBox>,
+    pub color: ElemColor,
 }
 
 //
@@ -55,11 +94,12 @@ impl Object {
     pub fn get_index_in_stack(&mut self) -> rhai::INT { self.index_in_stack.clone() as rhai::INT }
     pub fn get_position(&mut self) -> ElemPoint { self.position.clone() }
     pub fn get_scale(&mut self) -> ElemPoint { self.scale.clone() }
-    pub fn get_collision_boxes(&mut self) -> Dynamic { self.collision_boxes.clone().into() }
+    pub fn get_color(&mut self) -> ElemColor { self.color.clone() }
     pub fn get_sprites(&mut self) -> AssetList<Sprite> { self.sprites.clone() }
 
     pub fn set_position(&mut self, value: ElemPoint) { self.position = value; }
     pub fn set_scale(&mut self, value: ElemPoint) { self.scale = value; }
+    pub fn set_color(&mut self, value: ElemColor) { self.color = value; }
     pub fn set_sprites(&mut self, value: AssetList<Sprite>) {
         if self.sprites.len == value.len &&
         self.sprites.members.iter().enumerate().all(
@@ -69,48 +109,8 @@ impl Object {
         }
     }
 
-    pub fn to_string(&mut self) -> String {
-        //
-        let mut collision_boxes_str = String::new(); let mut i = 1;
-        //
-        for colli_box in &self.collision_boxes {
-            //
-            let mut s = colli_box.clone().to_string().replace("\n", "\n\t");
-            //
-            s.insert_str( 0, &format!("\n\n\t#{}\n\t", i));
-            i += 1;
-            //
-            collision_boxes_str.push_str(&s);
-        }
-        //       
-        format!("Position:\n\t{pos}\nCollision Box:{colli}", 
-            pos = self.position.to_string(), 
-            colli = collision_boxes_str)
-    }
-
     //
-    pub fn new(config: &Map, idx_in_stack: u32, init_x: f32, init_y: f32) -> Self {
-        //
-        let mut collision_boxes_vec: Vec<CollisionBox> = Vec::new();
-        //
-        for map in config["collision-boxes"].clone().into_typed_array::<Map>()
-        .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
-            //
-            collision_boxes_vec.push( CollisionBox {
-                point1: ElemPoint { 
-                    x: dynamic_to_number(&map["x1"])
-                    .expect("Every collision box should contain an float 'x1' attribute."), 
-                    y: dynamic_to_number(&map["y1"])
-                    .expect("Every collision box should contain an float 'y1' attribute.") 
-                },
-                point2: ElemPoint { 
-                    x: dynamic_to_number(&map["x2"])
-                    .expect("Every collision box should contain an float 'x2' attribute."), 
-                    y: dynamic_to_number(&map["y2"])
-                    .expect("Every collision box should contain an float 'y2' attribute.") 
-                }
-            } );
-        }
+    pub fn new(config: &Map, info: ObjectInitInfo) -> Self {
         //
         let mut sprites_vec: Vec<Sprite> = Vec::new();
         //
@@ -120,53 +120,40 @@ impl Object {
             sprites_vec.push(Sprite::new(id as u32));
         }
         //
+        let color = hex_color_to_rgba(&info.init_color);
+        //
         Self {
             //
             sprites: AssetList::new(sprites_vec),
             //
-            index_in_stack: idx_in_stack,
+            index_in_stack: info.idx_in_stack,
             //
-            position: ElemPoint { x: init_x, y: init_y },
+            position: ElemPoint { x: info.init_x, y: info.init_y },
             //
-            scale: ElemPoint { x: 1.0, y: 1.0 },
+            scale: ElemPoint { x: info.init_scale_x, y: info.init_scale_y },
             //
-            collision_boxes: collision_boxes_vec,
+            color: ElemColor { r: color[0], g: color[1],
+                b: color[2], a: info.init_alpha }
         }
     }
     //
-    pub fn recycle(&mut self, config: &Map, init_x: f32, init_y: f32) {
-        //
-        self.collision_boxes.clear();
-        //
-        for map in config["collision-boxes"].clone().into_typed_array::<Map>()
-        .expect("Every object's config should contain a 'collision-boxes' array, which should only have object-like members.") {
-            //
-            self.collision_boxes.push( CollisionBox {
-                point1: ElemPoint { 
-                    x: dynamic_to_number(&map["x1"])
-                    .expect("Every collision box should contain an float 'x1' attribute."), 
-                    y: dynamic_to_number(&map["y1"])
-                    .expect("Every collision box should contain an float 'y1' attribute.") 
-                },
-                point2: ElemPoint { 
-                    x: dynamic_to_number(&map["x2"])
-                    .expect("Every collision box should contain an float 'x2' attribute."), 
-                    y: dynamic_to_number(&map["y2"])
-                    .expect("Every collision box should contain an float 'y2' attribute.") 
-                }
-            } );
-        }
+    pub fn recycle(&mut self, config: &Map, info: ObjectInitInfo) {
         //
         self.sprites.recycle(config["sprites"].clone().into_typed_array::<rhai::INT>()
         .expect("Every object's config should contain a 'sprites' array, which should only have integer members."));
         //
-        self.position.x = init_x;
+        let color = hex_color_to_rgba(&info.init_color);
         //
-        self.position.y = init_y;
+        self.position.x = info.init_x;
+        self.position.y = info.init_y;
         //
-        self.scale.x = 1.0;
+        self.scale.x = info.init_scale_x;
+        self.scale.y = info.init_scale_y;
         //
-        self.scale.y = 1.0;
+        self.color.r = color[0];
+        self.color.g = color[1];
+        self.color.b = color[2];
+        self.color.a = info.init_alpha;
     }
 }
 
@@ -181,19 +168,6 @@ pub struct Layer {
 impl Layer {
     pub fn get_name(&mut self) -> String { self.name.clone() }
     pub fn get_instances(&mut self) -> Dynamic { self.instances.clone().into() }
-
-    pub fn to_string(&mut self) -> String {
-        let mut instances_str = String::new(); let mut i = 1;
-        //
-        for inst in &self.instances {
-            //
-            instances_str.push_str(&format!("\n\n\t#{i} - {}", inst));
-            //
-            i += 1;
-        }
-        //
-        format!("Name: {name}\nInstances:{instances}", name = self.name.clone(), instances = instances_str )
-    }
 }
 
 //
@@ -201,71 +175,40 @@ impl Layer {
 pub struct Camera {
     pub position: ElemPoint,
     pub zoom: f32,
+    pub color: ElemColor,
 }
 
 //
 impl Camera {
     pub fn get_position(&mut self) -> ElemPoint { self.position.clone() }
     pub fn get_zoom(&mut self) -> rhai::FLOAT { self.zoom.clone() as rhai::FLOAT }
+    pub fn get_color(&mut self) -> ElemColor { self.color.clone() }
 
     pub fn set_position(&mut self, value: ElemPoint) { self.position = value; }
     pub fn set_zoom(&mut self, value: rhai::FLOAT) { self.zoom = value as f32; }
-
-    pub fn to_string(&mut self) -> String { 
-        format!("{position} zoom - {zoom}", position = self.position.to_string(), zoom = self.zoom)
-    }
+    pub fn set_color(&mut self, value: ElemColor) { self.color = value; }
 }
 
 //
 #[derive(Clone)]
 pub struct Scene {
-    pub width: f32,
-    pub height: f32,
     pub objects_len: usize,
     pub runtimes_len: usize,
     pub runtime_vacants: Vec<u32>,
     pub layers_len: usize,
-    pub in_color: String,
-    pub out_color: String,
     pub layers: Vec<Layer>,
     pub camera: Camera,
 }
 
 //
 impl Scene {
-    pub fn get_width(&mut self) -> rhai::FLOAT { self.width.clone() as rhai::FLOAT }
-    pub fn get_height(&mut self) -> rhai::FLOAT { self.height.clone() as rhai::FLOAT }
-    pub fn get_inside_color(&mut self) -> String { self.in_color.clone() }
-    pub fn get_outside_color(&mut self) -> String { self.out_color.clone() }
     pub fn get_layers(&mut self) -> Dynamic { self.layers[0..self.layers_len].to_vec().into() }
     pub fn get_objects_len(&mut self) -> rhai::INT { self.objects_len.clone() as rhai::INT }
     pub fn get_runtimes_len(&mut self) -> rhai::INT { self.runtimes_len.clone() as rhai::INT }
     pub fn get_runtime_vacants(&mut self)  -> Dynamic { self.runtime_vacants.clone().into() }
     pub fn get_camera(&mut self) -> Camera { self.camera.clone() }
 
-    pub fn set_width(&mut self, value: rhai::FLOAT) { self.width = value as f32; }
-    pub fn set_height(&mut self, value: rhai::FLOAT) { self.height = value as f32; }
-    pub fn set_inside_color(&mut self, value: &str) { self.in_color.clear(); self.in_color.push_str(value); }
-    pub fn set_outside_color(&mut self, value: &str) { self.out_color.clear(); self.out_color.push_str(value); }
     pub fn set_camera(&mut self, value: Camera) { self.camera = value; }
-
-    pub fn to_string(&mut self) -> String {
-        let mut layers_str =  String::new(); let mut i = 1;
-        //
-        for layer in &self.layers {
-            //
-            let mut s = layer.clone().to_string().replace("\n", "\n\t\t");
-            //
-            s.insert_str( 0, &format!("\n\n\t\t#{}\n\t\t", i));
-            i += 1;
-            //
-            layers_str.push_str(&s);
-        }
-        //
-        format!("Scene:\n\twidth - {width} height - {height}\n\tinside color - {in_color} outside color - {out_color}\n\tCamera:\n\t\t{camera}\n\tLayers:{layers}", 
-            width = self.width, height = self.height, in_color = self.in_color, out_color = self.out_color, 
-            camera = &mut self.camera.to_string(), layers = layers_str)
-    }
 
     pub fn remove_instance(&mut self, idx: rhai::INT) -> bool {
         // Find the layer in which
@@ -294,24 +237,14 @@ impl Scene {
 
     pub fn add_instance(&mut self, idx: rhai::INT, layer_idx: rhai::INT) -> bool {
         // Check if the layer index received is
-        // in bounds and if the instance index
-        // received isn't already in a layer.
+        // in bounds, if the instance index
+        // received isn't already in a layer,
+        // and if the instance index is in bounds.
         if layer_idx < (self.layers_len as rhai::INT) && layer_idx >= 0 &&
-        !self.layers.iter().any(|layer| { layer.instances.contains(&(idx as u32)) }) {
+        !self.layers.iter().any(|layer| { layer.instances.contains(&(idx as u32)) }) &&
+        (idx as usize) < self.objects_len+self.runtimes_len {
             //
             self.layers[layer_idx as usize].instances.push(idx as u32);
-            // Check if the instance index
-            // should extend the pool's bounds
-            if (idx as usize) >= self.objects_len+self.runtimes_len {
-                //
-                self.runtime_vacants.extend_from_slice((
-                ((self.objects_len+self.runtimes_len) as u32)..(idx as u32)
-                ).collect::<Vec<u32>>().as_slice());
-                //
-                self.runtimes_len = ((idx+1) as usize) - self.objects_len;
-                //
-                return true;
-            }
             // Check if the instance index was
             // in the "vacant runtime objects list"
             if let Some((index,&_)) = self.runtime_vacants.iter().enumerate()
@@ -331,37 +264,18 @@ impl Scene {
         //
         let mut layers_vec: Vec<Layer> = Vec::new();
         //
-        for map in config["layers"].clone().into_typed_array::<Map>()
-        .expect("Every scene's config should contain a 'layers' array, which should only have object-like members.") {
+        for name in config["layers"].clone().into_typed_array::<String>()
+        .expect("Every scene's config should contain a 'layers' array, which should only have strings.") {
             //
-            layers_vec.push( Layer { 
-                name: map["name"].clone().into_string()
-                .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."),
-                instances: {
-                    //
-                    let mut instances_vec: Vec<u32> = Vec::new();
-                    //
-                    for index in map["instances"].clone().into_array()
-                    .expect(concat!("Every member in the 'layers' array of a scene's config should",
-                    " have a 'instances' array, which should only have object-like members.")) {
-                        //
-                        instances_vec.push( dynamic_to_number(&index)
-                            .expect(concat!("Every member in an 'instances' array of a 'layers' array",
-                            " of a scene's config should contain an integer 'index' attribute.")) as u32
-                        );
-                    }
-                    instances_vec
-                }
-            } );
+            layers_vec.push( Layer { name, instances: { Vec::new() } } );
         }
         //
+        let camera_info = config["camera"].clone_cast::<Map>();
+        //
+        let color = hex_color_to_rgba(&camera_info["color"].clone().into_string()
+        .expect("Every 'camera' object in a scene's config should contain a 'color' string attribute."));
+        //
         Self {
-            //
-            width: dynamic_to_number(&config["width"])
-            .expect("Every scene's config should contain an integer 'width' attribute.") as f32,
-            //
-            height: dynamic_to_number(&config["height"])
-            .expect("Every scene's config should contain an integer 'height' attribute.") as f32,
             //
             objects_len: config["object-instances"].clone().into_array()
             .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
@@ -372,22 +286,26 @@ impl Scene {
             //
             runtime_vacants: Vec::new(),
             //
-            in_color: config["background-color"].clone().into_string()
-            .expect("Every scene's config should contain a string 'background-color' attribute."),
-            //
-            out_color: config["outside-color"].clone().into_string()
-            .expect("Every scene's config should contain a string 'outside-color' attribute."),
-            //
             camera: Camera {
                 //
                 position: ElemPoint { 
-                    x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
-                    .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
-                    y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
-                    .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
+                    x: dynamic_to_number(&camera_info["x"])
+                    .expect("Every 'camera' object in a scene's config should contain a 'x' float attribute."), 
+                    y: dynamic_to_number(&camera_info["y"])
+                    .expect("Every 'camera' object in a scene's config should contain a 'y' float attribute.") 
                 }, 
                 //
-                zoom: 1 as f32 
+                zoom: dynamic_to_number(&camera_info["zoom"])
+                .expect("Every 'camera' object in a scene's config should contain a 'zoom' float attribute."),
+                //
+                color: ElemColor {
+                    r: color[0],
+                    g: color[1],
+                    b: color[2],
+                    a: dynamic_to_number(&camera_info["alpha"])
+                    .expect(concat!("Every 'camera' object in a scene's config should",
+                    " contain a 'alpha' integer attribute.")) as u8
+                }
             },
             //
             layers: layers_vec,
@@ -399,48 +317,21 @@ impl Scene {
         //
         let mut i = 0_usize;
         //
-        for map in config["layers"].clone().into_typed_array::<Map>()
-        .expect("Every scene's config should contain a 'layers' array, which should only have object-like members.") {
+        for name in config["layers"].clone().into_typed_array::<String>()
+        .expect("Every scene's config should contain a 'layers' array, which should only have strings.") {
             //
             if i < self.layers.len() {
                 //
-                self.layers[i].name.clear();
-                self.layers[i].name.push_str(&map["name"].clone().into_string()
-                .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."));
+                self.layers[i].name = name;
                 
                 //
                 self.layers[i].instances.clear();
-                for index in map["instances"].clone().into_array()
-                .expect(concat!("Every member in the 'layers' array of a scene's config should",
-                " have a 'instances' array, which should only have object-like members.")) {
-                    //
-                    self.layers[i].instances.push(dynamic_to_number(&index)
-                    .expect(concat!("Every member in an 'instances' array of a 'layers' array",
-                    " of a scene's config should contain an integer 'index' attribute.")) as u32);
-                }
                 //
                 i += 1;
                 continue;
             }
             //
-            self.layers.push( Layer { 
-                name: map["name"].clone().into_string()
-                .expect("Every member in the 'layers' array of a scene's config should have a string 'name' attribute."),
-                instances: {
-                    //
-                    let mut instances_vec: Vec<u32> = Vec::new();
-                    //
-                    for index in map["instances"].clone().into_array()
-                    .expect(concat!("Every member in the 'layers' array of a scene's config should",
-                    " have a 'instances' array, which should only have object-like members.")) {
-                        //
-                        instances_vec.push(dynamic_to_number(&index)
-                        .expect(concat!("Every member in an 'instances' array of a 'layers' array",
-                        " of a scene's config should contain an integer 'index' attribute.")) as u32);
-                    }
-                    instances_vec
-                }
-            } );
+            self.layers.push( Layer { name, instances: Vec::new() } );
             //
             i += 1;
         }
@@ -454,30 +345,113 @@ impl Scene {
         self.objects_len = config["object-instances"].clone().into_array()
         .expect("Every scene's config should contain an array 'object-instances' attribute.").len();
         //
-        self.width = dynamic_to_number(&config["width"])
-        .expect("Every scene's config should contain an integer 'width' attribute.") as f32;
+        let camera_info = config["camera"].clone_cast::<Map>();
         //
-        self.height = dynamic_to_number(&config["height"])
-        .expect("Every scene's config should contain an integer 'height' attribute.") as f32;
-        //
-        self.in_color.clear();
-        self.in_color.push_str(&config["background-color"].clone().into_string()
-        .expect("Every scene's config should contain a string 'background-color' attribute."));
-        //
-        self.out_color.clear();
-        self.out_color.push_str(&config["outside-color"].clone().into_string()
-        .expect("Every scene's config should contain a string 'outside-color' attribute."));
+        let color = hex_color_to_rgba(&camera_info["color"].clone().into_string()
+        .expect("Every 'camera' object in a scene's config should contain a 'color' string attribute."));
         //
         self.camera = Camera {
             //
             position: ElemPoint { 
-                x: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["x"])
-                .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes."), 
-                y: dynamic_to_number(&config["camera-position"].clone_cast::<Map>()["y"])
-                .expect("Every scene's config should contain a 'camera-position' object with 'x' and 'y' float attributes.") 
+                x: dynamic_to_number(&camera_info["x"])
+                .expect("Every 'camera' object in a scene's config should contain a 'x' float attribute."), 
+                y: dynamic_to_number(&camera_info["y"])
+                .expect("Every 'camera' object in a scene's config should contain a 'y' float attribute.") 
             }, 
             //
-            zoom: 1 as f32,
+            zoom: dynamic_to_number(&camera_info["zoom"])
+            .expect("Every 'camera' object in a scene's config should contain a 'zoom' float attribute."),
+            //
+            color: ElemColor {
+                r: color[0],
+                g: color[1],
+                b: color[2],
+                a: dynamic_to_number(&camera_info["alpha"])
+                .expect(concat!("Every 'camera' object in a scene's config should",
+                " contain a 'alpha' integer attribute.")) as u8
+            }
         };
+    }
+}
+
+//
+#[derive(Clone)]
+pub struct Game {
+    pub cur_scene: u32,
+    pub canvas_width: u32,
+    pub canvas_height: u32,
+    pub version: [u8; 4],
+    pub clear_red: u8,
+    pub clear_green: u8,
+    pub clear_blue: u8,
+    pub fps: u16,
+}
+
+impl Game {
+    //
+    pub fn get_cur_scene(&mut self) -> rhai::INT { self.cur_scene as rhai::INT }
+    pub fn get_canvas_width(&mut self) -> rhai::INT { self.canvas_width as rhai::INT }
+    pub fn get_canvas_height(&mut self) -> rhai::INT { self.canvas_height as rhai::INT }
+    pub fn get_version(&mut self) -> Dynamic { self.version.iter().map(|&num|
+        { Dynamic::from_int(num as rhai::INT) }).collect::<Vec<Dynamic>>().into() }
+    pub fn get_clear_red(&mut self) -> rhai::INT { self.clear_red as rhai::INT }
+    pub fn get_clear_green(&mut self) -> rhai::INT { self.clear_green as rhai::INT }
+    pub fn get_clear_blue(&mut self) -> rhai::INT { self.clear_blue as rhai::INT }
+    pub fn get_fps(&mut self) -> rhai::INT { self.fps as rhai::INT }
+
+    //
+    pub fn set_cur_scene(&mut self, value: rhai::INT) -> Result<(), Box<rhai::EvalAltResult>> { 
+        //
+        let kind = get_element_type(value as u32);
+        //
+        if kind == 2 {
+            //
+            self.cur_scene = value as u32;
+            //
+            Ok(())
+        } else {
+            //
+            Err("Tried to switch to a scene that doesn't exist.".into())
+        }
+    }
+    //
+    pub fn set_canvas_width(&mut self, value: rhai::INT) { self.canvas_width = value as u32; }
+    pub fn set_canvas_height(&mut self, value: rhai::INT) { self.canvas_height = value as u32; }
+    pub fn set_clear_red(&mut self, value: rhai::INT) { self.clear_red = value as u8; }
+    pub fn set_clear_green(&mut self, value: rhai::INT) { self.clear_green = value as u8; }
+    pub fn set_clear_blue(&mut self, value: rhai::INT) { self.clear_blue = value as u8; }
+    pub fn set_fps(&mut self, value: rhai::INT) { self.fps = value as u16; }
+    //
+    pub fn new(config: &Map) -> Self {
+        //
+        let color = hex_color_to_rgba(&config["clear-color"].clone().into_string()
+        .expect("The state manager's config should contain a 'clear-color' string attribute."));
+        //
+        let version_vec = config["version"].clone().into_array()
+        .expect("The state manager's config should contain a 'version' integer array attribute.");
+        //
+        Self {
+            cur_scene: dynamic_to_number(&config["initial-scene"])
+            .expect("The state manager's config should contain a 'initial-scene' integer attribute.") as u32,
+            canvas_width: dynamic_to_number(&config["canvas-width"])
+            .expect("The state manager's config should contain a 'canvas-width' integer attribute.") as u32,
+            canvas_height: dynamic_to_number(&config["canvas-height"])
+            .expect("The state manager's config should contain a 'canvas-height' integer attribute.") as u32,
+            fps: dynamic_to_number(&config["fps"])
+            .expect("The state manager's config should contain a 'fps' integer attribute.") as u16,
+            version: [
+                dynamic_to_number(&version_vec[0])
+                .expect("The state manager's config should contain a 'version' integer array attribute.") as u8,
+                dynamic_to_number(&version_vec[1])
+                .expect("The state manager's config should contain a 'version' integer array attribute.") as u8,
+                dynamic_to_number(&version_vec[2])
+                .expect("The state manager's config should contain a 'version' integer array attribute.") as u8,
+                dynamic_to_number(&version_vec[3])
+                .expect("The state manager's config should contain a 'version' integer array attribute.") as u8
+            ],
+            clear_red: color[0],
+            clear_green: color[1],
+            clear_blue: color[2],
+        }
     }
 }

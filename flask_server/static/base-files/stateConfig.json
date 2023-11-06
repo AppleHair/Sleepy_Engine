@@ -1,10 +1,9 @@
 {
-    "initial-scene": 1,
-    "fps": 60,
     "canvas-width": 960,
     "canvas-height": 540,
-    "browser-title": "2D Web Game",
+    "clear-color": "#000000",
+    "fps": 60,
     "version": [1,0,0,0],
-    "folder-name": "2dgamehtml5",
-    "output-name": "index"
+    "browser-title": "2D Web Game",
+    "initial-scene": 1
 }

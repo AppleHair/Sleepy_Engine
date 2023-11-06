@@ -44,10 +44,6 @@
                             <!--PREVIEW GOES HERE-->
                         </canvas>
                         <form id="sprite-config" class="config">
-                            <div class="json-field">
-                                <label>FPS</label>
-                                <input type="number" name="fps"/>
-                            </div>
                             <div name="origin" class="json-object">
                                 <label>Origin</label>
                                 <div class="json-field">
@@ -58,6 +54,10 @@
                                     <label>Y:</label>
                                     <input type="number" name="y"/>
                                 </div>
+                            </div>
+                            <div class="json-field">
+                                <label>FPS</label>
+                                <input type="number" name="fps"/>
                             </div>
                             <ol name="animations" class="json-array">
                                 <label>Animations</label>
@@ -117,7 +117,7 @@
                             <ol name="sprites" class="json-array">
                                 <label>Sprites</label>
                                 <div class="li-template">
-                                    <div class="json-field sprite-reference">
+                                    <div class="json-field">
                                         <label>ID:</label>
                                         <input type="number" value="0"/>
                                     </div>
@@ -126,26 +126,24 @@
                                 <!-- LIST ITEMS GO HERE-->
                                 <div class="plus-button"></div>
                             </ol>
-                            <ol name="collision-boxes" class="json-array">
-                                <label>Collision Boxes</label>
+                            <ol name="audios" class="json-array">
+                                <label>Audios</label>
                                 <div class="li-template">
-                                    <div class="json-object">
-                                        <div class="json-field">
-                                            <label>X1:</label>
-                                            <input type="number" name="x1" value="10"/>
-                                        </div>
-                                        <div class="json-field">
-                                            <label>Y1:</label>
-                                            <input type="number" name="y1" value="10"/>
-                                        </div>
-                                        <div class="json-field">
-                                            <label>X2:</label>
-                                            <input type="number" name="x2" value="10"/>
-                                        </div>
-                                        <div class="json-field">
-                                            <label>Y2:</label>
-                                            <input type="number" name="y2" value="10"/>
-                                        </div>
+                                    <div class="json-field">
+                                        <label>ID:</label>
+                                        <input type="number" value="0"/>
+                                    </div>
+                                    <div class="minus-button"></div>
+                                </div>
+                                <!-- LIST ITEMS GO HERE-->
+                                <div class="plus-button"></div>
+                            </ol>
+                            <ol name="fonts" class="json-array">
+                                <label>Fonts</label>
+                                <div class="li-template">
+                                    <div class="json-field">
+                                        <label>ID:</label>
+                                        <input type="number" value="0"/>
                                     </div>
                                     <div class="minus-button"></div>
                                 </div>
@@ -154,24 +152,8 @@
                             </ol>
                         </form>
                         <form id="scene-config" class="config">
-                            <div class="json-field">
-                                <label>Width</label>
-                                <input type="number" name="width"/>
-                            </div>
-                            <div class="json-field">
-                                <label>Height</label>
-                                <input type="number" name="height"/>
-                            </div>
-                            <div class="json-field">
-                                <label>Inside Color</label>
-                                <input type="color" name="background-color"/>
-                            </div>
-                            <div class="json-field">
-                                <label>Outside Color</label>
-                                <input type="color" name="outside-color"/>
-                            </div>
-                            <div name="camera-position" class="json-object">
-                                <label>Camera Position</label>
+                            <div name="camera" class="json-object">
+                                <label>Camera</label>
                                 <div class="json-field">
                                     <label>X:</label>
                                     <input type="number" name="x"/>
@@ -180,14 +162,30 @@
                                     <label>Y:</label>
                                     <input type="number" name="y"/>
                                 </div>
+                                <div class="json-field">
+                                    <label>Zoom:</label>
+                                    <input type="number" name="zoom"/>
+                                </div>
+                                <div class="json-field">
+                                    <label>Color</label>
+                                    <input type="color" name="color"/>
+                                </div>
+                                <div class="json-field">
+                                    <label>Alpha:</label>
+                                    <input type="number" name="alpha"/>
+                                </div>
                             </div>
                             <ol name="object-instances" class="json-array">
                                 <label>Object Instances</label>
                                 <div class="li-template">
-                                    <div class="json-object object-instance">
-                                        <div class="json-field object-instance">
+                                    <div class="json-object">
+                                        <div class="json-field">
                                             <label>ID: </label>
                                             <input type="number" name="id" value="0"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Layer: </label>
+                                            <input type="number" name="layer" value="-1"/>
                                         </div>
                                         <div class="json-field">
                                             <label>X: </label>
@@ -196,6 +194,22 @@
                                         <div class="json-field">
                                             <label>Y: </label>
                                             <input type="number" name="y" value="0"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Scale X: </label>
+                                            <input type="number" name="scale-x" value="1"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Scale Y: </label>
+                                            <input type="number" name="scale-y" value="1"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Color</label>
+                                            <input type="color" name="color" value="#FFFFFF"/>
+                                        </div>
+                                        <div class="json-field">
+                                            <label>Alpha:</label>
+                                            <input type="number" name="alpha" value="255"/>
                                         </div>
                                     </div>
                                     <div class="minus-button"></div>
@@ -206,21 +220,8 @@
                             <ol name="layers" class="json-array">
                                 <label>Layers</label>
                                 <div class="li-template">
-                                    <div class="json-object">
-                                        <div class="json-field">
-                                            <input type="text" name="name" placeholder="Name" autocomplete="off" value="new layer"/>
-                                        </div>
-                                        <ol name="instances" class="json-array">
-                                            <label>Instances</label>
-                                            <div class="li-template">
-                                                <div class="json-field instance-index">
-                                                    <input type="number" value="0"/>
-                                                </div>
-                                                <div class="minus-button"></div>
-                                            </div>
-                                            <!-- LIST ITEMS GO HERE-->
-                                            <div class="plus-button"></div>
-                                        </ol>
+                                    <div class="json-field">
+                                        <input type="text" placeholder="Name" autocomplete="off" value="new layer"/>
                                     </div>
                                     <div class="minus-button"></div>
                                 </div>
@@ -229,26 +230,6 @@
                             </ol>
                         </form>
                         <form id="state-config" class="config" style="padding-inline: 5rem;">
-                            <div class="json-field scene-reference">
-                                <label>Initial Scene ID</label>
-                                <input type="number" name="initial-scene"/>
-                            </div>
-                            <div class="json-field">
-                                <label>Browser Title</label>
-                                <input type="text" name="browser-title" autocomplete="off"/>
-                            </div>
-                            <div class="json-field">
-                                <label>Folder Name</label>
-                                <input type="text" name="folder-name" autocomplete="off"/>
-                            </div>
-                            <div class="json-field">
-                                <label>Output Name</label>
-                                <input type="text" name="output-name" autocomplete="off"/>
-                            </div>
-                            <div class="json-field">
-                                <label>FPS</label>
-                                <input type="number" name="fps"/>
-                            </div>
                             <div class="json-field">
                                 <label>Canvas Width</label>
                                 <input type="number" name="canvas-width"/>
@@ -256,6 +237,14 @@
                             <div class="json-field">
                                 <label>Canvas Height</label>
                                 <input type="number" name="canvas-height"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Clear Color</label>
+                                <input type="color" name="clear-color"/>
+                            </div>
+                            <div class="json-field">
+                                <label>FPS</label>
+                                <input type="number" name="fps"/>
                             </div>
                             <ol name="version" class="json-array">
                                 <label>Version</label>
@@ -280,6 +269,14 @@
                                     </div>
                                 </li>
                             </ol>
+                            <div class="json-field">
+                                <label>Browser Title</label>
+                                <input type="text" name="browser-title" autocomplete="off" placeholder="Title"/>
+                            </div>
+                            <div class="json-field">
+                                <label>Initial Scene</label>
+                                <input type="number" name="initial-scene"/>
+                            </div>
                             <div class="json-field" id="game-icon">
                                 <label id="game-icon-label" for="game-icon-input">Game Icon<img/></label>
                                 <input type="file" accept=".ico" id="game-icon-input"/>

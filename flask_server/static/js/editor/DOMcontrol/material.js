@@ -188,7 +188,6 @@ const configForms = {
     'object': document.querySelector("#object-config"),
     'scene': document.querySelector("#scene-config"),
     'state': document.querySelector("#state-config"),
-    'project': document.querySelector("#project-config")
 };
 
 //
@@ -236,10 +235,6 @@ function configSetup() {
         //
         const classToCheck = input.parentNode.className;
         //
-        if ((classToCheck.includes("instance") || classToCheck.includes("reference")) && input.value == 0) {
-            return;
-        }
-        //
         onChangeTo['config'](configInfo);
     });
 
@@ -255,10 +250,6 @@ function configSetup() {
         if (button.className == "plus-button") {
             //
             const item = addItemToConfigArray(button.parentNode, getJSONScope(button).length);
-            //
-            if (item.className.includes("instance")) {
-                return;
-            }
         //
         } else {
             const li = button.parentNode;

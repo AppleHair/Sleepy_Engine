@@ -1,15 +1,5 @@
 {
-    "width": 960,
-    "height": 540,
-    "background-color": "#000000",
-    "outside-color": "#000000",
     "object-instances": [],
-    "camera-position": {"x": 0, "y": 0},
-    "layers":
-    [
-        {
-            "name": "layer 1",
-            "instances": []
-        }
-    ]
+    "camera": {"x": 0, "y": 0, "zoom": 1, "color": "#FFFFFF", "alpha": 255},
+    "layers":["layer 1"]
 }

@@ -110,12 +110,13 @@ impl AssetDefinition {
 }
 
 //
-pub fn create_rendering_components(canvas_width: i32, canvas_height: i32)
+pub fn create_rendering_components(game: &element::Game)
  -> Result<(WebGlRenderingContext, WebGlProgram,
 HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
     //
     let gl_context = create_context(
-    canvas_width, canvas_height)?;
+    game.canvas_width as i32, game.canvas_height as i32,
+    [game.clear_red, game.clear_green, game.clear_blue])?;
     //
     let (gl_program, 
     data_locations) = 
@@ -189,12 +190,6 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
 
     } else { return Err("Couldn't find attribute 'a_texindex'".into()); }
 
-    //
-    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_resolution") {
-        //
-        gl_context.uniform2f(Some(location), canvas_width as f32, canvas_height as f32);
-
-    } else { return Err("Couldn't find uniform 'u_resolution'".into()); }
 
     // Get the maximun texture units we can use on the fragment shader
     let max_texture_units = gl_context
@@ -291,17 +286,23 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
 //
 pub fn render_scene(gl_context: &WebGlRenderingContext, gl_program: &WebGlProgram,
 data_locations: &HashMap<String,ProgramDataLocation>, vertex_buffer: &web_sys::WebGlBuffer,
-index_buffer: &web_sys::WebGlBuffer, scene_props: &element::Scene, asset_defs: &HashMap<u32,Result<AssetDefinition, JsValue>>,
+index_buffer: &web_sys::WebGlBuffer, game: &element::Game, scene_props: &element::Scene, asset_defs: &HashMap<u32,Result<AssetDefinition, JsValue>>,
 object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     gl_context.use_program(Some(&gl_program));
-
+    // Set the clear color.
+    gl_context.clear_color(from_0_225_to_0_1(game.clear_red),
+    from_0_225_to_0_1(game.clear_green), from_0_225_to_0_1(game.clear_blue), 1.0);
+    //
     {
-        // Get the outside-color of the stage.
-        let outcolor = hex_color_to_rgba(&scene_props.out_color);
-        // Set the clear color to the outside color.
-        gl_context.clear_color(outcolor[0], outcolor[1], outcolor[2], outcolor[3]);
-    }// 'outcolor' drops here
+        // Convert the canvas element into an HTMLCanvasElement object.
+        let canvas: web_sys::HtmlCanvasElement = gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+        // Set the desired width and height of the canvas,
+        // which is the size the canvas will be rendered
+        // at regardless of how CSS displays it.
+        canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
+        canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
+    } //
 
     // Clear the canvas
     gl_context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
@@ -322,13 +323,25 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
         gl_context.uniform1f(Some(location), scene_props.camera.zoom);
 
     } else { return Err("Couldn't find uniform 'u_zoom'".into()); }
+
+    //
+    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_screen_color") {
+        //
+        gl_context.uniform4f(Some(location), from_0_225_to_0_1(scene_props.camera.color.r),
+        from_0_225_to_0_1(scene_props.camera.color.g),from_0_225_to_0_1(scene_props.camera.color.b),
+        from_0_225_to_0_1(scene_props.camera.color.a));
+
+    } else { return Err("Couldn't find uniform 'u_screen_color'".into()); }
+
+    //
+    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_resolution") {
+        //
+        gl_context.uniform2f(Some(location), game.canvas_width as f32, game.canvas_height as f32);
+
+    } else { return Err("Couldn't find uniform 'u_resolution'".into()); }
     
     //
     let mut vertices: Vec<f32> = Vec::new();
-    // Add a quad for the scene.
-    vertices.extend_from_slice(&generate_colored_quad(0.0, 0.0,
-    scene_props.width.floor(), scene_props.height.floor(),
-    hex_color_to_rgba(&scene_props.in_color)));
 
     // Get the maximun texture units we can use on the fragment shader
     let max_texture_units = gl_context
@@ -364,15 +377,15 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
             let object_or_sprite = Rc::clone(&object.properties);
             let mut object_or_sprite = object_or_sprite.borrow_mut();
             let mut object_or_sprite = object_or_sprite
-                .write_lock::<element::Object>()
-                .expect("write lock should succeed.");
+            .write_lock::<element::Object>()
+            .expect("write lock should succeed.");
 
             // Here the object will switch to a sprite.
             // This needs to be done because the sprite is
             // owned by the object, and borrowing it at the
             // same time with the mutable borrow of the object
             // will violate the borrowing rules.
-            {
+            if object_or_sprite.sprites.len > 0 {
                 // Get the object's current sprite asset's id.
                 let cur_sprite_asset_id = object_or_sprite.sprites.cur_asset;
                 // Receive a mutable borrow of the active sprite.
@@ -380,154 +393,169 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
                 .get_mut(cur_sprite_asset_id)
                 .expect("the cur_asset index should exist in the members array of an AssetList.");
                 //
-                let texture_asset = asset_defs.get(&object_or_sprite.id)
-                .expect("the id included in a sprites array of an object should be correct").as_ref()?;
-                //
-                let gl_texture: &WebGlTexture;
-                //
-                match &texture_asset.asset_data {
-                    AssetData::ImageData { width, height, texture } => {
-                        tex_width = *width as f32;
-                        tex_height = *height as f32;
-                        gl_texture = texture;
-                    }
-                    //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
-                }
-
-                //
-                let fps = engine_api::dynamic_to_number(&texture_asset.config["fps"])
-                .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
-                
-                //
-                let mut found_anim = false;
-                //
-                for anim in texture_asset.config["animations"]
-                .clone().into_typed_array::<rhai::Map>().expect(concat!("Every sprite's config",
-                " should have an 'animations' array, which contains object-like members.")) {
+                if let Some(Ok(texture_asset)) = asset_defs.get(&object_or_sprite.id) {
                     //
-                    if anim["name"].clone().into_string().expect(concat!("Every",
-                    " member of the 'animations' array in a sprite's config should",
-                    " have a 'name' property with a string.")) != object_or_sprite.cur_animation {
-                        continue;
-                    }
+                    let gl_texture: &WebGlTexture;
                     //
-                    found_anim = true;
-                    //
-                    let frames = anim["frames"]
-                    .clone().into_typed_array::<rhai::Map>().expect(concat!("Every",
-                    " member of the 'animations' array in a sprite's config should",
-                    " have a 'frames' array, which contains object-like members."));
-                    //
-                    if !object_or_sprite.is_animation_finished {
-                        //
-                        object_or_sprite.animation_time += elapsed;
-                        object_or_sprite.cur_frame = ((fps as f64) * object_or_sprite.animation_time * 0.001).floor() as u32;
-                        //
-                        if object_or_sprite.cur_frame >= frames.len() as u32 {
-                            //
-                            object_or_sprite.cur_frame = (frames.len() - 1) as u32;
-                            //
-                            if !object_or_sprite.repeat {
-                                object_or_sprite.is_animation_finished = true;
-                            } else {
-                                object_or_sprite.cur_frame = 0;
-                                object_or_sprite.animation_time = 0.0;
-                            }
+                    match &texture_asset.asset_data {
+                        AssetData::ImageData { width, height, texture } => {
+                            tex_width = *width as f32;
+                            tex_height = *height as f32;
+                            gl_texture = texture;
                         }
+                        //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
                     }
+
                     //
-                    let area = frames[object_or_sprite.cur_frame as usize]["area"]
-                    .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'area' object-like property");
-                    //
-                    texcoord_1 = [
-                        engine_api::dynamic_to_number(&area["x1"])
-                        .expect("x1 should be a number.") / tex_width, 
-                        engine_api::dynamic_to_number(&area["y1"])
-                        .expect("y1 should be a number.") / tex_height
-                    ];
-                    //
-                    texcoord_2 = [
-                        1.0 - (engine_api::dynamic_to_number(&area["x2"])
-                        .expect("x2 should be a number.") / tex_width),
-                        1.0 - (engine_api::dynamic_to_number(&area["y2"])
-                        .expect("y2 should be a number.") / tex_height)
-                    ];
-                    //
-                    quad_width = tex_width - (
-                        engine_api::dynamic_to_number(&area["x1"])
-                        .expect("x1 should be a number.") +
-                        engine_api::dynamic_to_number(&area["x2"])
-                        .expect("x2 should be a number.")
-                    );
-                    //
-                    quad_height = tex_height - (
-                        engine_api::dynamic_to_number(&area["y1"])
-                        .expect("y1 should be a number.") +
-                        engine_api::dynamic_to_number(&area["y2"])
-                        .expect("y2 should be a number.")
-                    );
+                    let fps = engine_api::dynamic_to_number(&texture_asset.config["fps"])
+                    .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
                     
                     //
-                    let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
-                    .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'offset' object-like property");
+                    let mut found_anim = false;
                     //
-                    let origin = texture_asset.config["origin"]
-                    .clone().try_cast::<rhai::Map>().expect(concat!("Every sprite's config should",
-                    " have a 'origin' object-like property"));
-                    //
-                    origin_minus_offset = [
-                        engine_api::dynamic_to_number(&origin["x"])
-                        .expect("origin.x should be a number") -
-                        engine_api::dynamic_to_number(&offset["x"])
-                        .expect("offset.x should be a number"),
-                        engine_api::dynamic_to_number(&origin["y"])
-                        .expect("origin.y should be a number") -
-                        engine_api::dynamic_to_number(&offset["y"])
-                        .expect("offset.y should be a number")
-                    ];
-                    //
-                    break;
-                }
+                    for anim in texture_asset.config["animations"]
+                    .clone().into_typed_array::<rhai::Map>().expect(concat!("Every sprite's config",
+                    " should have an 'animations' array, which contains object-like members.")) {
+                        //
+                        if anim["name"].clone().into_string().expect(concat!("Every",
+                        " member of the 'animations' array in a sprite's config should",
+                        " have a 'name' property with a string.")) != object_or_sprite.cur_animation {
+                            continue;
+                        }
+                        //
+                        found_anim = true;
+                        //
+                        let frames = anim["frames"]
+                        .clone().into_typed_array::<rhai::Map>().expect(concat!("Every",
+                        " member of the 'animations' array in a sprite's config should",
+                        " have a 'frames' array, which contains object-like members."));
+                        //
+                        if !object_or_sprite.is_animation_finished {
+                            //
+                            object_or_sprite.animation_time += elapsed;
+                            object_or_sprite.cur_frame = ((fps as f64) * object_or_sprite.animation_time * 0.001).floor() as u32;
+                            //
+                            if object_or_sprite.cur_frame >= frames.len() as u32 {
+                                //
+                                object_or_sprite.cur_frame = (frames.len() - 1) as u32;
+                                //
+                                if !object_or_sprite.repeat {
+                                    object_or_sprite.is_animation_finished = true;
+                                } else {
+                                    object_or_sprite.cur_frame = 0;
+                                    object_or_sprite.animation_time = 0.0;
+                                }
+                            }
+                        }
+                        //
+                        let area = frames[object_or_sprite.cur_frame as usize]["area"]
+                        .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'area' object-like property");
+                        //
+                        texcoord_1 = [
+                            engine_api::dynamic_to_number(&area["x1"])
+                            .expect("x1 should be a number.") / tex_width, 
+                            engine_api::dynamic_to_number(&area["y1"])
+                            .expect("y1 should be a number.") / tex_height
+                        ];
+                        //
+                        texcoord_2 = [
+                            1.0 - (engine_api::dynamic_to_number(&area["x2"])
+                            .expect("x2 should be a number.") / tex_width),
+                            1.0 - (engine_api::dynamic_to_number(&area["y2"])
+                            .expect("y2 should be a number.") / tex_height)
+                        ];
+                        //
+                        quad_width = tex_width - (
+                            engine_api::dynamic_to_number(&area["x1"])
+                            .expect("x1 should be a number.") +
+                            engine_api::dynamic_to_number(&area["x2"])
+                            .expect("x2 should be a number.")
+                        );
+                        //
+                        quad_height = tex_height - (
+                            engine_api::dynamic_to_number(&area["y1"])
+                            .expect("y1 should be a number.") +
+                            engine_api::dynamic_to_number(&area["y2"])
+                            .expect("y2 should be a number.")
+                        );
+                        
+                        //
+                        let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
+                        .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'offset' object-like property");
+                        //
+                        let origin = texture_asset.config["origin"]
+                        .clone().try_cast::<rhai::Map>().expect(concat!("Every sprite's config should",
+                        " have a 'origin' object-like property"));
+                        //
+                        origin_minus_offset = [
+                            engine_api::dynamic_to_number(&origin["x"])
+                            .expect("origin.x should be a number") -
+                            engine_api::dynamic_to_number(&offset["x"])
+                            .expect("offset.x should be a number"),
+                            engine_api::dynamic_to_number(&origin["y"])
+                            .expect("origin.y should be a number") -
+                            engine_api::dynamic_to_number(&offset["y"])
+                            .expect("offset.y should be a number")
+                        ];
+                        //
+                        break;
+                    }
 
-                //
-                if !found_anim {
                     //
+                    if !found_anim {
+                        //
+                        continue;
+                    }
+
+                    //
+                    if let Some((idx, _)) = texture_slots.iter()
+                    .enumerate().find(|&slot| { object_or_sprite.id == *slot.1 }) {
+                        //
+                        unit_id = idx as f32;
+                    } else if texture_slots.len() < (max_texture_units as usize) {
+                        //
+                        gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (texture_slots.len() as u32));
+                        //
+                        gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
+                        //
+                        texture_slots.push(object_or_sprite.id);
+                        //
+                        unit_id = (texture_slots.len() as f32)-1_f32;
+                    } else {
+                        //
+                        flush(&gl_context, &mut vertices, &vertex_buffer, &index_buffer);
+                        texture_slots.truncate(1);
+                        //
+                        gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (texture_slots.len() as u32));
+                        //
+                        gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
+                        //
+                        texture_slots.push(object_or_sprite.id);
+                        //
+                        unit_id = (texture_slots.len() as f32)-1_f32;
+                    }
+                } else if object_or_sprite.id == 0 {
+                    // we will render a colored quad
+                    // using our white texture.
+                    unit_id = 0.0; tex_width = 1.0;
+                    tex_height = 1.0; quad_width = 1.0;
+                    quad_height = 1.0; texcoord_1 = [0.0, 0.0];
+                    texcoord_2 = [0.0, 0.0]; origin_minus_offset = [0.0, 0.0];
+                } else {
+                    // we will skip this object
                     continue;
                 }
-
-                //
-                if let Some((idx, _)) = texture_slots.iter()
-                .enumerate().find(|&slot| { object_or_sprite.id == *slot.1 }) {
-                    //
-                    unit_id = idx as f32;
-                } else if texture_slots.len() < (max_texture_units as usize) {
-                    //
-                    gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (texture_slots.len() as u32));
-                    //
-                    gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
-                    //
-                    texture_slots.push(object_or_sprite.id);
-                    //
-                    unit_id = (texture_slots.len() as f32)-1_f32;
-                } else {
-                    //
-                    flush(&gl_context, &mut vertices, &vertex_buffer, &index_buffer);
-                    texture_slots.truncate(1);
-                    //
-                    gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (texture_slots.len() as u32));
-                    //
-                    gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
-                    //
-                    texture_slots.push(object_or_sprite.id);
-                    //
-                    unit_id = (texture_slots.len() as f32)-1_f32;
-                }
-            }// Here the sprite switches back to being an object.
-
+            } // Here the sprite switches back to being an object.
+            else {
+               // we will skip this object
+               continue; 
+            }
             //
             vertices.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor() - 
             (origin_minus_offset[0] * object_or_sprite.scale.x), object_or_sprite.position.y.floor() - 
-            (origin_minus_offset[1] * object_or_sprite.scale.y), quad_width * object_or_sprite.scale.x,
+            (origin_minus_offset[1] * object_or_sprite.scale.y), [from_0_225_to_0_1(object_or_sprite.color.r),
+            from_0_225_to_0_1(object_or_sprite.color.g),from_0_225_to_0_1(object_or_sprite.color.b),
+            from_0_225_to_0_1(object_or_sprite.color.a)], quad_width * object_or_sprite.scale.x,
             quad_height * object_or_sprite.scale.y, texcoord_1, texcoord_2,
             [tex_width, tex_height], [object_or_sprite.scale.x, object_or_sprite.scale.y],
             unit_id));
@@ -579,7 +607,7 @@ index_buffer: &web_sys::WebGlBuffer) {
     vertices.clear();
 }
 
-fn create_context(width: i32, height: i32)  -> Result<WebGlRenderingContext, JsValue> {
+fn create_context(width: i32, height: i32, color: [u8; 3])  -> Result<WebGlRenderingContext, JsValue> {
     // Get the page's document.
     let document = web_sys::window().unwrap().document().unwrap();
     // Get to canvas from the document.
@@ -664,6 +692,7 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
         varying float v_texindex;
 
         uniform float u_zoom;
+        uniform vec4 u_screen_color;
         uniform sampler2D u_textures[gl_MaxTextureImageUnits];
 
         void main() {
@@ -681,12 +710,12 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
 
             int index = int(v_texindex);
 
-            // gl_FragColor = texture2D(u_textures[index], texcoord) * v_color;
+            // gl_FragColor = texture2D(u_textures[index], texcoord) * v_color * u_screen_color;
             // ERROR: '[]' : Index expression must be constant
 
             for (int i=0; i<gl_MaxTextureImageUnits; i++) {
                 if (index == i) {
-                    gl_FragColor = texture2D(u_textures[i], texcoord) * v_color;
+                    gl_FragColor = texture2D(u_textures[i], texcoord) * v_color * u_screen_color;
                 }
             }
         }
@@ -733,6 +762,10 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
         .get_uniform_location(&gl_program, "u_zoom")
         .ok_or("Unable to get uniform location (u_zoom)")?
     ));
+    data_locations.insert(String::from("u_screen_color"), ProgramDataLocation::Uniform(gl_context
+        .get_uniform_location(&gl_program, "u_screen_color")
+        .ok_or("Unable to get uniform location (u_screen_color)")?
+    ));
     data_locations.insert(String::from("u_textures"), ProgramDataLocation::Uniform(gl_context
         .get_uniform_location(&gl_program, "u_textures")
         .ok_or("Unable to get uniform location (u_textures)")?
@@ -743,29 +776,10 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
 
 // Creates an array of f32 floats with
 // the vertices which should represent a 
-// desired colored rectangle, while only using
-// 5 arguments: x, y, width, height and color.
-fn generate_colored_quad(x: f32, y: f32,
-width: f32, height: f32, color: [f32; 4]) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
-    let x1 = x;
-    let x2 = x + width;
-    let y1 = y;
-    let y2 = y + height;
-    //  x, y, red, green, blue, alpha, texture_x(0-1), texture_y(0-1), tex_width, tex_height, scale_x, scale_y, texture_unit_id
-    [
-        x1, y1, color[0], color[1], color[2], color[3], 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
-        x2, y1, color[0], color[1], color[2], color[3], 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0,
-        x1, y2, color[0], color[1], color[2], color[3], 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
-        x2, y2, color[0], color[1], color[2], color[3], 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0,
-    ]
-}
-
-// Creates an array of f32 floats with
-// the vertices which should represent a 
 // desired textured rectangle, while only using
-// 7 arguments: x, y, width, height, texpoint_1,
+// 7 arguments: x, y, color, width, height, texpoint_1,
 // texpoint_2 and texture unit id.
-fn generate_textured_quad(x: f32, y: f32,
+fn generate_textured_quad(x: f32, y: f32, color: [f32; 4],
 width: f32, height: f32, texpoint_1: [f32; 2],
 texpoint_2: [f32; 2], tex_size: [f32; 2],
 scale: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize] {
@@ -773,45 +787,25 @@ scale: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTE
     let x2 = x + width;
     let y1 = y;
     let y2 = y + height;
-    //  x, y, red, green, blue, alpha, texture_x(0-1), texture_y(0-1), tex_width, tex_height, scale_x, scale_y, texture_unit_id
+    //  x, y, red, green, blue, alpha, texture_x(0-1), texture_y(0-1),
+    //  tex_width, tex_height, scale_x, scale_y, texture_unit_id
     [
-        x1, y1, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_1[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
-        x2, y1, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_1[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
-        x1, y2, 1.0, 1.0, 1.0, 1.0, texpoint_1[0], texpoint_2[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
-        x2, y2, 1.0, 1.0, 1.0, 1.0, texpoint_2[0], texpoint_2[1], tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x1, y1, color[0], color[1], color[2], color[3], texpoint_1[0], texpoint_1[1],
+        tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x2, y1, color[0], color[1], color[2], color[3], texpoint_2[0], texpoint_1[1],
+        tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x1, y2, color[0], color[1], color[2], color[3], texpoint_1[0], texpoint_2[1],
+        tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
+        x2, y2, color[0], color[1], color[2], color[3], texpoint_2[0], texpoint_2[1],
+        tex_size[0], tex_size[1], scale[0], scale[1], texunit_id,
     ]
 }
 
-// Receives a string borrow with a
-// hex color code (#RRGGBBAA / #RRGGBB),
-// and converts it into a slice of floats,
-// for use with the WebGL context.
-fn hex_color_to_rgba(hex: &str) -> [f32; 4] {
-    // Result slice with
-    // place-holder values
-    let mut result: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-    // Result slice index counter
-    let mut i = 0;
-    // Hex color string
-    // index counter
-    let mut si = 1;
-
-    while si < hex.len() {
-        // Convert the hex string into an
-        // integer, cast it to f32 and divide
-        // by 255, to make it range from 0 to 1.
-        result[i] = i64::from_str_radix(&hex[si..si+2], 16)
-        .expect("hex to i64 parse should succeed") as f32 / 255_f32;
-        // Increase hex color string
-        // index counter by 2.
-        si += 2;
-        // Increase result slice
-        // index counter by 1.
-        i += 1;
-    }
-    // Return the 
-    // result slice
-    result
+// Receives a byte and makes it
+// go from 0 to 1 instead of from
+// 0 to 255, for use with the WebGL context.
+fn from_0_225_to_0_1(color: u8) -> f32 {
+    return (color as f32) / 255_f32; 
 }
 
 // Compiles a shader and

@@ -1,33 +1,37 @@
 
-    // Object Element Template Script //
+  // Object Template Script //
 
 /*
-    You can add local variables to
-    this element in the scripts body.
+  Use the 'Object' API to access
+  this element's propertys.
 */
-
-// variables go here
 
 /*
-    This function runs when an instance of this
-    object is created. Use it to preform initial
-    operations on your variables.
+  You can add local variables to
+  this element in the scripts body.
 */
-fn create() {
-  // code goes here
+
+let variable = "Hello, World!";
+
+/*
+  This function runs when the scene loads.
+  Use it to preform initial operations on 
+  your variables.
+*/
+fn init() {
+  print(variable);
 }
 
 /*
-    This function runs every game frame.
-    Use it to define this object's behavior.
+  This function runs every game frame.
+  Use it to control the game's behavior.
 
-    elapsed - contains a number, which
-        represents the time elapsed from
-        the last frame (in milliseconds).
-        Use it to measure the time which
-        elapses through out this object's
-        presence in the game.
+  elapsed - contains a number, which
+    represents the time elapsed from
+    the last frame (in milliseconds).
+    Use it to measure the time which
+    elapses through out the game.
 */
 fn update(elapsed) {
-  // code goes here
+  
 }

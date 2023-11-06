@@ -89,14 +89,6 @@ impl Sprite {
         //
         Ok(())
     }
-
-    //
-    pub fn to_string(&mut self) -> String {
-        //
-        format!(
-        "Sprite {{\n\tid: {}, cur_animation: \"{}\", cur_frame: {},\n\tis_animation_finished: {}, animation_time: {}, repeat: {} \n}}",
-        self.id, self.cur_animation, self.cur_frame, self.is_animation_finished, self.animation_time, self.repeat)
-    }
 }
 
 impl Asset for Sprite {
@@ -160,14 +152,6 @@ impl Audio {
     pub fn set_repeat_start_time(&mut self, value: rhai::FLOAT) { self.repeat_start_time = value as f64; }
     pub fn set_repeat(&mut self, value: bool) { self.repeat = value; }
     pub fn set_paused(&mut self, value: bool) { self.paused = value; }
-
-    //
-    pub fn to_string(&mut self) -> String {
-        //
-        format!(
-        "Audio {{\n\tid: {}, tag: \"{}\", audio_time: {},\n\tpaused: {}, repeat: {}, repeat_start_time: {}, volume: {} \n}}",
-        self.id, self.tag, self.audio_time, self.paused, self.repeat, self.repeat_start_time, self.volume)
-    }
 }
 
 impl Asset for Audio {
@@ -199,12 +183,6 @@ impl Font {
     pub fn get_id_rhai(&mut self) -> rhai::INT { self.id.clone() as rhai::INT }
     pub fn get_text(&mut self) -> String { self.text.clone() }
     pub fn set_text(&mut self, value: &str) { self.text.clear(); self.text.push_str(value); }
-
-    //
-    pub fn to_string(&mut self) -> String {
-        //
-        format!("Font {{\n\tid: {}, text: \"{}\"\n}}",self.id, self.text)
-    }
 }
 
 impl Asset for Font {
