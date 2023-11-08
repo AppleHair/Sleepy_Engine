@@ -115,8 +115,7 @@ pub fn create_rendering_components(game: &element::Game)
 HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
     //
     let gl_context = create_context(
-    game.canvas_width as i32, game.canvas_height as i32,
-    [game.clear_red, game.clear_green, game.clear_blue])?;
+    game.canvas_width, game.canvas_height)?;
     //
     let (gl_program, 
     data_locations) = 
@@ -293,16 +292,6 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
     // Set the clear color.
     gl_context.clear_color(from_0_225_to_0_1(game.clear_red),
     from_0_225_to_0_1(game.clear_green), from_0_225_to_0_1(game.clear_blue), 1.0);
-    //
-    {
-        // Convert the canvas element into an HTMLCanvasElement object.
-        let canvas: web_sys::HtmlCanvasElement = gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
-        // Set the desired width and height of the canvas,
-        // which is the size the canvas will be rendered
-        // at regardless of how CSS displays it.
-        canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
-        canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
-    } //
 
     // Clear the canvas
     gl_context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
@@ -339,6 +328,20 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
         gl_context.uniform2f(Some(location), game.canvas_width as f32, game.canvas_height as f32);
 
     } else { return Err("Couldn't find uniform 'u_resolution'".into()); }
+
+    //
+    {
+        // Convert the canvas element into an HTMLCanvasElement object.
+        let canvas: web_sys::HtmlCanvasElement = gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+        // Set the desired width and height of the canvas,
+        // which is the size the canvas will be rendered
+        // at regardless of how CSS displays it.
+        canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
+        canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
+    } //
+
+    //
+    gl_context.viewport(0, 0, game.canvas_width as i32, game.canvas_height as i32);
     
     //
     let mut vertices: Vec<f32> = Vec::new();
@@ -607,7 +610,7 @@ index_buffer: &web_sys::WebGlBuffer) {
     vertices.clear();
 }
 
-fn create_context(width: i32, height: i32, color: [u8; 3])  -> Result<WebGlRenderingContext, JsValue> {
+fn create_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsValue> {
     // Get the page's document.
     let document = web_sys::window().unwrap().document().unwrap();
     // Get to canvas from the document.

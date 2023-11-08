@@ -378,8 +378,8 @@ impl Scene {
 #[derive(Clone)]
 pub struct Game {
     pub cur_scene: u32,
-    pub canvas_width: u32,
-    pub canvas_height: u32,
+    pub canvas_width: f32,
+    pub canvas_height: f32,
     pub version: [u8; 4],
     pub clear_red: u8,
     pub clear_green: u8,
@@ -390,8 +390,8 @@ pub struct Game {
 impl Game {
     //
     pub fn get_cur_scene(&mut self) -> rhai::INT { self.cur_scene as rhai::INT }
-    pub fn get_canvas_width(&mut self) -> rhai::INT { self.canvas_width as rhai::INT }
-    pub fn get_canvas_height(&mut self) -> rhai::INT { self.canvas_height as rhai::INT }
+    pub fn get_canvas_width(&mut self) -> rhai::FLOAT { self.canvas_width as rhai::FLOAT }
+    pub fn get_canvas_height(&mut self) -> rhai::FLOAT { self.canvas_height as rhai::FLOAT }
     pub fn get_version(&mut self) -> Dynamic { self.version.iter().map(|&num|
         { Dynamic::from_int(num as rhai::INT) }).collect::<Vec<Dynamic>>().into() }
     pub fn get_clear_red(&mut self) -> rhai::INT { self.clear_red as rhai::INT }
@@ -415,8 +415,8 @@ impl Game {
         }
     }
     //
-    pub fn set_canvas_width(&mut self, value: rhai::INT) { self.canvas_width = value as u32; }
-    pub fn set_canvas_height(&mut self, value: rhai::INT) { self.canvas_height = value as u32; }
+    pub fn set_canvas_width(&mut self, value: rhai::FLOAT) { self.canvas_width = value as f32; }
+    pub fn set_canvas_height(&mut self, value: rhai::FLOAT) { self.canvas_height = value as f32; }
     pub fn set_clear_red(&mut self, value: rhai::INT) { self.clear_red = value as u8; }
     pub fn set_clear_green(&mut self, value: rhai::INT) { self.clear_green = value as u8; }
     pub fn set_clear_blue(&mut self, value: rhai::INT) { self.clear_blue = value as u8; }
@@ -434,9 +434,9 @@ impl Game {
             cur_scene: dynamic_to_number(&config["initial-scene"])
             .expect("The state manager's config should contain a 'initial-scene' integer attribute.") as u32,
             canvas_width: dynamic_to_number(&config["canvas-width"])
-            .expect("The state manager's config should contain a 'canvas-width' integer attribute.") as u32,
+            .expect("The state manager's config should contain a 'canvas-width' float attribute.") as f32,
             canvas_height: dynamic_to_number(&config["canvas-height"])
-            .expect("The state manager's config should contain a 'canvas-height' integer attribute.") as u32,
+            .expect("The state manager's config should contain a 'canvas-height' float attribute.") as f32,
             fps: dynamic_to_number(&config["fps"])
             .expect("The state manager's config should contain a 'fps' integer attribute.") as u16,
             version: [

@@ -144,8 +144,9 @@ impl ElementResources {
             return Ok(());
         }
         //
-        if let Some(err) = engine.call_fn::<()>
-        (&mut self.scope, &self.definition.script, name, args).err() {
+        if let Some(err) = engine.call_fn_with_options::<()>
+        (rhai::CallFnOptions::new().eval_ast(false), &mut self.scope,
+        &self.definition.script, name, args).err() {
             //
             return Err(self.definition.row.to_err_string(&err.to_string()));
         }
@@ -297,15 +298,57 @@ impl ElementHandler {
     }
 }
 
-//
 pub fn create_api(element_defs: &Rc<RefCell<HashMap<u32,Result<Rc<ElementDefinition>, String>>>>) -> Result<(Engine,
 ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<HashMap<String, KeyState>>>), String> {
-    // Create an 'Engine'
+    // Create a rhai engine, into which all
+    // the API features will be registered.
     let mut engine = Engine::new_raw();
 
-    // Register API features to the 'Engine'
-    engine.on_print(|text| { log_1(&wasm_bindgen::JsValue::from_str(text)); })
-          .register_type_with_name::<element::ElemPoint>("Point")
+    // Per-Element Local APIs  //
+
+    // It's important to note that the
+    // per-element APIs will only be
+    // available in the global scope
+    // of the element's script, and in
+    // any callback scope that is related
+    // to the API (like the 'update' callback).
+    // However, if you need to use your local
+    // API in a non-API related function, which
+    // is declared in the same script, you can
+    // use the ! notation to give the function
+    // access to the caller's scope, which will
+    // let you use the local API in the function.
+
+    // This method is not recommended by the
+    // rhai book, so use it with caution, or
+    // try to find a better solution.
+    // for more information: https://rhai.rs/book/language/fn-parent-scope.html#admonition-caveat-emptor
+
+    /* Example:
+
+        fn example() {
+            print(Object.position.x);
+        }
+        // example(); // will raise an error: "Object is not defined"
+        example!(); // will print the x position of the object using the local API
+
+        fn better_example(obj) {
+            print(obj.position.x);
+            // do something with the clone of the object...
+        }
+        better_example(Object);
+
+        fn best_example(x) {
+            print(x);
+            // do something with the x position of the object...
+        }
+        best_example(Object.position.x);
+     */
+
+    // Register API types to the rhai
+    // engine, which will mainly be
+    // used for per-element local APIs.
+    engine.register_type_with_name::<element::ElemPoint>("Point")
           .register_get_set("x", element::ElemPoint::get_x, element::ElemPoint::set_x)
           .register_get_set("y", element::ElemPoint::get_y, element::ElemPoint::set_y)
           .register_type_with_name::<element::ElemColor>("Color")
@@ -360,53 +403,103 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Has
           .register_get_set("clear_blue", element::Game::get_clear_blue, element::Game::set_clear_blue)
           .register_get_set("fps", element::Game::get_fps, element::Game::set_fps)
           .register_get("cur_scene", element::Game::get_cur_scene)
-          .register_set("cur scene", element::Game::set_cur_scene)
+          .register_set("cur_scene", element::Game::set_cur_scene)
           .register_get("version", element::Game::get_version);
 
-    // Register the standard packages
-    let std_package = StandardPackage::new();
-    // Load the standard packages into the 'Engine'
-    std_package.register_into_engine(&mut engine);
-
     // Register a variable definition filter.
+    // This will prevent scripts from shadowing
+    // their own APIs by accident, and will raise
+    // an error whenever they do.
     engine.on_def_var(|is_runtime, info, _| {
         Ok((info.name != "Scene" && info.name != "Object" && info.name != "Game" && info.name != "State") || !is_runtime)
     });
 
-    //
+
+    // State Manager and Current Scene Creation  //
+
+    // Load the state manager's definition,
+    // which includes his configuration and script
     element_defs.borrow_mut().insert(0,
         ElementDefinition::new(&engine,
         TableRow::Metadata
     ));
 
-    // Create a new element instance for the state manager.
-    // This instance will borrow its definition and contain
-    // the element's 'Scope'.
+    // Create a new element handler for the state manager.
+    // This handler will take a counted reference to this
+    // element's definition as long as no error occured
+    // while loading the definition. If an error did occur,
+    // it will be propagated back to the caller.
     let state_manager = ElementHandler::new(
         element_defs.borrow().get(&0).unwrap().as_ref()?,
         None
     )?;
 
-    // Receive the rowid of the initial scene from the the state manager's config
+    // Receive the rowid of the initial scene from the the state manager.
     let cur_scene_id = state_manager.properties.borrow()
     .read_lock::<element::Game>().expect("read_lock cast should succeed").cur_scene;
-    //
+    // Load the initial scene's definition.
     element_defs.borrow_mut().insert(cur_scene_id, 
         ElementDefinition::new(&engine,
         TableRow::Element(cur_scene_id, 2)
     ));
-    //
+    // Create a new element handler for the current
+    // scene, or return an error if the definition
+    // couldn't be loaded.
     let cur_scene = ElementHandler::new(
         element_defs.borrow().get(&cur_scene_id).unwrap().as_ref()?,
         None
     )?;
 
+
+    //  Always Available Global API  //
+    
+    // The following lines declare global
+    // API functions, which will always be
+    // available for scripts, even from
+    // non-API related functions.
+
+    // Register the standard packages,
+    // which contain many common librarys
+    // used by a programming language, like
+    // math functions, casting functions,
+    // string formating capabilitys and more.
+    let std_package = StandardPackage::new();
+    // Load the standard packages into the rhai engine
+    std_package.register_into_engine(&mut engine);
+    
+    // Register a print function to the rhai engine,
+    // which will be used by the scripts to print text
+    // to the browser's console.
+    engine.on_print(|text| { log_1(&wasm_bindgen::JsValue::from_str(text)); });
+    // Create the state table, and share
+    // a counted reference to it with
+    // the state manager's script.
+    // This table will be used to store
+    // global variables, which will be
+    // used for different purposes by
+    // the game's scripts. Only the state
+    // manager's script has write access
+    // to this table, while all other scripts
+    // only have read access to it.
     let state_table = Rc::new(RefCell::new(Dynamic::from_map(Map::default())));
+    // Share a counted reference to the state
+    // table with the state manager's script.
+    // Because the state table counts as a
+    // per-element API, it won't be naturally
+    // available for write access in non-API
+    // related functions, like any other
+    // per-element API.
     state_manager.resources.borrow_mut().scope
     .push_dynamic("State", Dynamic::from(Rc::clone(&state_table)));
-    
+    // Share a counted reference to the
+    // properties of the current scene,
+    // for use in the variable resolver.
     let api_scene_props = Rc::clone(&cur_scene.properties);
+
     // Register a variable resolver.
+    // This will allow the scripts to
+    // read the state table and the
+    // current scene's properties.
     engine.on_var(move |name, _, context| {
         match name {
             // If the name of the
@@ -442,66 +535,73 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Has
         }
     });
 
-    //
+    // Create the key states table.
+    // This table will be used to track
+    // the key state of every key on the
+    // keyboard, and will be used by the
+    // scripts to check if a key is held,
+    // pressed or released.
     let key_states: Rc<RefCell<HashMap<String, KeyState>>> = Rc::new(RefCell::new(HashMap::new()));
 
-    //
+    // Share a counted reference to the key
+    // states table with the following API function.
     let api_key_states = Rc::clone(&key_states);
     engine.register_fn("key_is_held", move |key: &str| -> bool {
-        //
+        // if the key exists in the table,
         if let Some(state) = api_key_states.borrow().get(key) {
-            //
+            // return it's 'is_held' state
             state.is_held
         } else {
-            //
+            // otherwise, return false
             false
         }
     });
 
-    //
     let api_key_states = Rc::clone(&key_states);
     engine.register_fn("key_just_pressed", move |key: &str| -> bool {
-        //
+        // if the key exists in the table,
         if let Some(state) = api_key_states.borrow().get(key) {
-            //
+            // return it's 'just_pressed' state
             state.just_pressed
         } else {
-            //
+            // otherwise, return false
             false
         }
     });
 
-    //
     let api_key_states = Rc::clone(&key_states);
     engine.register_fn("key_just_released", move |key: &str| -> bool {
-        //
+        // if the key exists in the table,
         if let Some(state) = api_key_states.borrow().get(key) {
-            //
+            // return it's 'just_released' state
             state.just_released
         } else {
-            //
+            // otherwise, return false
             false
         }
     });
 
-    //
+    // Share a counted reference to the
+    // current scene's properties, for
+    // use in the following API function.
     let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("object_is_valid", move |idx: rhai::INT| -> bool {
-        //
+        // borrow the current scene's properties for reading (immutable)
         let scene_props_borrow = cur_scene_props.borrow();
         let scene_props_borrow = scene_props_borrow
         .read_lock::<element::Scene>().expect("read_lock cast should succeed");
-        //
+        // return true if the index is in the range of the objects pool
         idx < (scene_props_borrow.objects_len+scene_props_borrow.runtimes_len) as rhai::INT && idx > -1
     });
-    //
+
     let cur_scene_props = Rc::clone(&cur_scene.properties);
     engine.register_fn("object_is_active", move |idx: rhai::INT| -> rhai::INT {
-        //
+        // borrow the current scene's properties for reading (immutable)
         let scene_props_borrow = cur_scene_props.borrow();
         let scene_props_borrow = scene_props_borrow
         .read_lock::<element::Scene>().expect("read_lock cast should succeed");
-        //
+        // if the index included in any layer in the current scene,
+        // return the index of the layer it's included in, otherwise return -1
         scene_props_borrow.layers[0..scene_props_borrow.layers_len]
         .iter().enumerate().flat_map(|(layer_idx, layer)| {
             layer.instances.iter().map(move |&index| {
@@ -510,76 +610,167 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Has
         }).find(|&(index, _)| { index == idx }).unwrap_or((-1, -1)).1 as rhai::INT
     });
 
-    //
+    // Share a counted reference to 
+    // the state manager's resources, 
+    // for use in the following API function.
     let state_manager_res = Rc::clone(&state_manager.resources);
     engine.register_fn("message_state_manager", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
-        //
+        // if the state manager's resources are not borrowed,
         if let Ok(mut borrow) = state_manager_res.try_borrow_mut() {
-            //
+            // call the function with the given name and
+            // arguments, and if an error is raised, return it.
             if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
-                //
+                // Mention the use of the messaging API in the error message
                 Err(format!("{}\nas a result of a call to 'message_state_manager'", err).into())
             } else { Ok(()) }
         } else {
-            //
+            // otherwise, return an error
             Err(concat!("Can't use the 'message_state_manager' function while the state manager's script is running",
             " (is handling another callback). Note: This might have happened because you tried to message yourself,",
             " or messaged an element, which tried to message you back in the scope of that same message.").into())
         }
     });
 
-    //
+    // Share a counted reference to 
+    // the current scene's resources, 
+    // for use in the following API function.
     let cur_scene_res = Rc::clone(&cur_scene.resources);
     engine.register_fn("message_cur_scene", move |context: rhai::NativeCallContext,
     name: &str, args: rhai::Array| -> Result<(), Box<EvalAltResult>> {
-        //
+        // if the current scene's resources are not borrowed,
         if let Ok(mut borrow) = cur_scene_res.try_borrow_mut() {
-            //
+            // call the function with the given name and
+            // arguments, and if an error is raised, return it.
             if let Some(err) = borrow.call_fn(context.engine(),&format!("message_{}", name), args).err() {
-                //
+                // Mention the use of the messaging API in the error message
                 Err(format!("{}\nas a result of a call to 'message_cur_scene'", err).into())
             } else { Ok(()) }
         } else {
-            //
+            // otherwise, return an error
             Err(concat!("Can't use the 'message_cur_scene' function while the current scene's script is running",
             " (is handling another callback). Note: This might have happened because you tried to message yourself,",
             " or messaged an element, which tried to message you back in the scope of that same message.").into())
         }
     });
 
-    //
+    // Converts an element's name to it's id.
+    // Returns an error if the name doesn't exist.
     engine.register_fn("element_name_to_id", |name: &str| -> Result<rhai::INT, Box<EvalAltResult>> {
-        //
         let res = data::get_element_id(name) as rhai::INT;
-        //
         if res == 0 {
-            //
             Err(format!("Tried to use 'element_name_to_id' with an element name that doesn't exist ('{}').", name).into())
-        } else {
-            //
-            Ok(res)
-        }
+        } else { Ok(res) }
     });
+
+    // Converts an element's id to it's name.
+    // Returns an error if the id doesn't exist.
+    engine.register_fn("element_id_to_name", |id: rhai::INT| -> Result<String, Box<EvalAltResult>> {
+        let res = data::get_element_name(id as u32);
+        if res.is_empty() {
+            Err(format!("Tried to use 'element_id_to_name' with an element id that doesn't exist ('{}').", id).into())
+        } else { Ok(res) }
+    });
+
+    // Converts an asset's name to it's id.
+    // Returns an error if the name doesn't exist.
+    engine.register_fn("asset_name_to_id", |name: &str| -> Result<rhai::INT, Box<EvalAltResult>> {
+        let res = data::get_asset_id(name) as rhai::INT;
+        if res == 0 {
+            Err(format!("Tried to use 'asset_name_to_id' with an asset name that doesn't exist ('{}').", name).into())
+        } else { Ok(res) }
+    });
+
+    // Converts an asset's id to it's name.
+    // Returns an error if the id doesn't exist.
+    engine.register_fn("asset_id_to_name", |id: rhai::INT| -> Result<String, Box<EvalAltResult>> {
+        let res = data::get_asset_name(id as u32);
+        if res.is_empty() {
+            Err(format!("Tried to use 'asset_id_to_name' with an asset id that doesn't exist ('{}').", id).into())
+        } else { Ok(res) }
+    });
+
+    // Uses web-sys to get the client
+    // width and height of the browser.
+    engine.register_fn("get_client_width", || -> rhai::FLOAT {
+        web_sys::window().expect("window cast should succeed")
+        .document().expect("document cast should succeed")
+        .document_element().expect("document_element cast should succeed")
+        .client_width() as rhai::FLOAT
+    });
+    engine.register_fn("get_client_height", || -> rhai::FLOAT {
+        web_sys::window().expect("window cast should succeed")
+        .document().expect("document cast should succeed")
+        .document_element().expect("document_element cast should succeed")
+        .client_height() as rhai::FLOAT
+    });
+
+    // For some weird reason, the rhai standard
+    // package doesn't include a 'min' and 'max'
+    // function for two integers (int-int) or
+    // two floats (float-float), but only for 
+    // an integer and a float combined (int-float).
+    // Because of this, I had to implement them myself.
+    engine.register_fn("min", |value1: rhai::INT, value2: rhai::INT| -> rhai::INT {
+        return value1.min(value2);
+    });
+    engine.register_fn("max", |value1: rhai::INT, value2: rhai::INT| -> rhai::INT {
+        return value1.max(value2);
+    });
+    engine.register_fn("min", |value1: rhai::FLOAT, value2: rhai::FLOAT| -> rhai::FLOAT {
+        return value1.min(value2);
+    });
+    engine.register_fn("max", |value1: rhai::FLOAT, value2: rhai::FLOAT| -> rhai::FLOAT {
+        return value1.max(value2);
+    });
+
+
+    // First Reload //
+    
+    // Here the state manager and the current scene's
+    // scripts get reloaded for the first time, which
+    // means they get to use all of the API features
+    // declaired above at the global scope.
+    // Every API feature that was declaired after this
+    // point will only be usable in a callback scope.
 
     state_manager.resources.borrow_mut().reload(&engine)?;
     cur_scene.resources.borrow_mut().reload(&engine)?;
 
-    //
+    // "Object Stack" Creation and Filling //
+
+    // Create the "object stack",
+    // which is a vector of element
+    // handlers that will be used as
+    // a dynamic pool of objects, meaning
+    // that when the current scene will be
+    // switched, the objects will be recycled,
+    // and memory won't be reallocated.
     let object_stack: Rc<RefCell<Vec<ElementHandler>>> = Rc::new(RefCell::new(Vec::new()));
 
-    //
+    // In order to fill the object stack,
+    // we'll need to borrow it mutably.
+    // Therefore, we'll need to open a
+    // seperate block for the filling
+    // process and borrow the object stack
+    // in it, so that it will be dropped
+    // as soon as the filling process is done.
     {
-        //
+        let mut object_stack_borrow = object_stack.borrow_mut();
+        // Get the "object-instances" list
+        // from the current scene's configuration.
         let instances = cur_scene.resources.borrow().definition
         .config["object-instances"].clone().into_typed_array::<Map>().expect(concat!("Every object's",
         " config should contain a 'object-instances' array, which should only have object-like members."));
-        //
-        let mut object_stack_borrow = object_stack.borrow_mut();
-        //
+        // Itrate over the instances list.
         for (idx, map, rowid, layer) in instances
         .iter().enumerate().map(|(inst_index, inst)| {(
-            //
+            // Devide the information into seperate variables:
+            // idx - the index of the instance in the list.
+            // map - the instance's map, which contains
+            //       all the instance's attributes.
+            // rowid - the instance's object rowid.
+            // layer - the instance's layer.
             inst_index as u32, inst,
             dynamic_to_number(&inst["id"])
             .expect(concat!("Every instance in the 'object-instances' array",
@@ -588,15 +779,15 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Has
             .expect(concat!("Every instance in the 'object-instances' array",
             " of an object's config should contain an integer 'layer' attribute.")),
         )}) {
-            //
+            // Borrow the current scene's properties in a seperate block.
             {
-                //
                 let mut scene_props_borrow = cur_scene.properties.borrow_mut();
                 let mut scene_props_borrow = scene_props_borrow
                 .write_lock::<element::Scene>().expect("write_lock cast should succeed");
-                //
+                // Add the instance to it's matching layer in the current scene.
                 scene_props_borrow.add_instance(idx as rhai::INT, layer as rhai::INT);
-            } //
+            } // the borrow of the current scene's properties drops here.
+            
             //
             if !element_defs.borrow().contains_key(&rowid) {
                 //

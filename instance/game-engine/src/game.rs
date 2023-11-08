@@ -182,7 +182,9 @@ pub fn run_game() -> Result<ClosuresHandle, JsValue>
             keys_just_changed_borrow.clear();
         }
         //
-        if let TableRow::Element(id, 2) = cur_scene.resources.borrow().definition.row {
+        let row_copy = cur_scene.resources.borrow().definition.row;
+        //
+        if let TableRow::Element(id, 2) = row_copy {
             //
             let mut cur_scene_id = state_manager.properties.borrow()
             .read_lock::<engine_api::element::Game>()
