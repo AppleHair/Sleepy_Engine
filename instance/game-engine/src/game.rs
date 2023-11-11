@@ -11,13 +11,6 @@ mod engine_api;
 mod renderer;
 
 //
-#[wasm_bindgen]
-pub struct ClosuresHandle {
-    _keydown: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
-    _keyup: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
-}
-
-//
 #[wasm_bindgen(catch)]
 extern "C" {
     #[wasm_bindgen(js_name = setTimeout)]
@@ -30,6 +23,10 @@ extern "C" {
 //
 #[derive(Clone, Copy)]
 pub enum TableRow {
+    // Because theres only one state manager in the game,
+    // it's data isn't stored in the 'element' table,
+    // but in unique rows in the 'blobs' table, refered
+    // to in this code base as 'metadata'.
     Metadata,
     Element(u32, u8),
     Asset(u32, u8),
@@ -52,254 +49,91 @@ impl TableRow {
 }
 
 //
-pub fn run_game() -> Result<ClosuresHandle, JsValue>
-{
-    // Create the element definitions hash map.
-    let element_defs: Rc<RefCell<HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>>>
-         = Rc::new(RefCell::new(HashMap::new()));
-    // Create the asset definitions hash map.
-    let mut asset_defs: HashMap<u32,Result<renderer::AssetDefinition, JsValue>> = HashMap::new();
-
-    // Create the API 'Engine', and the state manager instance.
-    let (engine, state_manager, 
-    cur_scene, object_stack,
-    key_states) = engine_api::create_api(&element_defs)?;
-    //
-    load_elements(&engine, &mut element_defs.borrow_mut(), true);
-
-    //
-    let keys_just_changed: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
-    //
-    let (onkeydown,
-    onkeyup) = 
-        create_keyboard_listeners(&key_states, &keys_just_changed)?;
-
-    //
-    call_fn_on_all("init", (), &engine,
-    &state_manager.resources,&cur_scene, &object_stack)?;
-
-    //
-    let (gl_context, gl_program,
-    program_data,
-    vertex_buffer, index_buffer) = 
-        renderer::create_rendering_components(&state_manager.properties.borrow()
-        .read_lock::<engine_api::element::Game>()
-        .expect("read_lock cast should succeed"))?;
-
-    //
-    load_assets(&engine, &mut asset_defs, &gl_context);
-    
-    //
-    let draw_loop = Rc::new(RefCell::new(
-    None::<Closure::<dyn FnMut(f64) -> Result<(), JsValue>>>));
-    //
-    let draw_init = Rc::clone(&draw_loop);
-    //
-    let mut last_draw = window()
-    .unwrap().performance()
-    .unwrap().now();
-    //
-    let cur_scene_props = Rc::clone(&cur_scene.properties);
-    //
-    let state_manager_props = Rc::clone(&state_manager.properties);
-    //
-    let renderer_object_stack = Rc::clone(&object_stack);
-    //
-    let json_engine = Engine::new_raw();
-    //
-    *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
-    move |draw_time: f64| -> Result<(), JsValue> {
-        //
-        let elapsed = draw_time - last_draw;
-        last_draw = draw_time;
-
-        //
-        load_assets(&json_engine,
-        &mut asset_defs, &gl_context);
-
-        //
-        renderer::render_scene(
-            &gl_context, &gl_program, &program_data, &vertex_buffer,
-            &index_buffer, &state_manager_props.borrow()
-            .read_lock::<engine_api::element::Game>()
-            .expect("read_lock cast should succeed"),
-            &cur_scene_props.borrow()
-            .read_lock::<engine_api::element::Scene>()
-            .expect("read_lock cast should succeed"),
-            &asset_defs,
-            &renderer_object_stack.borrow(),
-            elapsed
-        )?;
-        //
-        window().unwrap().request_animation_frame(
-            draw_loop
-                .borrow().as_ref().unwrap()
-                .as_ref().unchecked_ref()
-        )?;
-        //
-        Ok(())
-    }));
-
-    //
-    let update_loop = Rc::new(RefCell::new(
-    None::<Closure::<dyn FnMut() -> Result<(), JsValue>>>));
-    //
-    let update_init = Rc::clone(&update_loop);
-    //
-    let frame_rate_init = state_manager.properties.borrow()
-    .read_lock::<engine_api::element::Game>()
-    .expect("read_lock cast should succeed").fps as u32;
-    //
-    let mut last_update = window().unwrap().performance().unwrap().now();
-    //
-    *update_init.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
-    move || -> Result<(), JsValue> {
-        //
-        let update_time = window().unwrap().performance().unwrap().now();
-        let elapsed = update_time - last_update;
-        last_update = update_time;
-        //
-        call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &engine,
-        &state_manager.resources, &cur_scene, &object_stack)?;
-        //
-        {
-            //
-            let mut key_states_borrow = key_states.borrow_mut();
-            //
-            let mut keys_just_changed_borrow = keys_just_changed.borrow_mut();
-            //
-            for key in keys_just_changed_borrow.clone() {
-                //
-                key_states_borrow.get_mut(&key)
-                .expect("key should exist if it's inside the keys_just_changed vector")
-                .just_pressed = false;
-                //
-                key_states_borrow.get_mut(&key)
-                .expect("key should exist if it's inside the keys_just_changed vector")
-                .just_released = false;
-            }
-            //
-            keys_just_changed_borrow.clear();
-        }
-        //
-        let row_copy = cur_scene.resources.borrow().definition.row;
-        //
-        if let TableRow::Element(id, 2) = row_copy {
-            //
-            let mut cur_scene_id = state_manager.properties.borrow()
-            .read_lock::<engine_api::element::Game>()
-            .expect("read_lock cast should succeed").cur_scene;
-            //
-            let mut prv_scene_id = id;
-            //
-            while cur_scene_id != prv_scene_id {
-                //
-                switch_scene(cur_scene_id, &engine,
-                &cur_scene, &object_stack, &element_defs.borrow())?;
-                //
-                call_fn_on_all("init", (), &engine,
-                &state_manager.resources, &cur_scene, &object_stack)?;
-                //
-                prv_scene_id = cur_scene_id;
-                cur_scene_id = state_manager.properties.borrow()
-                .read_lock::<engine_api::element::Game>()
-                .expect("read_lock cast should succeed").cur_scene;
-            }
-        }
-
-        //
-        load_elements(&engine, &mut element_defs.borrow_mut(), false);
-
-        //
-        set_timeout_with_callback_and_f64(
-            update_loop
-                .borrow().as_ref().unwrap()
-                .as_ref().unchecked_ref(),
-            1000_f64 / (state_manager.properties.borrow()
-            .read_lock::<engine_api::element::Game>()
-            .expect("read_lock cast should succeed").fps as f64)
-        );
-        //
-        Ok(())
-    }));
-
-    //
-    set_timeout_with_callback_and_f64(
-        update_init
-            .borrow().as_ref().unwrap()
-            .as_ref().unchecked_ref(),
-        1000_f64 / (frame_rate_init as f64)
-    );
-
-    //
-    window().unwrap().request_animation_frame(
-        draw_init
-            .borrow().as_ref().unwrap()
-            .as_ref().unchecked_ref()
-    )?;
-
-    // Done!
-    Ok(ClosuresHandle {
-        _keydown: onkeydown,
-        _keyup: onkeyup
-    })
+pub struct KeyStateTracker {
+    pub key_states: Rc<RefCell<engine_api::KeyStates>>,
+    pub keys_just_changed: Rc<RefCell<Vec<String>>>,
+    _keydown: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
+    _keyup: Closure::<dyn Fn(web_sys::KeyboardEvent)>,
 }
 
-//
-fn create_keyboard_listeners(key_states: &Rc<RefCell<HashMap<String, engine_api::KeyState>>>, 
-keys_just_changed: &Rc<RefCell<Vec<String>>>) -> Result<(Closure<dyn Fn(web_sys::KeyboardEvent)>,
-Closure<dyn Fn(web_sys::KeyboardEvent)>), JsValue> {
-    //
-    let event_key_states = Rc::clone(&key_states);
-    //
-    let event_keys_just_changed = Rc::clone(&keys_just_changed);
-    //
-    let onkeydown = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
-    move |event: web_sys::KeyboardEvent| {
+impl KeyStateTracker {
+    pub fn init(key_states: Rc<RefCell<engine_api::KeyStates>>) -> Result<Self, JsValue> {
         //
-        if event.repeat() {
-            return;
+        let keys_just_changed = Rc::new(RefCell::new(Vec::new()));
+        //
+        let event_key_states = Rc::clone(&key_states);
+        let event_keys_just_changed = Rc::clone(&keys_just_changed);
+        let onkeydown = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+        move |event: web_sys::KeyboardEvent| {
+            //
+            if event.repeat() {
+                return;
+            }
+            //
+            let mut key_states_borrow = event_key_states.borrow_mut();
+            let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
+            //
+            key_states_borrow.insert(event.code(), engine_api::KeyState {
+                is_held: true, just_pressed: true, just_released: false
+            });
+            //
+            keys_just_changed_borrow.push(event.code());
+        });
+        //
+        window()
+        .unwrap().document()
+        .unwrap().add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
+
+        //
+        let event_key_states = Rc::clone(&key_states);
+        let event_keys_just_changed = Rc::clone(&keys_just_changed);
+        let onkeyup = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+        move |event: web_sys::KeyboardEvent| {
+            //
+            if event.repeat() {
+                return;
+            }
+            //
+            let mut key_states_borrow = event_key_states.borrow_mut();
+            let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
+            //
+            key_states_borrow.insert(event.code(), engine_api::KeyState {
+                is_held: false, just_pressed: false, just_released: true
+            });
+            //
+            keys_just_changed_borrow.push(event.code());
+        });
+        //
+        window()
+        .unwrap().document()
+        .unwrap().add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
+
+        //
+        Ok(Self {
+            key_states,
+            keys_just_changed,
+            _keydown: onkeydown,
+            _keyup: onkeyup
+        })
+    }
+
+    pub fn calibrate(&self) {
+        //
+        let mut key_states_borrow = self.key_states.borrow_mut();
+        let mut keys_just_changed_borrow = self.keys_just_changed.borrow_mut();
+        //
+        for key in keys_just_changed_borrow.clone() {
+            //
+            key_states_borrow.get_mut(&key)
+            .expect("key should exist if it's inside the keys_just_changed vector")
+            .just_pressed = false;
+            key_states_borrow.get_mut(&key)
+            .expect("key should exist if it's inside the keys_just_changed vector")
+            .just_released = false;
         }
         //
-        let mut key_states_borrow = event_key_states.borrow_mut();
-        //
-        let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
-        //
-        key_states_borrow.insert(event.code(), engine_api::KeyState {
-            is_held: true, just_pressed: true, just_released: false
-        });
-        //
-        keys_just_changed_borrow.push(event.code());
-    });
-
-    window()
-    .unwrap().document()
-    .unwrap().add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
-
-    //
-    let event_key_states = Rc::clone(&key_states);
-    //
-    let event_keys_just_changed = Rc::clone(&keys_just_changed);
-    //
-    let onkeyup = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
-    move |event: web_sys::KeyboardEvent| {
-        //
-        let mut key_states_borrow = event_key_states.borrow_mut();
-        //
-        let mut keys_just_changed_borrow = event_keys_just_changed.borrow_mut();
-        //
-        key_states_borrow.insert(event.code(), engine_api::KeyState {
-            is_held: false, just_pressed: false, just_released: true
-        });
-        //
-        keys_just_changed_borrow.push(event.code());
-    });
-    //
-    window()
-    .unwrap().document()
-    .unwrap().add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
-    //
-    Ok((onkeydown, onkeyup))
+        keys_just_changed_borrow.clear();
+    }
 }
 
 //
@@ -363,12 +197,14 @@ object_stack: &Rc<RefCell<Vec<engine_api::ElementHandler>>>) -> Result<(), Strin
 //
 fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::ElementHandler,
 object_stack: &Rc<RefCell<Vec<engine_api::ElementHandler>>>,
-element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -> Result<(), String> {
+element_defs: &engine_api::ElementDefinitions) -> Result<(), String> {
     //
-    scene.recycle(&engine,
+    scene.recycle(
         element_defs.get(&scene_id).unwrap().as_ref()?,
         None
     )?;
+    //
+    scene.resources.borrow_mut().run_script(&engine)?;
     //
     let instances = scene.resources.borrow().definition
     .config["object-instances"].clone().into_typed_array::<rhai::Map>().expect(concat!("Every object's",
@@ -382,10 +218,10 @@ element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -
     .iter().enumerate().map(|(inst_index, inst)| {(
         //
         inst_index, inst,
-        engine_api::dynamic_to_number(&inst["id"])
+        dynamic_to_number(&inst["id"])
         .expect(concat!("Every instance in the 'object-instances' array",
         " of an object's config should contain an integer 'id' attribute.")) as u32,
-        engine_api::dynamic_to_number(&inst["layer"])
+        dynamic_to_number(&inst["layer"])
         .expect(concat!("Every instance in the 'object-instances' array",
         " of an object's config should contain an integer 'layer' attribute.")),
     )}) {
@@ -400,9 +236,11 @@ element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -
         //
         if idx < object_stack_borrow.len() {
             //
-            object_stack_borrow[idx].recycle(&engine,
+            object_stack_borrow[idx].recycle(
             element_defs.get(&rowid).unwrap().as_ref()?,
             Some(engine_api::element::ObjectInitInfo::new(idx as u32, map)))?;
+            //
+            object_stack_borrow[idx].resources.borrow_mut().run_script(&engine)?;
         }
         //
         object_stack_borrow.push(engine_api::ElementHandler::new(
@@ -410,14 +248,38 @@ element_defs: &HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>) -
             Some(engine_api::element::ObjectInitInfo::new(idx as u32, map))
         )?);
         //
-        object_stack_borrow.last().unwrap().resources.borrow_mut().reload(&engine)?;
+        object_stack_borrow.last().unwrap().resources.borrow_mut().run_script(&engine)?;
     }
     //
     Ok(())
 }
 
+// Rhai dynamic values are evaluated
+// as integers or floats separately
+// and they don't do any automatic casting
+// between the two types of numbers.
+// This behavior is not very convenient,
+// because it requires you to check if 
+// the value is a float or an integer 
+// every time you want to extract a number
+// from a script or an evaluated JSON file.
+// Therefore, I created this function, which 
+// will convert a dynamic value to a f32 if it's
+// eather an integer(i32) or a float(f32), and 
+// will return an error if it's not eather of
+// the two. After that, you can cast the result
+// into any other number type you want, by using
+// the 'as' keyword, like this: 
+// 'let x: u8 = dynamic_to_number(&dynamic)? as u8;'.
+pub fn dynamic_to_number(dynam: &rhai::Dynamic) -> Result<f32, &str> {
+    if dynam.is_int() { 
+        return Ok(dynam.as_int()? as f32);
+    }
+    Ok(dynam.as_float()? as f32)
+}
+
 //
-fn load_assets(engine: &Engine, asset_defs: &mut HashMap<u32,Result<renderer::AssetDefinition, JsValue>>,
+fn load_assets(engine: &Engine, asset_defs: &mut renderer::AssetDefinitions,
 gl_context: &web_sys::WebGlRenderingContext) {
     for asset in data::assets_to_load().iter() {
         //
@@ -435,8 +297,7 @@ gl_context: &web_sys::WebGlRenderingContext) {
 }
 
 //
-fn load_elements(engine: &Engine, element_defs: &mut HashMap<u32,Result<Rc<engine_api::ElementDefinition>, String>>
-, init: bool) {
+fn load_elements(engine: &Engine, element_defs: &mut engine_api::ElementDefinitions, init: bool) {
     for element in data::elements_to_load().iter() {
         //
         let int_id = js_sys::Reflect::get_u32(&element, 0)
@@ -452,4 +313,171 @@ fn load_elements(engine: &Engine, element_defs: &mut HashMap<u32,Result<Rc<engin
         element_defs.insert(int_id, engine_api::ElementDefinition::new(&engine,
         TableRow::Element(int_id, int_type)));
     }
+}
+
+//
+pub fn run_game() -> Result<(), JsValue>
+{
+    // Create the element definitions hash map.
+    let element_defs: Rc<RefCell<engine_api::ElementDefinitions>>
+         = Rc::new(RefCell::new(HashMap::new()));
+    // Create the asset definitions hash map.
+    let mut asset_defs: renderer::AssetDefinitions = HashMap::new();
+
+    // Create the API 'Engine', and the state manager instance.
+    let (engine, state_manager, 
+    cur_scene, object_stack,
+    key_states) = engine_api::create_api(&element_defs)?;
+    //
+    load_elements(&engine, &mut element_defs.borrow_mut(), true);
+
+    //
+    let key_tracker = KeyStateTracker::init(key_states)?;
+
+    //
+    call_fn_on_all("init", (), &engine,
+    &state_manager.resources, &cur_scene, &object_stack)?;
+
+    //
+    let (gl_context, gl_program,
+    program_data,
+    vertex_buffer, index_buffer) = 
+        renderer::create_rendering_components(&state_manager.properties.borrow()
+        .read_lock::<engine_api::element::Game>()
+        .expect("read_lock cast should succeed"))?;
+
+    //
+    load_assets(&engine, &mut asset_defs, &gl_context);
+    
+    //
+    let draw_loop = Rc::new(RefCell::new(
+    None::<Closure::<dyn FnMut(f64) -> Result<(), JsValue>>>));
+    //
+    let draw_init = Rc::clone(&draw_loop);
+    //
+    let mut last_draw = window()
+    .unwrap().performance()
+    .unwrap().now();
+    //
+    let cur_scene_props = Rc::clone(&cur_scene.properties);
+    //
+    let state_manager_props = Rc::clone(&state_manager.properties);
+    //
+    let renderer_object_stack = Rc::clone(&object_stack);
+    //
+    let json_engine = Engine::new_raw();
+    //
+    *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
+    move |draw_time: f64| -> Result<(), JsValue> {
+        //
+        let elapsed = draw_time - last_draw;
+        last_draw = draw_time;
+
+        //
+        load_assets(&json_engine,
+        &mut asset_defs, &gl_context);
+
+        //
+        renderer::render_scene(
+            &gl_context, &gl_program, &program_data, &vertex_buffer,
+            &index_buffer, &state_manager_props.borrow()
+            .read_lock::<engine_api::element::Game>()
+            .expect("read_lock cast should succeed"),
+            &cur_scene_props.borrow()
+            .read_lock::<engine_api::element::Scene>()
+            .expect("read_lock cast should succeed"),
+            &renderer_object_stack.borrow(),
+            &asset_defs, elapsed
+        )?;
+        //
+        window().unwrap().request_animation_frame(
+            draw_loop
+                .borrow().as_ref().unwrap()
+                .as_ref().unchecked_ref()
+        )?;
+        //
+        Ok(())
+    }));
+
+    //
+    let update_loop = Rc::new(RefCell::new(
+    None::<Closure::<dyn FnMut() -> Result<(), JsValue>>>));
+    //
+    let update_init = Rc::clone(&update_loop);
+    //
+    let frame_rate_init = state_manager.properties.borrow()
+    .read_lock::<engine_api::element::Game>()
+    .expect("read_lock cast should succeed").fps as u32;
+    //
+    let mut last_update = window().unwrap().performance().unwrap().now();
+    //
+    *update_init.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
+    move || -> Result<(), JsValue> {
+        //
+        let update_time = window().unwrap().performance().unwrap().now();
+        let elapsed = update_time - last_update;
+        last_update = update_time;
+        //
+        call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &engine,
+        &state_manager.resources, &cur_scene, &object_stack)?;
+        //
+        key_tracker.calibrate();
+        //
+        let row_copy = cur_scene.resources.borrow().definition.row;
+        //
+        if let TableRow::Element(id, 2) = row_copy {
+            //
+            let mut cur_scene_id = state_manager.properties.borrow()
+            .read_lock::<engine_api::element::Game>()
+            .expect("read_lock cast should succeed").cur_scene;
+            //
+            let mut prv_scene_id = id;
+            //
+            while cur_scene_id != prv_scene_id {
+                //
+                switch_scene(cur_scene_id, &engine,
+                &cur_scene, &object_stack, &element_defs.borrow())?;
+                //
+                call_fn_on_all("init", (), &engine,
+                &state_manager.resources, &cur_scene, &object_stack)?;
+                //
+                prv_scene_id = cur_scene_id;
+                cur_scene_id = state_manager.properties.borrow()
+                .read_lock::<engine_api::element::Game>()
+                .expect("read_lock cast should succeed").cur_scene;
+            }
+        }
+
+        //
+        load_elements(&engine, &mut element_defs.borrow_mut(), false);
+
+        //
+        set_timeout_with_callback_and_f64(
+            update_loop
+                .borrow().as_ref().unwrap()
+                .as_ref().unchecked_ref(),
+            1000_f64 / (state_manager.properties.borrow()
+            .read_lock::<engine_api::element::Game>()
+            .expect("read_lock cast should succeed").fps as f64)
+        );
+        //
+        Ok(())
+    }));
+
+    //
+    window().unwrap().request_animation_frame(
+        draw_init
+            .borrow().as_ref().unwrap()
+            .as_ref().unchecked_ref()
+    )?;
+    //
+    set_timeout_with_callback_and_f64(
+        update_init
+            .borrow().as_ref().unwrap()
+            .as_ref().unchecked_ref(),
+        1000_f64 / (frame_rate_init as f64)
+    );
+
+    // Done!
+    Ok(())
 }

@@ -1,6 +1,8 @@
-BASE_FILES_PATH='flask_server\static\base-files\'
+# Loading booleans
 LOAD_BASE_FILES=false
+LOAD_EXPORT_PACKAGE=false
+# Loading paths
+BASE_FILES_PATH='flask_server\static\base-files\'
 ENGINE_CORE_PATH='flask_server\static\js\engine-core\'
 EXPORT_PACKAGE_PATH='instance\Export Package.zip'
 JS_LIBRARYS_PATH='flask_server\static\js\libs\'
-LOAD_EXPORT_PACKAGE=false

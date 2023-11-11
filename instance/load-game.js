@@ -7,8 +7,6 @@ let sqlite;
 //
 let gameData;
 //
-let updateHandle;
-//
 let assetsToLoad = [];
 //
 let elementsToLoad = [];
@@ -169,7 +167,5 @@ init().then(() => {
     });
 
     //
-    initEngine().then(() => {
-        updateHandle = wasmEngine.handle_game();
-    });
+    initEngine();
 })

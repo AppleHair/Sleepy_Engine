@@ -4,9 +4,12 @@ use std::{rc::Rc, collections::HashMap};
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlBuffer, WebGlTexture, WebGlContextAttributes};
 
-use crate::{data, game::TableRow};
+use crate::{data, game::{TableRow, dynamic_to_number}};
 
 use super::engine_api::{element, self};
+
+pub type AssetDefinitions = HashMap<u32,Result<AssetDefinition, JsValue>>;
+pub type ProgramDataLocations = HashMap<String, ProgramDataLocation>;
 
 const MAX_QUAD_COUNT: i32 = 1000;
 const INDCIES_PER_QUAD: i32 = 6;
@@ -112,7 +115,7 @@ impl AssetDefinition {
 //
 pub fn create_rendering_components(game: &element::Game)
  -> Result<(WebGlRenderingContext, WebGlProgram,
-HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
+ProgramDataLocations, WebGlBuffer, WebGlBuffer), JsValue> {
     //
     let gl_context = create_context(
     game.canvas_width, game.canvas_height)?;
@@ -284,9 +287,9 @@ HashMap<String, ProgramDataLocation>, WebGlBuffer, WebGlBuffer), JsValue> {
 
 //
 pub fn render_scene(gl_context: &WebGlRenderingContext, gl_program: &WebGlProgram,
-data_locations: &HashMap<String,ProgramDataLocation>, vertex_buffer: &web_sys::WebGlBuffer,
-index_buffer: &web_sys::WebGlBuffer, game: &element::Game, scene_props: &element::Scene, asset_defs: &HashMap<u32,Result<AssetDefinition, JsValue>>,
-object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsValue> {
+data_locations: &ProgramDataLocations, vertex_buffer: &web_sys::WebGlBuffer,
+index_buffer: &web_sys::WebGlBuffer, game: &element::Game, scene_props: &element::Scene,
+object_stack: &Vec<engine_api::ElementHandler>, asset_defs: &AssetDefinitions, elapsed: f64) -> Result<(), JsValue> {
     // Use the scene rendering shader program.
     gl_context.use_program(Some(&gl_program));
     // Set the clear color.
@@ -396,10 +399,11 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
                 .get_mut(cur_sprite_asset_id)
                 .expect("the cur_asset index should exist in the members array of an AssetList.");
                 //
-                if let Some(Ok(texture_asset)) = asset_defs.get(&object_or_sprite.id) {
+                if let Some(def) = asset_defs.get(&object_or_sprite.id) {
+                    //
+                    let texture_asset = def.as_ref()?;
                     //
                     let gl_texture: &WebGlTexture;
-                    //
                     match &texture_asset.asset_data {
                         AssetData::ImageData { width, height, texture } => {
                             tex_width = *width as f32;
@@ -410,7 +414,7 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
                     }
 
                     //
-                    let fps = engine_api::dynamic_to_number(&texture_asset.config["fps"])
+                    let fps = dynamic_to_number(&texture_asset.config["fps"])
                     .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
                     
                     //
@@ -455,30 +459,30 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
                         .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'area' object-like property");
                         //
                         texcoord_1 = [
-                            engine_api::dynamic_to_number(&area["x1"])
+                            dynamic_to_number(&area["x1"])
                             .expect("x1 should be a number.") / tex_width, 
-                            engine_api::dynamic_to_number(&area["y1"])
+                            dynamic_to_number(&area["y1"])
                             .expect("y1 should be a number.") / tex_height
                         ];
                         //
                         texcoord_2 = [
-                            1.0 - (engine_api::dynamic_to_number(&area["x2"])
+                            1.0 - (dynamic_to_number(&area["x2"])
                             .expect("x2 should be a number.") / tex_width),
-                            1.0 - (engine_api::dynamic_to_number(&area["y2"])
+                            1.0 - (dynamic_to_number(&area["y2"])
                             .expect("y2 should be a number.") / tex_height)
                         ];
                         //
                         quad_width = tex_width - (
-                            engine_api::dynamic_to_number(&area["x1"])
+                            dynamic_to_number(&area["x1"])
                             .expect("x1 should be a number.") +
-                            engine_api::dynamic_to_number(&area["x2"])
+                            dynamic_to_number(&area["x2"])
                             .expect("x2 should be a number.")
                         );
                         //
                         quad_height = tex_height - (
-                            engine_api::dynamic_to_number(&area["y1"])
+                            dynamic_to_number(&area["y1"])
                             .expect("y1 should be a number.") +
-                            engine_api::dynamic_to_number(&area["y2"])
+                            dynamic_to_number(&area["y2"])
                             .expect("y2 should be a number.")
                         );
                         
@@ -491,13 +495,13 @@ object_stack: &Vec<engine_api::ElementHandler>, elapsed: f64) -> Result<(), JsVa
                         " have a 'origin' object-like property"));
                         //
                         origin_minus_offset = [
-                            engine_api::dynamic_to_number(&origin["x"])
+                            dynamic_to_number(&origin["x"])
                             .expect("origin.x should be a number") -
-                            engine_api::dynamic_to_number(&offset["x"])
+                            dynamic_to_number(&offset["x"])
                             .expect("offset.x should be a number"),
-                            engine_api::dynamic_to_number(&origin["y"])
+                            dynamic_to_number(&origin["y"])
                             .expect("origin.y should be a number") -
-                            engine_api::dynamic_to_number(&offset["y"])
+                            dynamic_to_number(&offset["y"])
                             .expect("offset.y should be a number")
                         ];
                         //
@@ -643,7 +647,7 @@ fn create_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsVa
 }
 
 fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
- -> Result<(WebGlProgram,HashMap<String,ProgramDataLocation>), JsValue> {
+ -> Result<(WebGlProgram,ProgramDataLocations), JsValue> {
     // Create the vertex shader
     let vert_shader = compile_shader(
         &gl_context,
@@ -730,7 +734,7 @@ fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
     let gl_program = link_program(&gl_context, &vert_shader, &frag_shader)?;
 
     //
-    let mut data_locations: HashMap<String,ProgramDataLocation> = HashMap::new();
+    let mut data_locations: ProgramDataLocations = HashMap::new();
 
     // Look up attribute locations.
     data_locations.insert(String::from("a_position"), ProgramDataLocation::Attribute(gl_context

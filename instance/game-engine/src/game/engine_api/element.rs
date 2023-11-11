@@ -1,9 +1,39 @@
 
 use rhai::{Map, Dynamic};
 
-use crate::data::get_element_type;
+use crate::{data::get_element_type, game::dynamic_to_number};
 
-use super::{dynamic_to_number, hex_color_to_rgba, asset::*};
+use super::asset::*;
+
+// Receives a string borrow with a
+// hex color code (#RRGGBBAA / #RRGGBB),
+// and converts it into a slice of bytes.
+pub fn hex_color_to_rgba(hex: &str) -> [u8; 4] {
+    // Result slice with
+    // place-holder values
+    let mut result: [u8; 4] = [0, 0, 0, 255];
+    // Result slice index counter
+    let mut i = 0;
+    // Hex color string
+    // index counter
+    let mut si = 1;
+
+    while si < hex.len() {
+        // Convert the hex string
+        // into an unsigned byte.
+        result[i] = u8::from_str_radix(&hex[si..si+2], 16)
+        .expect("hex to u8 parse should succeed");
+        // Increase hex color string
+        // index counter by 2.
+        si += 2;
+        // Increase result slice
+        // index counter by 1.
+        i += 1;
+    }
+    // Return the 
+    // result slice
+    result
+}
 
 //
 #[derive(Clone)]
