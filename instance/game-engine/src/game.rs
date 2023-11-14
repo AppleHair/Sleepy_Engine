@@ -11,7 +11,7 @@ mod engine_api;
 mod renderer;
 
 //
-#[wasm_bindgen(catch)]
+#[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_name = setTimeout)]
     fn set_timeout_with_callback_and_f64(
