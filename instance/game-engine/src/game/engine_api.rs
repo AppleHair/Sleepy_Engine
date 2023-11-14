@@ -13,19 +13,19 @@ pub mod asset;
 pub type ElementDefinitions = HashMap<u32,Result<Rc<ElementDefinition>, String>>;
 pub type KeyStates = HashMap<String, KeyState>;
 
-// A struct that will be used to
-// track the state of a key on the
-// keyboard in the key states table.
+/// A struct that will be used to
+/// track the state of a key on the
+/// keyboard in the key states table.
 pub struct KeyState {
     pub is_held: bool,
     pub just_pressed: bool,
     pub just_released: bool,
 }
 
-// A struct that will be used to
-// store all the data which is loaded
-// for a single element defined in the
-// project file/game data file.
+/// A struct that will be used to
+/// store all the data which is loaded
+/// for a single element defined in the
+/// project file/game data file.
 pub struct ElementDefinition {
     pub config: Map,
     pub script: AST,
@@ -33,10 +33,10 @@ pub struct ElementDefinition {
 }
 
 impl ElementDefinition {
-    // Using a rhai engine and row data,
-    // this function will load the element's
-    // configuration and script and return
-    // a new element definition, or an error. 
+    /// Using a rhai engine and row data,
+    /// this function will load the element's
+    /// configuration and script and return
+    /// a new element definition, or an error. 
     pub fn new(engine: &Engine, row: TableRow) -> Result<Rc<Self>, String> {
         // Load the element's script and compile
         // it into an AST (Abstract Syntax Tree).
@@ -92,43 +92,45 @@ impl ElementDefinition {
     }
 }
 
-// A struct that will store the
-// element's "resources", which
-// include the element's definition,
-// and the scope of the element's
-// script. The main purpose of this
-// struct is to maintain the state 
-// of an element's script between
-// callbacks using the rhai scope,
-// and keeping a counted reference
-// to the element's definition, which
-// is needed for running the element's
-// script with the maintained scope
-// among other things.
+/// A struct that will store the
+/// element's "resources", which
+/// include the element's definition,
+/// and the scope of the element's script.
+/// 
+/// The main purpose of this
+/// struct is to maintain the state 
+/// of an element's script between
+/// callbacks using the rhai scope,
+/// and keeping a counted reference
+/// to the element's definition, which
+/// is needed for running the element's
+/// script with the maintained scope
+/// among other things.
 pub struct ElementResources {
     pub definition: Rc<ElementDefinition>,
     scope: Scope<'static>
 }
 
 impl ElementResources {
-    // Creates a new element resources
-    // struct using a given element definition.
+    /// Creates a new element resources
+    /// struct using a given element definition.
     fn new(definition: Rc<ElementDefinition>) -> Self {
         Self { definition, scope: Scope::new() }
     }
-    // Recycles an existing element resources
-    // struct using a given element definition.
+    /// Recycles an existing element resources
+    /// struct using a given element definition.
     fn recycle(&mut self, definition: Rc<ElementDefinition>) {
         self.definition = definition;
         self.scope.clear();
     }
-    // Runs the element's script
-    // with the current scope and
-    // return an error if any occured.
-    // This means the code written in 
-    // the global scope will be executed
-    // and every variable defined in it will
-    // stay in the scope until it's cleared.
+    /// Runs the element's script
+    /// with the current scope and
+    /// return an error if any occured.
+    /// 
+    /// This means the code written in 
+    /// the global scope will be executed
+    /// and every variable defined in it will
+    /// stay in the scope until it's cleared.
     pub fn run_script(&mut self, engine: &Engine) -> Result<(), String> {
         if let Some(err) = engine.run_ast_with_scope
         (&mut self.scope, &self.definition.script).err() {
@@ -136,14 +138,15 @@ impl ElementResources {
         }
         Ok(())
     }
-    // Runs a function defined in the
-    // element's script with the maintained
-    // scope and return an error if any occured.
-    // If the function doesn't exist, the call
-    // will be ignored and no error will be raised.
-    // Any new variable defined in the function
-    // will be cleared from the scope after the
-    // function returns.
+    /// Runs a function defined in the
+    /// element's script with the maintained
+    /// scope and return an error if any occured.
+    /// 
+    /// If the function doesn't exist, the call
+    /// will be ignored and no error will be raised.
+    /// Any new variable defined in the function
+    /// will be cleared from the scope after the
+    /// function returns.
     pub fn call_fn(&mut self, engine: &Engine, name: &str, args: impl rhai::FuncArgs) -> Result<(), String> {
         if !self.definition.script.iter_functions()
         .any(|func| { func.name == name}) {
@@ -158,15 +161,16 @@ impl ElementResources {
     }
 }
 
-// A struct that will be used to
-// handle an instance of an element.
-// This struct will store the element's
-// properties and an element resources
-// struct. The element's properties
-// will be shared with the scope of
-// the element's script, which will
-// allow the script to access it's
-// local API.
+/// A struct that will be used to
+/// handle an instance of an element.
+/// 
+/// This struct will store the element's
+/// properties and an element resources
+/// struct. The element's properties
+/// will be shared with the scope of
+/// the element's script, which will
+/// allow the script to access it's
+/// local API.
 pub struct ElementHandler {
     // Each attribute of this struct
     // is wrapped in an counted reference
@@ -179,14 +183,15 @@ pub struct ElementHandler {
 }
 
 impl ElementHandler {
-    // Creates a new element handler.
-    // The element resources will be
-    // created first using the given
-    // element definition, and then
-    // the element definition will be
-    // used to create the element's
-    // properties, which will be shared
-    // with the element's script scope.
+    /// Creates a new element handler.
+    /// 
+    /// The element resources will be
+    /// created first using the given
+    /// element definition, and then
+    /// the element definition will be
+    /// used to create the element's
+    /// properties, which will be shared
+    /// with the element's script scope.
     pub fn new(def: &Rc<ElementDefinition>,
     object_info: Option<element::ObjectInitInfo>) -> Result<Self, String> {
         // The element handler first gets
@@ -294,14 +299,15 @@ impl ElementHandler {
             },
         }
     }
-    // Recycles an existing handler.
-    // The element resources will be
-    // recycled first using the given
-    // element definition, and then
-    // the element definition will be
-    // used to recycle the element's
-    // properties, which will be shared
-    // with the element's script scope.
+    /// Recycles an existing handler.
+    /// 
+    /// The element resources will be
+    /// recycled first using the given
+    /// element definition, and then
+    /// the element definition will be
+    /// used to recycle the element's
+    /// properties, which will be shared
+    /// with the element's script scope.
     pub fn recycle(&self, def: &Rc<ElementDefinition>,
     object_info: Option<element::ObjectInitInfo>) -> Result<(), String> {
         // If the element handler is the
@@ -388,52 +394,78 @@ impl ElementHandler {
     }
 }
 
+/// Creates the API for the game engine,
+/// and returns it's integrated components.
+/// 
+/// # Global APIs
+/// 
+/// global APIs are available to all
+/// scripts, but not all of them can
+/// be accessed from the global scope
+/// or from non-API related functions.
+/// While most of the global APIs are
+/// available in the global scope, some
+/// of them are only available in the
+/// scope of a callback, like the 'update'
+/// callback. This is because some of the
+/// global APIs are related to the current
+/// scene's objects, which need to be created
+/// after the scene and the state manager's
+/// scripts run, and before the 'init' callback,
+/// which is called after all the object are created.
+/// 
+/// # Per-element Local APIs
+/// 
+/// per-element APIs will only be
+/// available in the global scope
+/// of the element's script, and in
+/// any callback scope that is related
+/// to the API (like the 'update' callback).
+/// However, if you need to use your local
+/// API in a non-API related function, which
+/// is declared in the same script, you can
+/// use the ! syntax to give the function
+/// access to the caller's scope, which will
+/// let you use the local API in the function
+/// (also applys to other local variables).
+/// 
+/// for more information: https://rhai.rs/book/language/fn-parent-scope.html
+/// 
+/// ## Example
+/// 
+/// ```rhai
+/// fn example() {
+///     print(Object.position.x);
+/// }
+/// // example(); // will raise an error: "Object is not defined"
+/// example!(); // will print the x position of the object using the local API
+/// ```
+/// 
+/// The use of the ! syntax is not
+/// recommended by the rhai book,
+/// so you should use it with caution,
+/// or try to find a better solution.
+/// 
+/// ## Example
+/// 
+/// ```rhai
+/// fn better_example(obj) {
+///     print(obj.position.x);
+///     // do something with the clone of the object...
+/// }
+/// better_example(Object);
+/// 
+/// fn best_example(x) {
+///     print(x);
+///     // do something with the x position of the object...
+/// }
+/// best_example(Object.position.x);
+/// ```
 pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>) -> Result<(Engine,
 ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<KeyStates>>), String> {
     // Create a rhai engine, into which all
     // the API features will be registered.
     let mut engine = Engine::new_raw();
-
-    // Per-Element Local APIs  //
-
-    // It's important to note that the
-    // per-element APIs will only be
-    // available in the global scope
-    // of the element's script, and in
-    // any callback scope that is related
-    // to the API (like the 'update' callback).
-    // However, if you need to use your local
-    // API in a non-API related function, which
-    // is declared in the same script, you can
-    // use the ! notation to give the function
-    // access to the caller's scope, which will
-    // let you use the local API in the function.
-
-    // This method is not recommended by the
-    // rhai book, so use it with caution, or
-    // try to find a better solution.
-    // for more information: https://rhai.rs/book/language/fn-parent-scope.html#admonition-caveat-emptor
-
-    /* Example:
-
-        fn example() {
-            print(Object.position.x);
-        }
-        // example(); // will raise an error: "Object is not defined"
-        example!(); // will print the x position of the object using the local API
-
-        fn better_example(obj) {
-            print(obj.position.x);
-            // do something with the clone of the object...
-        }
-        better_example(Object);
-
-        fn best_example(x) {
-            print(x);
-            // do something with the x position of the object...
-        }
-        best_example(Object.position.x);
-     */
 
     // Register API types to the rhai
     // engine, which will mainly be
@@ -504,9 +536,6 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
         Ok((info.name != "Scene" && info.name != "Object" && info.name != "Game" && info.name != "State") || !is_runtime)
     });
 
-
-    // State Manager and Current Scene Creation  //
-
     // Load the state manager's definition,
     // which includes his configuration and script
     element_defs.borrow_mut().insert(0,
@@ -539,9 +568,6 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
         element_defs.borrow().get(&cur_scene_id).unwrap().as_ref()?,
         None
     )?;
-
-
-    //  Always Available Global API  //
     
     // The following lines declare global
     // API functions, which will always be
@@ -817,9 +843,6 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
     |value1: rhai::FLOAT, value2: rhai::FLOAT| -> rhai::FLOAT {
         return value1.max(value2);
     });
-
-
-    // First Script Run //
     
     // Here the state manager and the current scene's
     // scripts get run for the first time, which
@@ -827,11 +850,8 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
     // declaired above at the global scope.
     // Every API feature that was declaired after this
     // point will only be usable in a callback scope.
-
     state_manager.resources.borrow_mut().run_script(&engine)?;
     cur_scene.resources.borrow_mut().run_script(&engine)?;
-
-    // "Object Stack" Creation and Filling //
 
     // Create the "object stack",
     // which is a vector of element
@@ -900,8 +920,6 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
             object_stack_borrow.last().unwrap().resources.borrow_mut().run_script(&engine)?;
         }
     }
-
-    // Callback Available Global API //
 
     // Share a counted reference to the
     // object stack and current scene's

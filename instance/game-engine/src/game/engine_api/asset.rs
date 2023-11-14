@@ -1,6 +1,8 @@
 
 use rhai::Dynamic;
 
+use crate::game::dynamic_to_number;
+
 pub trait Asset {
     fn get_id(&self) -> u32;
     fn recycle(&mut self, new_id: u32);
@@ -278,7 +280,7 @@ impl<T: Clone + Asset> AssetList<T> {
         }
     }
     //
-    pub fn recycle(&mut self, vec: Vec<i32>) {
+    pub fn recycle(&mut self, vec: &Vec<Dynamic>) {
         //
         self.cur_asset = 0;
         //
@@ -287,15 +289,21 @@ impl<T: Clone + Asset> AssetList<T> {
         let mut i = 0_usize;
         //
         for id in vec {
+            //
+            let id = dynamic_to_number(id)
+            .expect(concat!("Every object's config should",
+            " contain a 'sprites' array, which should only have",
+            " integer members.")) as u32;
+            //
             if i < self.members.len() {
                 //
-                self.members[i].recycle(id as u32);
+                self.members[i].recycle(id);
                 //
                 i += 1;
                 continue;
             }
             //
-            self.members.push(T::new(id as u32));
+            self.members.push(T::new(id));
             //
             i += 1;
         }
