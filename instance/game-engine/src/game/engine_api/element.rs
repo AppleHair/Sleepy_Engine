@@ -5,8 +5,8 @@ use crate::{data::get_element_type, game::dynamic_to_number};
 
 use super::asset::*;
 
-/// Receives a string borrow with a
-/// hex color code (#RRGGBBAA / #RRGGBB),
+/// Receives a string borrow with a\
+/// hex color code (#RRGGBBAA / #RRGGBB),\
 /// and converts it into a slice of bytes.
 pub fn hex_color_to_rgba(hex: &str) -> [u8; 4] {
     // Result slice with
@@ -35,7 +35,7 @@ pub fn hex_color_to_rgba(hex: &str) -> [u8; 4] {
     result
 }
 
-/// Used for storing point data
+/// Used for storing point data\
 /// in element properties.
 #[derive(Clone)]
 pub struct ElemPoint {
@@ -51,8 +51,8 @@ impl ElemPoint {
     pub fn set_y(&mut self, value: rhai::FLOAT) { self.y = value as f32; }
 }
 
-/// Used for storing RGBA
-/// color data in element
+/// Used for storing RGBA\
+/// color data in element\
 /// properties.
 #[derive(Clone)]
 pub struct ElemColor {
@@ -73,18 +73,18 @@ impl ElemColor {
 }
 
 /// This struct is used for
-/// storing the information
+/// storing the information\
 /// which needs to be provided
-/// by the scene's config in order
-/// to create an object.
+/// by the scene's config in\
+/// order to create an object.
 /// 
 /// This Information might also
-/// be provided by the global
-/// 'add_object_to_stack' function,
-/// but in that case, only the position
+/// be provided by the global\
+/// `add_object_to_stack` function,
+/// but in that case, only the position\
 /// is being provided by the function's
-/// arguments, and the rest of the
-/// information uses default values.
+/// arguments, and the rest of\
+/// the information uses default values.
 pub struct ObjectInitInfo {
     pub idx_in_stack: u32,
     pub init_x: f32, pub init_y: f32,
@@ -94,9 +94,9 @@ pub struct ObjectInitInfo {
 
 impl ObjectInitInfo {
     /// Using the index of the object
-    /// in the object stack, and the
+    /// in the object stack, and the\
     /// object instance's config map,
-    /// this function extracts the
+    /// this function extracts the\
     /// necessary information for
     /// creating an object.
     pub fn new(idx: u32, map: &Map) -> Self { Self {
@@ -123,9 +123,9 @@ impl ObjectInitInfo {
 }
 
 /// This struct defines the
-/// properties of an object,
+/// properties of an object,\
 /// and the local API which
-/// is used for accessing
+/// is used for accessing\
 /// and modifying them. 
 #[derive(Clone)]
 pub struct Object {
@@ -147,10 +147,10 @@ impl Object {
     pub fn set_position(&mut self, value: ElemPoint) { self.position = value; }
     pub fn set_scale(&mut self, value: ElemPoint) { self.scale = value; }
     pub fn set_color(&mut self, value: ElemColor) { self.color = value; }
-    /// Asset list setters need to
-    /// check if the new list has
+    /// `AssetList` setters need to
+    /// check if the new list has\
     /// the same assets as the old
-    /// one, and if it doesn't, then
+    /// one, and if it doesn't, then\
     /// the setting should be prevented.
     pub fn set_sprites(&mut self, value: AssetList<Sprite>) {
         if self.sprites.len == value.len &&
@@ -162,15 +162,15 @@ impl Object {
     }
 
     /// Using the object's config, and
-    /// the provided object init info, 
+    /// the provided object init info,\ 
     /// this function defines properties
-    /// for the object in a new 'Object'
+    /// for the object in a new `Object`\
     /// API instance.
     pub fn new(config: &Map, info: ObjectInitInfo) -> Self {
-        // Create a vector of 'Sprite' instances
+        // Create a vector of `Sprite` instances
         let mut sprites_vec: Vec<Sprite> = Vec::new();
         // Add every sprite whos id is
-        // included in the 'sprites' list
+        // included in the `sprites` list
         // of the object's config
         for id in config["sprites"].clone().into_typed_array::<rhai::INT>()
         .expect("Every object's config should contain a 'sprites' array, which should only have integer members.") {
@@ -179,19 +179,19 @@ impl Object {
         // Convert the hex color string
         // into a slice of bytes
         let color = hex_color_to_rgba(&info.init_color);
-        // Return the new 'Object' API instance,
+        // Return the new `Object` API instance,
         // while setting its properties using
         // the provided object init info
         Self {
-            // Create a new 'AssetList' instance
-            // using the vector of 'Sprite' instances
+            // Create a new `AssetList` instance
+            // using the vector of `Sprite` instances
             // which was created earlier
             sprites: AssetList::new(sprites_vec),
             index_in_stack: info.idx_in_stack,
             position: ElemPoint { x: info.init_x, y: info.init_y },
             scale: ElemPoint { x: info.init_scale_x, y: info.init_scale_y },
             // Use the color slice of bytes
-            // to create a new 'ElemColor' instance
+            // to create a new `ElemColor` instance
             // for the object's color property
             color: ElemColor { r: color[0], g: color[1],
                 b: color[2], a: info.init_alpha }
@@ -199,13 +199,13 @@ impl Object {
     }
 
     /// Using the object's config, and
-    /// the provided object init info, 
+    /// the provided object init info,\
     /// this function recycles an existing
-    /// 'Object' API instance to defines
+    /// `Object` API instance to define\
     /// properties for a new object.
     pub fn recycle(&mut self, config: &Map, info: ObjectInitInfo) {
-        // Recycle the 'AssetList' instance
-        // using the object config's 'sprites' list
+        // Recycle the `AssetList` instance
+        // using the object config's `sprites` list
         self.sprites.recycle(&config["sprites"].read_lock::<Vec<Dynamic>>()
         .expect("Every object's config should contain a 'sprites' array, which should only have integer members."));
         // Convert the hex color string
@@ -230,7 +230,7 @@ impl Object {
 /// information about a scene's layer.
 ///  
 /// The scene's layers will be iterated 
-/// through by the renderer, an it will 
+/// through by the renderer, an it will\
 /// draw the objects according to the order 
 /// of the layers they are placed in.
 #[derive(Clone)]
@@ -248,14 +248,14 @@ impl Layer {
 /// information about the scene's camera.
 /// 
 /// The camera's properties are similar
-/// to the properties of an object, but
-/// the camera's properties applys to 
-/// every object in the scene. For example,
+/// to the properties of an object, but\
+/// the camera's properties applys to every
+/// object in the scene. For example,\
 /// when the camera's position is changed,
-/// every object in the scene will appear
-/// to move in the opposite direction and
-/// when the camera's zoom is changed, every
-/// object in the scene will appear to scale.
+/// every object in the scene will appear\
+/// to move in the opposite direction
+/// and when the camera's zoom is changed,\
+/// every object in the scene will appear to scale.
 #[derive(Clone)]
 pub struct Camera {
     pub position: ElemPoint,
@@ -274,10 +274,10 @@ impl Camera {
 }
 
 /// This struct defines the
-/// properties of a scene,
+/// properties of a scene,\
 /// and the local API which
-/// is used for accessing
-/// and modifying them. 
+/// is used for accessing\
+/// and modifying them.
 #[derive(Clone)]
 pub struct Scene {
     pub camera: Camera,
@@ -300,9 +300,9 @@ impl Scene {
     pub fn set_camera(&mut self, value: Camera) { self.camera = value; }
 
     /// This function removes an
-    /// object instance from one of
+    /// object instance from one of\
     /// the scene's layers if it already
-    /// exists in any of them. It also
+    /// exists in any of them. It also\
     /// returns a boolean value which
     /// indicates if the instance was removed.
     pub fn remove_instance(&mut self, idx: rhai::INT) -> bool {
@@ -331,7 +331,7 @@ impl Scene {
 
     /// This function adds an object
     /// instance to one of the scene's
-    /// layers if it doesn't already exist
+    /// layers if it doesn't already exist\
     /// in any of them. It also returns a
     /// boolean value which indicates if
     /// the instance was added.
@@ -358,50 +358,50 @@ impl Scene {
         false
     }
 
-    /// Using the scene's config, this
-    /// function defines properties for
-    /// the scene in a new 'Scene' API
+    /// Using the scene's config, this\
+    /// function defines properties for\
+    /// the scene in a new `Scene` API\
     /// instance.
     pub fn new(config: &Map) -> Self {
-        //
+        // Create a vector of `Layer` instances
         let mut layers_vec: Vec<Layer> = Vec::new();
-        //
+        // Add every layer whos name is
+        // included in the `layers` list
+        // of the scene's config
         for name in config["layers"].clone().into_typed_array::<String>()
         .expect("Every scene's config should contain a 'layers' array, which should only have strings.") {
-            //
             layers_vec.push( Layer { name, instances: { Vec::new() } } );
         }
-        //
+        // Get the camera's properties
         let camera_info: &Map = &config["camera"].read_lock::<Map>()
         .expect("Every scene's config should contain a 'camera' object-like attrbute.");
-        //
+        // Convert the hex color string
+        // into a slice of bytes
         let color = hex_color_to_rgba(&camera_info["color"].read_lock::<rhai::ImmutableString>()
         .expect("Every 'camera' object in a scene's config should contain a 'color' string attribute."));
-        //
+        // Return the new `Scene` API instance,
+        // while setting its properties using
+        // the provided configuration
         Self {
-            //
             objects_len: config["object-instances"].read_lock::<Vec<Dynamic>>()
             .expect("Every scene's config should contain an array 'object-instances' attribute.").len(),
-            //
             layers_len: layers_vec.len(),
-            //
             runtimes_len: 0,
-            //
             runtime_vacants: Vec::new(),
-            //
+            // Create a new camera instance
+            // for the scene's `camera` property
             camera: Camera {
-                //
                 position: ElemPoint { 
                     x: dynamic_to_number(&camera_info["x"])
                     .expect("Every 'camera' object in a scene's config should contain a 'x' float attribute."), 
                     y: dynamic_to_number(&camera_info["y"])
                     .expect("Every 'camera' object in a scene's config should contain a 'y' float attribute.") 
-                }, 
-                //
+                },
                 zoom: dynamic_to_number(&camera_info["zoom"])
                 .expect("Every 'camera' object in a scene's config should contain a 'zoom' float attribute."),
-                //
                 color: ElemColor {
+                    // Use the color slice of bytes
+                    // to set the camera's color property
                     r: color[0],
                     g: color[1],
                     b: color[2],
@@ -410,68 +410,76 @@ impl Scene {
                     " contain a 'alpha' integer attribute.")) as u8
                 }
             },
-            //
+            // Use the vector of `Layer` instances
+            // as the scene's `layers` property
             layers: layers_vec,
         }
     }
 
-    //
+    /// Using the scene's config, this
+    /// function recycles an existing\
+    /// `Scene` API instance to define
+    /// properties for a new object.
     pub fn recycle(&mut self, config: &Map) {
-        //
+        // Use this counter to keep track
+        // of th nuber of layers this scene
+        // should have after recycling
         let mut i = 0_usize;
-        //
+        // Iterate through the scene's config's
+        // `layers` list, and add every layer
+        // whos name is included in the list
         for name in &config["layers"].read_lock::<Vec<Dynamic>>()
         .expect("Every scene's config should contain a 'layers' array, which should only have strings.")
         as &Vec<Dynamic>  {
-            //
             let name: &str = &name.read_lock::<rhai::ImmutableString>()
             .expect("Every scene's config should contain a 'layers' array, which should only have strings.");
-            //
+            // If this layer name 's index
+            // is still in the bounds of
+            // the scene's `layers` property,
+            // then recycle the layer in its
+            // index, replacing it with a new
+            // clear layer with the new name.
             if i < self.layers.len() {
-                //
                 self.layers[i].name.clear();
-                //
                 self.layers[i].name.push_str(name);
-                //
                 self.layers[i].instances.clear();
-                //
                 i += 1;
                 continue;
             }
-            //
+            // Otherwise, extend the scene's
+            // `layers` property with a new
+            // clear layer with the new name.
             self.layers.push( Layer {  name: String::from(name), instances: Vec::new() } );
-            //
             i += 1;
         }
-        //
-        self.layers_len = i;
-        //
-        self.runtimes_len = 0;
-        //
-        self.runtime_vacants.clear();
-        //
-        self.objects_len = config["object-instances"].read_lock::<Vec<Dynamic>>()
-        .expect("Every scene's config should contain an array 'object-instances' attribute.").len();
-        //
+        // Get the camera's properties
         let camera_info: &Map = &config["camera"].read_lock::<Map>()
         .expect("Every scene's config should contain a 'camera' object-like attrbute.");
-        //
+        // Convert the hex color string
+        // into a slice of bytes
         let color = hex_color_to_rgba(&camera_info["color"].read_lock::<rhai::ImmutableString>()
         .expect("Every 'camera' object in a scene's config should contain a 'color' string attribute."));
-        //
+        // Set the scene's properties
+        // using the provided configuration
+        self.layers_len = i;
+        self.runtimes_len = 0;
+        self.runtime_vacants.clear();
+        self.objects_len = config["object-instances"].read_lock::<Vec<Dynamic>>()
+        .expect("Every scene's config should contain an array 'object-instances' attribute.").len();
+        // Create a new camera instance
+        // for the scene's `camera` property
         self.camera = Camera {
-            //
             position: ElemPoint { 
                 x: dynamic_to_number(&camera_info["x"])
                 .expect("Every 'camera' object in a scene's config should contain a 'x' float attribute."), 
                 y: dynamic_to_number(&camera_info["y"])
                 .expect("Every 'camera' object in a scene's config should contain a 'y' float attribute.") 
-            }, 
-            //
+            },
             zoom: dynamic_to_number(&camera_info["zoom"])
             .expect("Every 'camera' object in a scene's config should contain a 'zoom' float attribute."),
-            //
             color: ElemColor {
+                // Use the color slice of bytes
+                // to set the camera's color property
                 r: color[0],
                 g: color[1],
                 b: color[2],
@@ -483,13 +491,17 @@ impl Scene {
     }
 }
 
-//
+/// This struct defines the
+/// properties of the state\
+/// manager, and the local
+/// API which is used for\
+/// accessing and modifying them.
 #[derive(Clone)]
 pub struct Game {
     pub cur_scene: u32,
     pub canvas_width: f32,
     pub canvas_height: f32,
-    pub version: [u8; 4],
+    pub version: Vec<u8>,
     pub clear_red: u8,
     pub clear_green: u8,
     pub clear_blue: u8,
@@ -497,48 +509,51 @@ pub struct Game {
 }
 
 impl Game {
-    //
     pub fn get_cur_scene(&mut self) -> rhai::INT { self.cur_scene as rhai::INT }
     pub fn get_canvas_width(&mut self) -> rhai::FLOAT { self.canvas_width as rhai::FLOAT }
     pub fn get_canvas_height(&mut self) -> rhai::FLOAT { self.canvas_height as rhai::FLOAT }
-    pub fn get_version(&mut self) -> Dynamic { self.version.iter().map(|&num|
-        { Dynamic::from_int(num as rhai::INT) }).collect::<Vec<Dynamic>>().into() }
+    pub fn get_version(&mut self) -> Dynamic { self.version.into() }
     pub fn get_clear_red(&mut self) -> rhai::INT { self.clear_red as rhai::INT }
     pub fn get_clear_green(&mut self) -> rhai::INT { self.clear_green as rhai::INT }
     pub fn get_clear_blue(&mut self) -> rhai::INT { self.clear_blue as rhai::INT }
     pub fn get_fps(&mut self) -> rhai::INT { self.fps as rhai::INT }
 
-    //
+    // The `cur_scene` property
+    // setter needs to check if
+    // the requested scene rowid
+    // is a valid scene rowid.
     pub fn set_cur_scene(&mut self, value: rhai::INT) -> Result<(), Box<rhai::EvalAltResult>> { 
-        //
         let kind = get_element_type(value as u32);
-        //
         if kind == 2 {
-            //
             self.cur_scene = value as u32;
-            //
             Ok(())
         } else {
-            //
             Err("Tried to switch to a scene that doesn't exist.".into())
         }
     }
-    //
     pub fn set_canvas_width(&mut self, value: rhai::FLOAT) { self.canvas_width = value as f32; }
     pub fn set_canvas_height(&mut self, value: rhai::FLOAT) { self.canvas_height = value as f32; }
     pub fn set_clear_red(&mut self, value: rhai::INT) { self.clear_red = value as u8; }
     pub fn set_clear_green(&mut self, value: rhai::INT) { self.clear_green = value as u8; }
     pub fn set_clear_blue(&mut self, value: rhai::INT) { self.clear_blue = value as u8; }
     pub fn set_fps(&mut self, value: rhai::INT) { self.fps = value as u16; }
-    //
+
+    /// Using the state manager's\
+    /// config, this function defines\
+    /// properties for the state manager\
+    /// in a new `Game` API instance.
     pub fn new(config: &Map) -> Self {
-        //
-        let color = hex_color_to_rgba(&config["clear-color"].clone().into_string()
+        // Convert the hex color string
+        // into a slice of bytes
+        let color = hex_color_to_rgba(&config["clear-color"].read_lock::<rhai::ImmutableString>()
         .expect("The state manager's config should contain a 'clear-color' string attribute."));
-        //
-        let version_vec = config["version"].clone().into_array()
+        // Get the version numbers as
+        // an vector of `Dynamic`s.
+        let version_vec: &Vec<Dynamic> = &config["version"].read_lock::<Vec<Dynamic>>()
         .expect("The state manager's config should contain a 'version' integer array attribute.");
-        //
+        // Return the new `Game` API instance,
+        // while setting its properties using
+        // the provided configuration
         Self {
             cur_scene: dynamic_to_number(&config["initial-scene"])
             .expect("The state manager's config should contain a 'initial-scene' integer attribute.") as u32,
@@ -548,7 +563,10 @@ impl Game {
             .expect("The state manager's config should contain a 'canvas-height' float attribute.") as f32,
             fps: dynamic_to_number(&config["fps"])
             .expect("The state manager's config should contain a 'fps' integer attribute.") as u16,
-            version: [
+            // Use the version numbers vector
+            // to set the state manager's `version``
+            // property
+            version: vec![
                 dynamic_to_number(&version_vec[0])
                 .expect("The state manager's config should contain a 'version' integer array attribute.") as u8,
                 dynamic_to_number(&version_vec[1])
@@ -558,6 +576,8 @@ impl Game {
                 dynamic_to_number(&version_vec[3])
                 .expect("The state manager's config should contain a 'version' integer array attribute.") as u8
             ],
+            // Use the color slice of bytes
+            // to set the clear color properties
             clear_red: color[0],
             clear_green: color[1],
             clear_blue: color[2],
