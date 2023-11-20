@@ -13,9 +13,10 @@ pub mod asset;
 pub type ElementDefinitions = HashMap<u32,Result<Rc<ElementDefinition>, String>>;
 pub type KeyStates = HashMap<String, KeyState>;
 
-/// A struct that will be used to
-/// track the state of a key on the
-/// keyboard in the key states table.
+/// A struct that will be
+/// used to track the state\
+/// of a key on the keyboard
+/// in the key states table.
 pub struct KeyState {
     pub is_held: bool,
     pub just_pressed: bool,
@@ -23,7 +24,7 @@ pub struct KeyState {
 }
 
 /// A struct that will be used to
-/// store all the data which is loaded
+/// store all the data which is loaded\
 /// for a single element defined in the
 /// project file/game data file.
 pub struct ElementDefinition {
@@ -34,7 +35,7 @@ pub struct ElementDefinition {
 
 impl ElementDefinition {
     /// Using a rhai engine and row data,
-    /// this function will load the element's
+    /// this function will load the element's\
     /// configuration and script and return
     /// a new element definition, or an error. 
     pub fn new(engine: &Engine, row: TableRow) -> Result<Rc<Self>, String> {
@@ -93,42 +94,43 @@ impl ElementDefinition {
 }
 
 /// A struct that will store the
-/// element's "resources", which
+/// element's "resources", which\
 /// include the element's definition,
-/// and the scope of the element's script.
+/// and the scope of the\
+/// element's script.
 /// 
 /// The main purpose of this
-/// struct is to maintain the state 
+/// struct is to maintain the state\
 /// of an element's script between
-/// callbacks using the rhai scope,
+/// callbacks using the rhai scope,\
 /// and keeping a counted reference
-/// to the element's definition, which
-/// is needed for running the element's
-/// script with the maintained scope
-/// among other things.
+/// to the element's definition,\
+/// which is needed for running the
+/// element's script with the\
+/// maintained scope among other things.
 pub struct ElementResources {
     pub definition: Rc<ElementDefinition>,
     scope: Scope<'static>
 }
 
 impl ElementResources {
-    /// Creates a new element resources
+    /// Creates a new element resources\
     /// struct using a given element definition.
     fn new(definition: Rc<ElementDefinition>) -> Self {
         Self { definition, scope: Scope::new() }
     }
-    /// Recycles an existing element resources
+    /// Recycles an existing element resources\
     /// struct using a given element definition.
     fn recycle(&mut self, definition: Rc<ElementDefinition>) {
         self.definition = definition;
         self.scope.clear();
     }
     /// Runs the element's script
-    /// with the current scope and
+    /// with the current scope and\
     /// return an error if any occured.
     /// 
     /// This means the code written in 
-    /// the global scope will be executed
+    /// the global scope will be executed\
     /// and every variable defined in it will
     /// stay in the scope until it's cleared.
     pub fn run_script(&mut self, engine: &Engine) -> Result<(), String> {
@@ -143,7 +145,7 @@ impl ElementResources {
     /// scope and return an error if any occured.
     /// 
     /// If the function doesn't exist, the call
-    /// will be ignored and no error will be raised.
+    /// will be ignored and no error will be raised.\
     /// Any new variable defined in the function
     /// will be cleared from the scope after the
     /// function returns.
@@ -165,9 +167,9 @@ impl ElementResources {
 /// handle an instance of an element.
 /// 
 /// This struct will store the element's
-/// properties and an element resources
+/// properties and an element resources\
 /// struct. The element's properties
-/// will be shared with the scope of
+/// will be shared with the scope of\
 /// the element's script, which will
 /// allow the script to access it's
 /// local API.
@@ -188,7 +190,7 @@ impl ElementHandler {
     /// The element resources will be
     /// created first using the given
     /// element definition, and then
-    /// the element definition will be
+    /// the element definition will be\
     /// used to create the element's
     /// properties, which will be shared
     /// with the element's script scope.
@@ -304,7 +306,7 @@ impl ElementHandler {
     /// The element resources will be
     /// recycled first using the given
     /// element definition, and then
-    /// the element definition will be
+    /// the element definition will be\
     /// used to recycle the element's
     /// properties, which will be shared
     /// with the element's script scope.
@@ -495,7 +497,7 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
           .register_indexer_set(asset::AssetList::<asset::Sprite>::set_asset)
           .register_fn("len", asset::AssetList::<asset::Sprite>::len)
           .register_get("len", asset::AssetList::<asset::Sprite>::len)
-          .register_fn("contains", asset::AssetList::<asset::Sprite>::contains)
+          .register_fn("contains", asset::AssetList::<asset::Sprite>::find)
           .register_type_with_name::<element::Object>("Object")
           .register_get_set("position", element::Object::get_position, element::Object::set_position)
           .register_get_set("scale", element::Object::get_scale, element::Object::set_scale)

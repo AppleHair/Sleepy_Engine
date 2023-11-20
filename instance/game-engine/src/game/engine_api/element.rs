@@ -422,7 +422,7 @@ impl Scene {
     /// properties for a new object.
     pub fn recycle(&mut self, config: &Map) {
         // Use this counter to keep track
-        // of th nuber of layers this scene
+        // of th number of layers this scene
         // should have after recycling
         let mut i = 0_usize;
         // Iterate through the scene's config's
