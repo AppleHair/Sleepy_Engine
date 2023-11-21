@@ -57,7 +57,7 @@ pub struct KeyStateTracker {
 }
 
 impl KeyStateTracker {
-    pub fn init(key_states: Rc<RefCell<engine_api::KeyStates>>) -> Result<Self, JsValue> {
+    pub fn new(key_states: Rc<RefCell<engine_api::KeyStates>>) -> Result<Self, JsValue> {
         //
         let keys_just_changed = Rc::new(RefCell::new(Vec::new()));
         //
@@ -332,22 +332,21 @@ pub fn run_game() -> Result<(), JsValue>
     load_elements(&engine, &mut element_defs.borrow_mut(), true);
 
     //
-    let key_tracker = KeyStateTracker::init(key_states)?;
+    let key_tracker = KeyStateTracker::new(key_states)?;
 
     //
     call_fn_on_all("init", (), &engine,
     &state_manager.resources, &cur_scene, &object_stack)?;
 
     //
-    let (gl_context, gl_program,
-    program_data,
-    vertex_buffer, index_buffer) = 
-        renderer::create_rendering_components(&state_manager.properties.borrow()
+    let mut webgl_renderer = renderer::WebGlRenderer::new(
+        &state_manager.properties.borrow()
         .read_lock::<engine_api::element::Game>()
-        .expect("read_lock cast should succeed"))?;
+        .expect("read_lock cast should succeed")
+    )?;
 
     //
-    load_assets(&engine, &mut asset_defs, &gl_context);
+    load_assets(&engine, &mut asset_defs, &webgl_renderer.gl_context);
     
     //
     let draw_loop = Rc::new(RefCell::new(
@@ -375,12 +374,11 @@ pub fn run_game() -> Result<(), JsValue>
 
         //
         load_assets(&json_engine,
-        &mut asset_defs, &gl_context);
+        &mut asset_defs, &webgl_renderer.gl_context);
 
         //
-        renderer::render_scene(
-            &gl_context, &gl_program, &program_data, &vertex_buffer,
-            &index_buffer, &state_manager_props.borrow()
+        webgl_renderer.render_scene(
+            &state_manager_props.borrow()
             .read_lock::<engine_api::element::Game>()
             .expect("read_lock cast should succeed"),
             &cur_scene_props.borrow()

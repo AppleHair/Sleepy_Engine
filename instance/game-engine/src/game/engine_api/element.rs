@@ -512,7 +512,7 @@ impl Game {
     pub fn get_cur_scene(&mut self) -> rhai::INT { self.cur_scene as rhai::INT }
     pub fn get_canvas_width(&mut self) -> rhai::FLOAT { self.canvas_width as rhai::FLOAT }
     pub fn get_canvas_height(&mut self) -> rhai::FLOAT { self.canvas_height as rhai::FLOAT }
-    pub fn get_version(&mut self) -> Dynamic { self.version.into() }
+    pub fn get_version(&mut self) -> Dynamic { self.version.clone().into() }
     pub fn get_clear_red(&mut self) -> rhai::INT { self.clear_red as rhai::INT }
     pub fn get_clear_green(&mut self) -> rhai::INT { self.clear_green as rhai::INT }
     pub fn get_clear_blue(&mut self) -> rhai::INT { self.clear_blue as rhai::INT }

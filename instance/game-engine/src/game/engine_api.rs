@@ -37,7 +37,7 @@ impl ElementDefinition {
     /// Using a rhai engine and row data,
     /// this function will load the element's\
     /// configuration and script and return
-    /// a new element definition, or an error. 
+    /// a new element definition, or an error.
     pub fn new(engine: &Engine, row: TableRow) -> Result<Rc<Self>, String> {
         // Load the element's script and compile
         // it into an AST (Abstract Syntax Tree).

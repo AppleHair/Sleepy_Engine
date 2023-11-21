@@ -9,25 +9,124 @@ use crate::{data, game::{TableRow, dynamic_to_number}};
 use super::engine_api::{element, self};
 
 pub type AssetDefinitions = HashMap<u32,Result<AssetDefinition, JsValue>>;
-pub type ProgramDataLocations = HashMap<String, ProgramDataLocation>;
+
+/// The html element id
+/// of the canvas element.
+const CANVAS_ID: &str = "canvas";
 
 const MAX_QUAD_COUNT: i32 = 1000;
 const INDCIES_PER_QUAD: i32 = 6;
 const VERTICES_PER_QUAD: i32 = 4;
 const FLOATS_PER_VERTEX: i32 = 13;
 
-pub enum ProgramDataLocation {
-    Attribute(u32),
-    Uniform(web_sys::WebGlUniformLocation),
-}
+const VERTEX_SHADER: &str = r#"
+attribute vec2 a_position;
+attribute vec4 a_color;
+attribute vec2 a_texcoord;
+attribute vec2 a_texsize;
+attribute vec2 a_scale;
+attribute float a_texindex;
 
-//
+uniform vec2 u_resolution;
+uniform vec2 u_camera;
+uniform float u_zoom;
+
+varying vec4 v_color;
+varying vec2 v_texcoord;
+varying vec2 v_texsize;
+varying vec2 v_scale;
+varying float v_texindex;
+
+void main() {
+
+    v_color = a_color;
+    v_texcoord = a_texcoord * a_texsize;
+    v_texsize = a_texsize;
+    v_scale = a_scale;
+    v_texindex = a_texindex;
+
+    vec2 camRelative = a_position - u_camera;
+    vec2 clipSpace = camRelative * abs(u_zoom) * 2.0 / u_resolution;
+    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+}
+"#;
+
+const FRAGMENT_SHADER: &str = r#"
+precision highp float;
+
+varying vec4 v_color;
+varying vec2 v_texcoord;
+varying vec2 v_texsize;
+varying vec2 v_scale;
+varying float v_texindex;
+
+uniform float u_zoom;
+uniform vec4 u_cam_color;
+uniform sampler2D u_textures[gl_MaxTextureImageUnits];
+
+void main() {
+    
+    vec2 texcoord = v_texcoord;
+
+    // This method utliizes bilinear sampling
+    // to apply per-texel anti-aliasing, which
+    // will help to prevent image distortions,
+    // while keeping the texels sharp enough.
+
+    // Calculate the ratio between
+    // the pixel and texel sizes.
+    vec2 pixPerTex = abs(v_scale) * abs(u_zoom);
+    // Calculate the offset of the pixel
+    // from the center of the texel.
+    vec2 pixoffset = clamp(fract(v_texcoord) * pixPerTex, 0.0, 0.5) - clamp((1.0 - fract(v_texcoord)) * pixPerTex, 0.0, 0.5);
+    // Because we don't want to devide by zero,
+    // make sure the texture size isn't zero.
+    if (v_texsize != vec2(0.0,0.0)) {
+        // We will apply the offset to the texture coordinates
+        texcoord = (floor(v_texcoord) + 0.5 + pixoffset) / v_texsize;
+    }
+
+    int index = int(v_texindex);
+
+    // gl_FragColor = texture2D(u_textures[index], texcoord) * v_color * u_cam_color;
+    // ERROR: '[]' : Index expression must be constant
+
+    // This is a workaround for the above error.
+    for (int i=0; i<gl_MaxTextureImageUnits; i++) {
+        if (index == i) {
+            gl_FragColor = texture2D(u_textures[i], texcoord) * v_color * u_cam_color;
+        }
+    }
+}
+"#;
+
+const ATTRIBUTE_MATRIX: [(&str, i32, i32); 6] = [
+    // name, size, offset
+    ("a_position", 2, 0),
+    ("a_color", 4, 8),
+    ("a_texcoord", 2, 24),
+    ("a_texsize", 2, 32),
+    ("a_scale", 2, 40),
+    ("a_texindex", 1, 48),
+];
+
+const UNIFORM_LIST: [&str; 5] = [
+    "u_resolution", "u_camera", "u_zoom", "u_cam_color", "u_textures"
+];
+
+/// This enum will help
+/// the `AssetDefinition`\
+/// struct to store data of
+/// different types of assets.
 pub enum AssetData {
     ImageData{width: i32, height: i32, texture: WebGlTexture},
 }
 
-//
 impl AssetData {
+    /// Using a rowid and the webgl context,
+    /// this function will return an `AssetData`\
+    /// enum variant with the image data of the
+    /// asset with the provided rowid.
     pub fn new_image_data(id: u32, gl_context: &WebGlRenderingContext) -> Result<AssetData, JsValue> {
         // Use the id to get the image png data.
         let image_data = data::get_asset_data(id);
@@ -74,36 +173,56 @@ impl AssetData {
     }
 }
 
-//
+/// A struct that will be used to
+/// store all the data which is loaded\
+/// for a single asset defined in the
+/// project file/game data file.
 pub struct AssetDefinition {
     pub row: TableRow,
     pub asset_data: AssetData,
     pub config: rhai::Map,
 }
 
-//
 impl AssetDefinition {
-    //
+    /// Using a rhai engine, row data and
+    /// a webgl context, this function will\
+    /// load the asset's configuration and
+    /// data and return a new asset definition,
+    /// or an error.
     pub fn new(engine: &rhai::Engine, row: TableRow, gl_context: &WebGlRenderingContext) -> Result<Self, JsValue> {
-        //
+        // Load the asset's data using the rowid.
         let asset_data = match row {
-            TableRow::Asset(id, 1) => AssetData::new_image_data(id, gl_context)?,
-            TableRow::Asset(_, _) => { return Err(concat!("Audio / Font asset definitions are not implemented in",
-                " this version of the engine. Please remove any use of them from your project.").into()); },
-            _ => { return Err("Can't define an element as an asset.".into()); },
+            // An asset of type 1 is an sprite asset.
+            TableRow::Asset(id, 1) => AssetData::new_image_data(id, gl_context),
+            // Assets of any other type
+            // aren't implemented yet.
+            TableRow::Asset(_, _) => { Err(concat!("Audio / Font asset definitions are not implemented in",
+                " this version of the engine. Please remove any use of them from your project.").into()) },
+            _ => { Err("Can't define an element as an asset.".into()) },
         };
-        //
+        // Return an error if the asset data couldn't be loaded.
+        if let Some(err) = asset_data.as_ref().err() {
+            return Err(JsValue::from_str(&row.to_err_string(&err.as_string()
+            .unwrap_or(String::from("Uncaught image data loading error.")))));
+        }
+        // Load the asset's configuration and
+        // parse it into a rhai map (JSON object).
         let json = engine.parse_json(&match row {
             TableRow::Asset(id, _) => data::get_asset_config(id),
             _ => { return Err("Can't define an element as an asset.".into()); },
         }, false);
-        //
+        // Return an error if any occured
+        // while parsing the config.
         if let Some(err) = json.as_ref().err() {
-            //
             return Err(JsValue::from_str(&row.to_err_string(&err.to_string())));
         }
-        //
-        Ok(Self{row,asset_data,
+        // Return the asset definition.
+        Ok(Self{row,
+        asset_data: asset_data.expect(
+            concat!("This Err should",
+            " have been caught by this",
+            " function beforehand")
+        ),
         config: json.expect(
             concat!("This Err should",
             " have been caught by this",
@@ -112,513 +231,478 @@ impl AssetDefinition {
     }
 }
 
-//
-pub fn create_rendering_components(game: &element::Game)
- -> Result<(WebGlRenderingContext, WebGlProgram,
-ProgramDataLocations, WebGlBuffer, WebGlBuffer), JsValue> {
-    //
-    let gl_context = create_context(
-    game.canvas_width, game.canvas_height)?;
-    //
-    let (gl_program, 
-    data_locations) = 
-        create_scene_rendering_program(&gl_context)?;
-    // 
-    let vertex_buffer = gl_context
-        .create_buffer()
-        .ok_or("failed to create buffer")?;
-    //
-    gl_context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
-    // Use the scene rendering shader program.
-    gl_context.use_program(Some(&gl_program));
-
-    //
-    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_position") {
-        // Enable the attribute-reading method
-        gl_context.enable_vertex_attrib_array(*location);
-        // Tell the GPU how to read the vertex buffer by attributes
-        gl_context.vertex_attrib_pointer_with_i32(*location, 
-        2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 0);
-
-    } else { return Err("Couldn't find attribute 'a_position'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_color") {
-        // Enable the attribute-reading method
-        gl_context.enable_vertex_attrib_array(*location);
-        // Tell the GPU how to read the vertex buffer by attributes
-        gl_context.vertex_attrib_pointer_with_i32(*location, 
-        4, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 8);
-
-    } else { return Err("Couldn't find attribute 'a_color'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_texcoord") {
-        // Enable the attribute-reading method
-        gl_context.enable_vertex_attrib_array(*location);
-        // Tell the GPU how to read the vertex buffer by attributes
-        gl_context.vertex_attrib_pointer_with_i32(*location, 
-        2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 24);
-
-    } else { return Err("Couldn't find attribute 'a_texcoord'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_texsize") {
-        // Enable the attribute-reading method
-        gl_context.enable_vertex_attrib_array(*location);
-        // Tell the GPU how to read the vertex buffer by attributes
-        gl_context.vertex_attrib_pointer_with_i32(*location, 
-        2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 32);
-
-    } else { return Err("Couldn't find attribute 'a_texsize'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_scale") {
-        // Enable the attribute-reading method
-        gl_context.enable_vertex_attrib_array(*location);
-        // Tell the GPU how to read the vertex buffer by attributes
-        gl_context.vertex_attrib_pointer_with_i32(*location, 
-        2, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 40);
-
-    } else { return Err("Couldn't find attribute 'a_scale'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Attribute(location)) = data_locations.get("a_texindex") {
-        // Enable the attribute-reading method
-        gl_context.enable_vertex_attrib_array(*location);
-        // Tell the GPU how to read the vertex buffer by attributes
-        gl_context.vertex_attrib_pointer_with_i32(*location, 
-        1, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, 48);
-
-    } else { return Err("Couldn't find attribute 'a_texindex'".into()); }
-
-
-    // Get the maximun texture units we can use on the fragment shader
-    let max_texture_units = gl_context
-    .get_parameter(WebGlRenderingContext::MAX_TEXTURE_IMAGE_UNITS)
-    .unwrap().as_f64().unwrap() as i32;
-
-    //
-    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_textures") {
-        //
-        gl_context.uniform1iv_with_i32_array(Some(location),
-        (0..max_texture_units).collect::<Vec<i32>>().as_slice());
-
-    } else { return Err("Couldn't find uniform 'u_textures'".into()); }
-    
-    //
-    gl_context.buffer_data_with_i32(
-        WebGlRenderingContext::ARRAY_BUFFER,
-        MAX_QUAD_COUNT * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * 4,
-        WebGlRenderingContext::DYNAMIC_DRAW,
-    );
-
-    //
-    let index_buffer = gl_context
-        .create_buffer()
-        .ok_or("failed to create buffer")?;
-    //
-    gl_context.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
-
-    //
-    let mut indcies: Vec<u16> = Vec::new();
-    for i in 0..MAX_QUAD_COUNT {
-        // Copy data into the Vec<u16> 
-        // from the slice which includes
-        // the indcies which represent 
-        // the order of the vertices' rendering.
-        indcies.extend_from_slice(&[
-            (0 + VERTICES_PER_QUAD * i) as u16,
-            (1 + VERTICES_PER_QUAD * i) as u16,
-            (2 + VERTICES_PER_QUAD * i) as u16,
-            (2 + VERTICES_PER_QUAD * i) as u16,
-            (1 + VERTICES_PER_QUAD * i) as u16,
-            (3 + VERTICES_PER_QUAD * i) as u16,
-        ]);
-    }
-    // Note that `Uint16Array::view` is somewhat dangerous (hence the
-    // `unsafe`!). This is creating a raw view into our module's
-    // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
-    // (aka do a memory allocation in Rust) it'll cause the buffer to change,
-    // causing the `Uint16Array` to be invalid.
-    //
-    // As a result, after `Uint16Array::view` we have to be very careful not to
-    // do any memory allocations before it's dropped.
-    unsafe {
-        //
-        let indcies_array = js_sys::Uint16Array::view(indcies.as_slice());
-        //
-        gl_context.buffer_data_with_array_buffer_view(
-            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
-            &indcies_array,
-            WebGlRenderingContext::STATIC_DRAW,
-        );
-    }
-    // Create webgl white texture object
-    let white_texture = gl_context.create_texture();
-    // Activate texture unit 0 with this white texture
-    gl_context.active_texture(WebGlRenderingContext::TEXTURE0);
-    // bind the white texture to the webgl context
-    gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, white_texture.as_ref());
-    // Set Parameters
-    gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
-        WebGlRenderingContext::TEXTURE_MIN_FILTER,
-        WebGlRenderingContext::LINEAR as i32);
-    gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
-        WebGlRenderingContext::TEXTURE_MAG_FILTER,
-        WebGlRenderingContext::LINEAR as i32);
-    gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
-        WebGlRenderingContext::TEXTURE_WRAP_S,
-        WebGlRenderingContext::CLAMP_TO_EDGE as i32);
-    gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
-        WebGlRenderingContext::TEXTURE_WRAP_T,
-        WebGlRenderingContext::CLAMP_TO_EDGE as i32);
-    // Create the image data of the texture (1x1 white pixel)
-    gl_context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
-        WebGlRenderingContext::TEXTURE_2D, 0,
-        WebGlRenderingContext::RGBA as i32, 1, 1,
-        0, WebGlRenderingContext::RGBA,
-        WebGlRenderingContext::UNSIGNED_BYTE,
-        Some(&[255,255,255,255])
-    )?;
-    //
-    Ok((gl_context, gl_program, data_locations, vertex_buffer, index_buffer))
+/// This struct stores all the
+/// rendering components of the game.\
+/// It will be used to manage the
+/// rendering proccess of the game.
+pub struct WebGlRenderer {
+    pub gl_context: WebGlRenderingContext,
+    pub gl_program: WebGlProgram,
+    uniform_locations: HashMap<String,web_sys::WebGlUniformLocation>,
+    vertex_buffer: WebGlBuffer,
+    index_buffer: WebGlBuffer,
+    vertex_vec: Vec<f32>,
+    texture_slots: Vec<u32>,
+    max_texture_units: i32,
 }
 
-//
-pub fn render_scene(gl_context: &WebGlRenderingContext, gl_program: &WebGlProgram,
-data_locations: &ProgramDataLocations, vertex_buffer: &web_sys::WebGlBuffer,
-index_buffer: &web_sys::WebGlBuffer, game: &element::Game, scene_props: &element::Scene,
-object_stack: &Vec<engine_api::ElementHandler>, asset_defs: &AssetDefinitions, elapsed: f64) -> Result<(), JsValue> {
-    // Use the scene rendering shader program.
-    gl_context.use_program(Some(&gl_program));
-    // Set the clear color.
-    gl_context.clear_color(from_0_225_to_0_1(game.clear_red),
-    from_0_225_to_0_1(game.clear_green), from_0_225_to_0_1(game.clear_blue), 1.0);
-
-    // Clear the canvas
-    gl_context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
-    // Set the blending method the alpha of the images will control
-    gl_context.enable(WebGlRenderingContext::BLEND);
-    gl_context.blend_func(WebGlRenderingContext::ONE, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
-
+impl WebGlRenderer {
     //
-    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_camera") {
+    pub fn new(game: &element::Game) -> Result<Self, JsValue> {
         //
-        gl_context.uniform2f(Some(location), scene_props.camera.position.x.floor(), scene_props.camera.position.y.floor());
-
-    } else { return Err("Couldn't find uniform 'u_camera'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_zoom") {
+        let gl_context = activate_context(
+        game.canvas_width, game.canvas_height)?;
         //
-        gl_context.uniform1f(Some(location), scene_props.camera.zoom);
-
-    } else { return Err("Couldn't find uniform 'u_zoom'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_screen_color") {
+        let (gl_program, 
+        uniform_locations) = 
+            create_program(&gl_context)?;
+        // 
+        let vertex_buffer = gl_context
+            .create_buffer()
+            .ok_or("failed to create buffer")?;
         //
-        gl_context.uniform4f(Some(location), from_0_225_to_0_1(scene_props.camera.color.r),
-        from_0_225_to_0_1(scene_props.camera.color.g),from_0_225_to_0_1(scene_props.camera.color.b),
-        from_0_225_to_0_1(scene_props.camera.color.a));
+        gl_context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
+        // Use the shader program
+        // in the rendering context.
+        gl_context.use_program(Some(&gl_program));
 
-    } else { return Err("Couldn't find uniform 'u_screen_color'".into()); }
-
-    //
-    if let Some(ProgramDataLocation::Uniform(location)) = data_locations.get("u_resolution") {
-        //
-        gl_context.uniform2f(Some(location), game.canvas_width as f32, game.canvas_height as f32);
-
-    } else { return Err("Couldn't find uniform 'u_resolution'".into()); }
-
-    //
-    {
-        // Convert the canvas element into an HTMLCanvasElement object.
-        let canvas: web_sys::HtmlCanvasElement = gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
-        // Set the desired width and height of the canvas,
-        // which is the size the canvas will be rendered
-        // at regardless of how CSS displays it.
-        canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
-        canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
-    } //
-
-    //
-    gl_context.viewport(0, 0, game.canvas_width as i32, game.canvas_height as i32);
-    
-    //
-    let mut vertices: Vec<f32> = Vec::new();
-
-    // Get the maximun texture units we can use on the fragment shader
-    let max_texture_units = gl_context
-    .get_parameter(WebGlRenderingContext::MAX_TEXTURE_IMAGE_UNITS)
-    .unwrap().as_f64().unwrap() as i32;
-
-    // 
-    let mut texture_slots: Vec<u32> = vec![0];
-    texture_slots.reserve_exact((max_texture_units-1) as usize);
-
-    //
-    let mut unit_id: f32;
-    let mut tex_width: f32;
-    let mut tex_height: f32;
-    let mut quad_width: f32 = 1.0;
-    let mut quad_height: f32 = 1.0;
-    let mut texcoord_1: [f32; 2] = [0.0, 0.0];
-    let mut texcoord_2: [f32; 2] = [0.0, 0.0];
-    let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
-    //
-    for &index in scene_props.layers[0..scene_props.layers_len].iter()
-    .flat_map(|layer| { layer.instances.iter() }) {
-        //
-        if (vertices.len() as i32) / (FLOATS_PER_VERTEX * VERTICES_PER_QUAD * MAX_QUAD_COUNT) >= 1 {
-            //
-            flush(&gl_context, &mut vertices, &vertex_buffer, &index_buffer);
-            texture_slots.truncate(1);
+        // Enable the vertex attributes
+        for (index, &(_, size, offset)) in ATTRIBUTE_MATRIX.iter().enumerate() {
+            gl_context.enable_vertex_attrib_array(index as u32);
+            gl_context.vertex_attrib_pointer_with_i32(index as u32, 
+            size, WebGlRenderingContext::FLOAT, false, FLOATS_PER_VERTEX * 4, offset);
         }
+
+        // Get the maximun texture units we can use on the fragment shader
+        let max_texture_units = gl_context
+        .get_parameter(WebGlRenderingContext::MAX_TEXTURE_IMAGE_UNITS)
+        .unwrap().as_f64().unwrap() as i32;
+
         //
-        if let Some(object) = object_stack.get(index as usize) {
-            // Get a mutable borrow of the object,
-            // which will later switch to the sprite of the object.
-            let object_or_sprite = Rc::clone(&object.properties);
-            let mut object_or_sprite = object_or_sprite.borrow_mut();
-            let mut object_or_sprite = object_or_sprite
-            .write_lock::<element::Object>()
-            .expect("write lock should succeed.");
+        if let Some(location) = uniform_locations.get("u_textures") {
+            //
+            gl_context.uniform1iv_with_i32_array(Some(location),
+            (0..max_texture_units).collect::<Vec<i32>>().as_slice());
 
-            // Here the object will switch to a sprite.
-            // This needs to be done because the sprite is
-            // owned by the object, and borrowing it at the
-            // same time with the mutable borrow of the object
-            // will violate the borrowing rules.
-            if object_or_sprite.sprites.len > 0 {
-                // Get the object's current sprite asset's id.
-                let cur_sprite_asset_id = object_or_sprite.sprites.cur_asset;
-                // Receive a mutable borrow of the active sprite.
-                let object_or_sprite = object_or_sprite.sprites.members
-                .get_mut(cur_sprite_asset_id)
-                .expect("the cur_asset index should exist in the members array of an AssetList.");
+        } else { return Err("Couldn't find uniform 'u_textures'".into()); }
+        
+        //
+        gl_context.buffer_data_with_i32(
+            WebGlRenderingContext::ARRAY_BUFFER,
+            MAX_QUAD_COUNT * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * 4,
+            WebGlRenderingContext::DYNAMIC_DRAW,
+        );
+
+        //
+        let index_buffer = gl_context
+            .create_buffer()
+            .ok_or("failed to create buffer")?;
+        //
+        gl_context.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
+
+
+        let mut indcies: Vec<u16> = Vec::new();
+        for i in 0..MAX_QUAD_COUNT {
+            // Copy data into the Vec<u16> 
+            // from the slice which includes
+            // the indcies which represent 
+            // the order of the vertices' rendering.
+            indcies.extend_from_slice(&[
+                (0 + VERTICES_PER_QUAD * i) as u16,
+                (1 + VERTICES_PER_QUAD * i) as u16,
+                (2 + VERTICES_PER_QUAD * i) as u16,
+                (2 + VERTICES_PER_QUAD * i) as u16,
+                (1 + VERTICES_PER_QUAD * i) as u16,
+                (3 + VERTICES_PER_QUAD * i) as u16,
+            ]);
+        }
+
+        // Note that `Uint16Array::view` is somewhat dangerous (hence the
+        // `unsafe`!). This is creating a raw view into our module's
+        // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
+        // (aka do a memory allocation in Rust) it'll cause the buffer to change,
+        // causing the `Uint16Array` to be invalid.
+        //
+        // As a result, after `Uint16Array::view` we have to be very careful not to
+        // do any memory allocations before it's dropped.
+        unsafe {
+            let indcies_array = js_sys::Uint16Array::view(indcies.as_slice());
+            gl_context.buffer_data_with_array_buffer_view(
+                WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+                &indcies_array,
+                WebGlRenderingContext::STATIC_DRAW,
+            );
+        }
+        // Create webgl white texture object
+        let white_texture = gl_context.create_texture();
+        // Activate texture unit 0 with this white texture
+        gl_context.active_texture(WebGlRenderingContext::TEXTURE0);
+        // bind the white texture to the webgl context
+        gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, white_texture.as_ref());
+        // Set Parameters
+        gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
+            WebGlRenderingContext::TEXTURE_MIN_FILTER,
+            WebGlRenderingContext::LINEAR as i32);
+        gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
+            WebGlRenderingContext::TEXTURE_MAG_FILTER,
+            WebGlRenderingContext::LINEAR as i32);
+        gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
+            WebGlRenderingContext::TEXTURE_WRAP_S,
+            WebGlRenderingContext::CLAMP_TO_EDGE as i32);
+        gl_context.tex_parameteri(WebGlRenderingContext::TEXTURE_2D,
+            WebGlRenderingContext::TEXTURE_WRAP_T,
+            WebGlRenderingContext::CLAMP_TO_EDGE as i32);
+        // Create the image data of the texture (1x1 white pixel)
+        gl_context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+            WebGlRenderingContext::TEXTURE_2D, 0,
+            WebGlRenderingContext::RGBA as i32, 1, 1,
+            0, WebGlRenderingContext::RGBA,
+            WebGlRenderingContext::UNSIGNED_BYTE,
+            Some(&[255,255,255,255])
+        )?;
+        //
+        let mut texture_slots: Vec<u32> = vec![0];
+        texture_slots.reserve_exact((max_texture_units-1) as usize);
+
+        //
+        let mut vertex_vec: Vec<f32> = Vec::new();
+        vertex_vec.reserve_exact((MAX_QUAD_COUNT * VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize);
+
+        //
+        Ok(Self{gl_context, gl_program, uniform_locations, vertex_buffer, index_buffer,
+        vertex_vec, texture_slots, max_texture_units})
+    }
+
+    pub fn render_scene(&mut self, game: &element::Game, scene_props: &element::Scene,
+    object_stack: &Vec<engine_api::ElementHandler>, asset_defs: &AssetDefinitions, elapsed: f64)
+     -> Result<(), JsValue> {
+        // Use the scene rendering shader program.
+        self.gl_context.use_program(Some(&self.gl_program));
+        // Set the clear color.
+        self.gl_context.clear_color(from_0_225_to_0_1(game.clear_red),
+        from_0_225_to_0_1(game.clear_green), from_0_225_to_0_1(game.clear_blue), 1.0);
+
+        // Clear the canvas
+        self.gl_context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
+        // Set the blending method the alpha of the images will control
+        self.gl_context.enable(WebGlRenderingContext::BLEND);
+        self.gl_context.blend_func(WebGlRenderingContext::ONE, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
+
+        //
+        if let Some(location) = self.uniform_locations.get("u_camera") {
+            //
+            self.gl_context.uniform2f(Some(location), scene_props.camera.position.x.floor(), scene_props.camera.position.y.floor());
+
+        } else { return Err("Couldn't find uniform 'u_camera'".into()); }
+
+        //
+        if let Some(location) = self.uniform_locations.get("u_zoom") {
+            //
+            self.gl_context.uniform1f(Some(location), scene_props.camera.zoom);
+
+        } else { return Err("Couldn't find uniform 'u_zoom'".into()); }
+
+        //
+        if let Some(location) = self.uniform_locations.get("u_cam_color") {
+            //
+            self.gl_context.uniform4f(Some(location), from_0_225_to_0_1(scene_props.camera.color.r),
+            from_0_225_to_0_1(scene_props.camera.color.g),from_0_225_to_0_1(scene_props.camera.color.b),
+            from_0_225_to_0_1(scene_props.camera.color.a));
+
+        } else { return Err("Couldn't find uniform 'u_cam_color'".into()); }
+
+        //
+        if let Some(location) = self.uniform_locations.get("u_resolution") {
+            //
+            self.gl_context.uniform2f(Some(location), game.canvas_width as f32, game.canvas_height as f32);
+
+        } else { return Err("Couldn't find uniform 'u_resolution'".into()); }
+
+        //
+        {
+            // Convert the canvas element into an HTMLCanvasElement object.
+            let canvas: web_sys::HtmlCanvasElement = self.gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+            // Set the desired width and height of the canvas,
+            // which is the size the canvas will be rendered
+            // at regardless of how CSS displays it.
+            canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
+            canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
+        } //
+
+        //
+        self.gl_context.viewport(0, 0, game.canvas_width as i32, game.canvas_height as i32);
+
+        //
+        let mut unit_id: f32;
+        let mut tex_width: f32;
+        let mut tex_height: f32;
+        let mut quad_width: f32 = 1.0;
+        let mut quad_height: f32 = 1.0;
+        let mut texcoord_1: [f32; 2] = [0.0, 0.0];
+        let mut texcoord_2: [f32; 2] = [0.0, 0.0];
+        let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
+        //
+        for &index in scene_props.layers[0..scene_props.layers_len].iter()
+        .flat_map(|layer| { layer.instances.iter() }) {
+            //
+            if (self.vertex_vec.len() as i32) / (FLOATS_PER_VERTEX * VERTICES_PER_QUAD * MAX_QUAD_COUNT) >= 1 {
                 //
-                if let Some(def) = asset_defs.get(&object_or_sprite.id) {
-                    //
-                    let texture_asset = def.as_ref()?;
-                    //
-                    let gl_texture: &WebGlTexture;
-                    match &texture_asset.asset_data {
-                        AssetData::ImageData { width, height, texture } => {
-                            tex_width = *width as f32;
-                            tex_height = *height as f32;
-                            gl_texture = texture;
-                        }
-                        //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
-                    }
-
-                    //
-                    let fps = dynamic_to_number(&texture_asset.config["fps"])
-                    .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
-                    
-                    //
-                    let mut found_anim = false;
-                    //
-                    for anim in texture_asset.config["animations"]
-                    .clone().into_typed_array::<rhai::Map>().expect(concat!("Every sprite's config",
-                    " should have an 'animations' array, which contains object-like members.")) {
-                        //
-                        if anim["name"].clone().into_string().expect(concat!("Every",
-                        " member of the 'animations' array in a sprite's config should",
-                        " have a 'name' property with a string.")) != object_or_sprite.cur_animation {
-                            continue;
-                        }
-                        //
-                        found_anim = true;
-                        //
-                        let frames = anim["frames"]
-                        .clone().into_typed_array::<rhai::Map>().expect(concat!("Every",
-                        " member of the 'animations' array in a sprite's config should",
-                        " have a 'frames' array, which contains object-like members."));
-                        //
-                        if !object_or_sprite.is_animation_finished {
-                            //
-                            object_or_sprite.animation_time += elapsed;
-                            object_or_sprite.cur_frame = ((fps as f64) * object_or_sprite.animation_time * 0.001).floor() as u32;
-                            //
-                            if object_or_sprite.cur_frame >= frames.len() as u32 {
-                                //
-                                object_or_sprite.cur_frame = (frames.len() - 1) as u32;
-                                //
-                                if !object_or_sprite.repeat {
-                                    object_or_sprite.is_animation_finished = true;
-                                } else {
-                                    object_or_sprite.cur_frame = 0;
-                                    object_or_sprite.animation_time = 0.0;
-                                }
-                            }
-                        }
-                        //
-                        let area = frames[object_or_sprite.cur_frame as usize]["area"]
-                        .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'area' object-like property");
-                        //
-                        texcoord_1 = [
-                            dynamic_to_number(&area["x1"])
-                            .expect("x1 should be a number.") / tex_width, 
-                            dynamic_to_number(&area["y1"])
-                            .expect("y1 should be a number.") / tex_height
-                        ];
-                        //
-                        texcoord_2 = [
-                            1.0 - (dynamic_to_number(&area["x2"])
-                            .expect("x2 should be a number.") / tex_width),
-                            1.0 - (dynamic_to_number(&area["y2"])
-                            .expect("y2 should be a number.") / tex_height)
-                        ];
-                        //
-                        quad_width = tex_width - (
-                            dynamic_to_number(&area["x1"])
-                            .expect("x1 should be a number.") +
-                            dynamic_to_number(&area["x2"])
-                            .expect("x2 should be a number.")
-                        );
-                        //
-                        quad_height = tex_height - (
-                            dynamic_to_number(&area["y1"])
-                            .expect("y1 should be a number.") +
-                            dynamic_to_number(&area["y2"])
-                            .expect("y2 should be a number.")
-                        );
-                        
-                        //
-                        let offset = frames[object_or_sprite.cur_frame as usize]["offset"]
-                        .clone().try_cast::<rhai::Map>().expect("Every frame should have a 'offset' object-like property");
-                        //
-                        let origin = texture_asset.config["origin"]
-                        .clone().try_cast::<rhai::Map>().expect(concat!("Every sprite's config should",
-                        " have a 'origin' object-like property"));
-                        //
-                        origin_minus_offset = [
-                            dynamic_to_number(&origin["x"])
-                            .expect("origin.x should be a number") -
-                            dynamic_to_number(&offset["x"])
-                            .expect("offset.x should be a number"),
-                            dynamic_to_number(&origin["y"])
-                            .expect("origin.y should be a number") -
-                            dynamic_to_number(&offset["y"])
-                            .expect("offset.y should be a number")
-                        ];
-                        //
-                        break;
-                    }
-
-                    //
-                    if !found_anim {
-                        //
-                        continue;
-                    }
-
-                    //
-                    if let Some((idx, _)) = texture_slots.iter()
-                    .enumerate().find(|&slot| { object_or_sprite.id == *slot.1 }) {
-                        //
-                        unit_id = idx as f32;
-                    } else if texture_slots.len() < (max_texture_units as usize) {
-                        //
-                        gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (texture_slots.len() as u32));
-                        //
-                        gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
-                        //
-                        texture_slots.push(object_or_sprite.id);
-                        //
-                        unit_id = (texture_slots.len() as f32)-1_f32;
-                    } else {
-                        //
-                        flush(&gl_context, &mut vertices, &vertex_buffer, &index_buffer);
-                        texture_slots.truncate(1);
-                        //
-                        gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (texture_slots.len() as u32));
-                        //
-                        gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
-                        //
-                        texture_slots.push(object_or_sprite.id);
-                        //
-                        unit_id = (texture_slots.len() as f32)-1_f32;
-                    }
-                } else if object_or_sprite.id == 0 {
-                    // we will render a colored quad
-                    // using our white texture.
-                    unit_id = 0.0; tex_width = 1.0;
-                    tex_height = 1.0; quad_width = 1.0;
-                    quad_height = 1.0; texcoord_1 = [0.0, 0.0];
-                    texcoord_2 = [0.0, 0.0]; origin_minus_offset = [0.0, 0.0];
-                } else {
-                    // we will skip this object
-                    continue;
-                }
-            } // Here the sprite switches back to being an object.
-            else {
-               // we will skip this object
-               continue; 
+                self.flush();
             }
             //
-            vertices.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor() - 
-            (origin_minus_offset[0] * object_or_sprite.scale.x), object_or_sprite.position.y.floor() - 
-            (origin_minus_offset[1] * object_or_sprite.scale.y), [from_0_225_to_0_1(object_or_sprite.color.r),
-            from_0_225_to_0_1(object_or_sprite.color.g),from_0_225_to_0_1(object_or_sprite.color.b),
-            from_0_225_to_0_1(object_or_sprite.color.a)], quad_width * object_or_sprite.scale.x,
-            quad_height * object_or_sprite.scale.y, texcoord_1, texcoord_2,
-            [tex_width, tex_height], [object_or_sprite.scale.x, object_or_sprite.scale.y],
-            unit_id));
+            if let Some(object) = object_stack.get(index as usize) {
+                // Get a mutable borrow of the object,
+                // which will later switch to the sprite of the object.
+                let object_or_sprite = Rc::clone(&object.properties);
+                let mut object_or_sprite = object_or_sprite.borrow_mut();
+                let mut object_or_sprite = object_or_sprite
+                .write_lock::<element::Object>()
+                .expect("write lock should succeed.");
+
+                // Here the object will switch to a sprite.
+                // This needs to be done because the sprite is
+                // owned by the object, and borrowing it at the
+                // same time with the mutable borrow of the object
+                // will violate the borrowing rules.
+                if object_or_sprite.sprites.len > 0 {
+                    // Get the object's current sprite asset's id.
+                    let cur_sprite_asset_id = object_or_sprite.sprites.cur_asset;
+                    // Receive a mutable borrow of the active sprite.
+                    let object_or_sprite = object_or_sprite.sprites.members
+                    .get_mut(cur_sprite_asset_id)
+                    .expect("the cur_asset index should exist in the members array of an AssetList.");
+                    //
+                    if let Some(def) = asset_defs.get(&object_or_sprite.id) {
+                        //
+                        let texture_asset = def.as_ref()?;
+                        //
+                        let gl_texture: &WebGlTexture;
+                        match &texture_asset.asset_data {
+                            AssetData::ImageData { width, height, texture } => {
+                                tex_width = *width as f32;
+                                tex_height = *height as f32;
+                                gl_texture = texture;
+                            }
+                            //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
+                        }
+
+                        //
+                        let fps = dynamic_to_number(&texture_asset.config["fps"])
+                        .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
+                        
+                        //
+                        let mut found_anim = false;
+                        //
+                        for anim in &texture_asset.config["animations"]
+                        .read_lock::<Vec<rhai::Dynamic>>().expect(concat!("Every sprite's config should have an",
+                        " 'animations' array, which contains object-like members.")) as &Vec<rhai::Dynamic> {
+                            //
+                            let anim: &rhai::Map = &anim.read_lock::<rhai::Map>().expect(concat!("Every member of the 'animations'",
+                            " array in a sprite's config should be an object-like member."));
+                            //
+                            if &anim["name"].read_lock::<rhai::ImmutableString>().expect(
+                            concat!("Every member of the 'animations' array in a sprite's config should",
+                            " have a 'name' property with a string.")) as &str != object_or_sprite.cur_animation {
+                                continue;
+                            }
+                            //
+                            found_anim = true;
+                            //
+                            let frames = &anim["frames"]
+                            .read_lock::<Vec<rhai::Dynamic>>().expect(concat!("Every",
+                            " member of the 'animations' array in a sprite's config should",
+                            " have a 'frames' array, which contains object-like members.")) as &Vec<rhai::Dynamic>;
+                            //
+                            if !object_or_sprite.is_animation_finished {
+                                //
+                                object_or_sprite.animation_time += elapsed;
+                                object_or_sprite.cur_frame = ((fps as f64) * object_or_sprite.animation_time * 0.001).floor() as u32;
+                                //
+                                if object_or_sprite.cur_frame >= frames.len() as u32 {
+                                    //
+                                    object_or_sprite.cur_frame = (frames.len() - 1) as u32;
+                                    //
+                                    if !object_or_sprite.repeat {
+                                        object_or_sprite.is_animation_finished = true;
+                                    } else {
+                                        object_or_sprite.cur_frame = 0;
+                                        object_or_sprite.animation_time = 0.0;
+                                    }
+                                }
+                            }
+                            //
+                            let current_frame: &rhai::Map = &frames[object_or_sprite.cur_frame as usize]
+                            .read_lock::<rhai::Map>().expect("Every frame should be an object-like member.");
+                            //
+                            let area: &rhai::Map = &current_frame["area"].read_lock::<rhai::Map>()
+                            .expect("Every frame should have a 'area' object-like property");
+                            //
+                            texcoord_1 = [
+                                dynamic_to_number(&area["x1"])
+                                .expect("x1 should be a number.") / tex_width, 
+                                dynamic_to_number(&area["y1"])
+                                .expect("y1 should be a number.") / tex_height
+                            ];
+                            //
+                            texcoord_2 = [
+                                1.0 - (dynamic_to_number(&area["x2"])
+                                .expect("x2 should be a number.") / tex_width),
+                                1.0 - (dynamic_to_number(&area["y2"])
+                                .expect("y2 should be a number.") / tex_height)
+                            ];
+                            //
+                            quad_width = tex_width - (
+                                dynamic_to_number(&area["x1"])
+                                .expect("x1 should be a number.") +
+                                dynamic_to_number(&area["x2"])
+                                .expect("x2 should be a number.")
+                            );
+                            //
+                            quad_height = tex_height - (
+                                dynamic_to_number(&area["y1"])
+                                .expect("y1 should be a number.") +
+                                dynamic_to_number(&area["y2"])
+                                .expect("y2 should be a number.")
+                            );
+                            
+                            //
+                            let offset: &rhai::Map = &current_frame["offset"].read_lock::<rhai::Map>()
+                            .expect("Every frame should have a 'offset' object-like property");
+                            //
+                            let origin = &texture_asset.config["origin"]
+                            .read_lock::<rhai::Map>().expect(concat!("Every sprite's config should",
+                            " have a 'origin' object-like property")) as &rhai::Map;
+                            //
+                            origin_minus_offset = [
+                                dynamic_to_number(&origin["x"])
+                                .expect("origin.x should be a number") -
+                                dynamic_to_number(&offset["x"])
+                                .expect("offset.x should be a number"),
+                                dynamic_to_number(&origin["y"])
+                                .expect("origin.y should be a number") -
+                                dynamic_to_number(&offset["y"])
+                                .expect("offset.y should be a number")
+                            ];
+                            //
+                            break;
+                        }
+
+                        //
+                        if !found_anim {
+                            //
+                            continue;
+                        }
+
+                        //
+                        if let Some((idx, _)) = self.texture_slots.iter()
+                        .enumerate().find(|&slot| { object_or_sprite.id == *slot.1 }) {
+                            //
+                            unit_id = idx as f32;
+                        } else if self.texture_slots.len() < (self.max_texture_units as usize) {
+                            //
+                            self.gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (self.texture_slots.len() as u32));
+                            //
+                            self.gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
+                            //
+                            self.texture_slots.push(object_or_sprite.id);
+                            //
+                            unit_id = (self.texture_slots.len() as f32)-1_f32;
+                        } else {
+                            //
+                            self.flush();
+                            //
+                            self.gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (self.texture_slots.len() as u32));
+                            //
+                            self.gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
+                            //
+                            self.texture_slots.push(object_or_sprite.id);
+                            //
+                            unit_id = (self.texture_slots.len() as f32)-1_f32;
+                        }
+                    } else if object_or_sprite.id == 0 {
+                        // we will render a colored quad
+                        // using our white texture.
+                        unit_id = 0.0; tex_width = 1.0;
+                        tex_height = 1.0; quad_width = 1.0;
+                        quad_height = 1.0; texcoord_1 = [0.0, 0.0];
+                        texcoord_2 = [0.0, 0.0]; origin_minus_offset = [0.0, 0.0];
+                    } else {
+                        // we will skip this object
+                        continue;
+                    }
+                } // Here the sprite switches back to being an object.
+                else {
+                // we will skip this object
+                continue; 
+                }
+                //
+                self.vertex_vec.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor() - 
+                (origin_minus_offset[0] * object_or_sprite.scale.x), object_or_sprite.position.y.floor() - 
+                (origin_minus_offset[1] * object_or_sprite.scale.y), [from_0_225_to_0_1(object_or_sprite.color.r),
+                from_0_225_to_0_1(object_or_sprite.color.g),from_0_225_to_0_1(object_or_sprite.color.b),
+                from_0_225_to_0_1(object_or_sprite.color.a)], quad_width * object_or_sprite.scale.x,
+                quad_height * object_or_sprite.scale.y, texcoord_1, texcoord_2,
+                [tex_width, tex_height], [object_or_sprite.scale.x, object_or_sprite.scale.y],
+                unit_id));
+            }
         }
+        //
+        self.flush();
+
+        // The Rendering is Done!
+        Ok(())
     }
-    //
-    flush(&gl_context, &mut vertices, &vertex_buffer, &index_buffer);
 
-    // The Rendering is Done!
-    Ok(())
-}
+    // This function will be used to
+    // flush the vertex vector into the
+    // vertex buffer and draw the scene.
+    fn flush(&mut self) {
+        // Bind the vertex buffer
+        // to the WebGL context.
+        self.gl_context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&self.vertex_buffer));
+        // Bind the index buffer
+        // to the WebGL context.
+        self.gl_context.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&self.index_buffer));
 
-//
-fn flush(gl_context: &WebGlRenderingContext, vertices: &mut Vec<f32>, vertex_buffer: &web_sys::WebGlBuffer,
-index_buffer: &web_sys::WebGlBuffer) {
-    // Bind the vertex buffer
-    // to the WebGL context.
-    gl_context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(vertex_buffer));
-    // Bind the index buffer
-    // to the WebGL context.
-    gl_context.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(index_buffer));
+        // Note that `Float32Array::view` is somewhat dangerous (hence the
+        // `unsafe`!). This is creating a raw view into our module's
+        // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
+        // (aka do a memory allocation in Rust) it'll cause the buffer to change,
+        // causing the `Float32Array` to be invalid.
 
-    // Note that `Float32Array::view` is somewhat dangerous (hence the
-    // `unsafe`!). This is creating a raw view into our module's
-    // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
-    // (aka do a memory allocation in Rust) it'll cause the buffer to change,
-    // causing the `Float32Array` to be invalid.
-
-    // As a result, after `Float32Array::view` we have to be very careful not to
-    // do any memory allocations before it's dropped.
-    unsafe {
-        //
-        let vertices_array = js_sys::Float32Array::view(vertices.as_slice());
-        //
-        gl_context.buffer_sub_data_with_f64_and_array_buffer_view(
-            WebGlRenderingContext::ARRAY_BUFFER,
-            0.0,
-            &vertices_array,
+        // As a result, after `Float32Array::view` we have to be very careful not to
+        // do any memory allocations before it's dropped.
+        unsafe {
+            let vertices_array = js_sys::Float32Array::view(self.vertex_vec.as_slice());
+            self.gl_context.buffer_sub_data_with_f64_and_array_buffer_view(
+                WebGlRenderingContext::ARRAY_BUFFER,
+                0.0,
+                &vertices_array,
+            );
+        }
+        // Draw the scene rectangle on the canvas
+        self.gl_context.draw_elements_with_i32(
+            WebGlRenderingContext::TRIANGLES,
+            (self.vertex_vec.len() as i32 * INDCIES_PER_QUAD) / (VERTICES_PER_QUAD * FLOATS_PER_VERTEX),
+            WebGlRenderingContext::UNSIGNED_SHORT,
+            0,
         );
+        // Clear the vertex vector
+        // and the texture slots vector.
+        self.vertex_vec.clear();
+        self.texture_slots.truncate(1);
     }
-    // Draw the scene rectangle on the canvas
-    gl_context.draw_elements_with_i32(
-        WebGlRenderingContext::TRIANGLES,
-        (vertices.len() as i32 * INDCIES_PER_QUAD) / (VERTICES_PER_QUAD * FLOATS_PER_VERTEX),
-        WebGlRenderingContext::UNSIGNED_SHORT,
-        0,
-    );
-    //
-    vertices.clear();
 }
 
-fn create_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsValue> {
+/// This function will find the
+/// canvas element in the page,
+/// set its width and height,
+/// and return its WebGL context.
+fn activate_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsValue> {
     // Get the page's document.
     let document = web_sys::window().unwrap().document().unwrap();
     // Get to canvas from the document.
-    let canvas = document.get_element_by_id("canvas").unwrap();
+    let canvas = document.get_element_by_id(CANVAS_ID).unwrap();
     // Convert the canvas element into an HTMLCanvasElement object.
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
     // Set the desired width and height of the canvas,
@@ -629,7 +713,6 @@ fn create_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsVa
 
     // Get the WebGL context
     // from the canvas.
-    // (String::from("premultipliedAlpha"), false)
     let context = canvas
     .get_context_with_context_options("webgl",
         WebGlContextAttributes::new()
@@ -639,146 +722,59 @@ fn create_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsVa
     )?
     .unwrap()
     .dyn_into::<WebGlRenderingContext>()?;
-    //
+    // Enable premultiplied alpha unpacking,
+    // which will make webgl premultiply the
+    // alpha channel of the image data for us.
     context.pixel_storei(WebGlRenderingContext::UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
-
-    //
+    // Return the WebGL context.
     Ok(context)
 }
 
-fn create_scene_rendering_program(gl_context: &WebGlRenderingContext)
- -> Result<(WebGlProgram,ProgramDataLocations), JsValue> {
+/// This function will compile
+/// the vertex and fragment shaders
+/// and link them into a shader program.
+/// It will also bind the attribute locations
+/// to the shader program and look up the
+/// uniform locations. The shader program
+/// and the uniform locations will be returned.
+fn create_program(gl_context: &WebGlRenderingContext)
+ -> Result<(WebGlProgram,HashMap<String, web_sys::WebGlUniformLocation>), JsValue> {
     // Create the vertex shader
     let vert_shader = compile_shader(
         &gl_context,
         WebGlRenderingContext::VERTEX_SHADER,
-        r#"
-        attribute vec2 a_position;
-        attribute vec4 a_color;
-        attribute vec2 a_texcoord;
-        attribute vec2 a_texsize;
-        attribute vec2 a_scale;
-        attribute float a_texindex;
-
-        uniform vec2 u_resolution;
-        uniform vec2 u_camera;
-        uniform float u_zoom;
-
-        varying vec4 v_color;
-        varying vec2 v_texcoord;
-        varying vec2 v_texsize;
-        varying vec2 v_scale;
-        varying float v_texindex;
-
-        void main() {
-
-            v_color = a_color;
-            v_texcoord = a_texcoord * a_texsize;
-            v_texsize = a_texsize;
-            v_scale = a_scale;
-            v_texindex = a_texindex;
-
-            vec2 camRelative = a_position - u_camera;
-            vec2 clipSpace = camRelative * abs(u_zoom) * 2.0 / u_resolution;
-            gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-        }
-    "#,
+        VERTEX_SHADER,
     )?;
 
     // Create the fragment shader
     let frag_shader = compile_shader(
         &gl_context,
         WebGlRenderingContext::FRAGMENT_SHADER,
-        r#"
-        precision highp float;
-
-        varying vec4 v_color;
-        varying vec2 v_texcoord;
-        varying vec2 v_texsize;
-        varying vec2 v_scale;
-        varying float v_texindex;
-
-        uniform float u_zoom;
-        uniform vec4 u_screen_color;
-        uniform sampler2D u_textures[gl_MaxTextureImageUnits];
-
-        void main() {
-
-            vec2 texcoord = v_texcoord;
-
-            vec2 pixPerTex = abs(v_scale) * abs(u_zoom);
-
-            vec2 pixoffset = clamp(fract(v_texcoord) * pixPerTex, 0.0, 0.5) - clamp((1.0 - fract(v_texcoord)) * pixPerTex, 0.0, 0.5);
-
-            if (v_texsize != vec2(0.0,0.0)) {
-                
-                texcoord = (floor(v_texcoord) + 0.5 + pixoffset) / v_texsize;
-            }
-
-            int index = int(v_texindex);
-
-            // gl_FragColor = texture2D(u_textures[index], texcoord) * v_color * u_screen_color;
-            // ERROR: '[]' : Index expression must be constant
-
-            for (int i=0; i<gl_MaxTextureImageUnits; i++) {
-                if (index == i) {
-                    gl_FragColor = texture2D(u_textures[i], texcoord) * v_color * u_screen_color;
-                }
-            }
-        }
-    "#,
+        FRAGMENT_SHADER,
     )?;
 
     // Create the shader program using
     // the vertex and fragment shaders.
-    let gl_program = link_program(&gl_context, &vert_shader, &frag_shader)?;
-
-    //
-    let mut data_locations: ProgramDataLocations = HashMap::new();
-
-    // Look up attribute locations.
-    data_locations.insert(String::from("a_position"), ProgramDataLocation::Attribute(gl_context
-        .get_attrib_location(&gl_program, "a_position") as u32
-    ));
-    data_locations.insert(String::from("a_color"), ProgramDataLocation::Attribute(gl_context
-        .get_attrib_location(&gl_program, "a_color") as u32
-    ));
-    data_locations.insert(String::from("a_texcoord"), ProgramDataLocation::Attribute(gl_context
-        .get_attrib_location(&gl_program, "a_texcoord") as u32
-    ));
-    data_locations.insert(String::from("a_texsize"), ProgramDataLocation::Attribute(gl_context
-        .get_attrib_location(&gl_program, "a_texsize") as u32
-    ));
-    data_locations.insert(String::from("a_scale"), ProgramDataLocation::Attribute(gl_context
-        .get_attrib_location(&gl_program, "a_scale") as u32
-    ));
-    data_locations.insert(String::from("a_texindex"), ProgramDataLocation::Attribute(gl_context
-        .get_attrib_location(&gl_program, "a_texindex") as u32
-    ));
+    let gl_program = link_program(&gl_context, &vert_shader, &frag_shader,
+    Some(|gl_context: &WebGlRenderingContext, gl_program: &WebGlProgram| {
+        // Bind attribute locations.
+        for (index, &(attribute,_,_)) in ATTRIBUTE_MATRIX.iter().enumerate() {
+            gl_context.bind_attrib_location(&gl_program, index as u32, attribute);
+        }
+    }))?;
 
     // Look up uniform locations.
-    data_locations.insert(String::from("u_resolution"), ProgramDataLocation::Uniform(gl_context
-        .get_uniform_location(&gl_program, "u_resolution")
-        .ok_or("Unable to get uniform location (u_resolution)")?
-    ));
-    data_locations.insert(String::from("u_camera"), ProgramDataLocation::Uniform(gl_context
-        .get_uniform_location(&gl_program, "u_camera")
-        .ok_or("Unable to get uniform location (u_camera)")?
-    ));
-    data_locations.insert(String::from("u_zoom"), ProgramDataLocation::Uniform(gl_context
-        .get_uniform_location(&gl_program, "u_zoom")
-        .ok_or("Unable to get uniform location (u_zoom)")?
-    ));
-    data_locations.insert(String::from("u_screen_color"), ProgramDataLocation::Uniform(gl_context
-        .get_uniform_location(&gl_program, "u_screen_color")
-        .ok_or("Unable to get uniform location (u_screen_color)")?
-    ));
-    data_locations.insert(String::from("u_textures"), ProgramDataLocation::Uniform(gl_context
-        .get_uniform_location(&gl_program, "u_textures")
-        .ok_or("Unable to get uniform location (u_textures)")?
-    ));
+    let mut uniform_locations: HashMap<String, web_sys::WebGlUniformLocation> = HashMap::new();
+    for &uniform in UNIFORM_LIST.iter() {
+        uniform_locations.insert(String::from(uniform), gl_context
+            .get_uniform_location(&gl_program, uniform)
+            .ok_or(format!("Unable to get uniform location ({})", uniform))?
+        );
+    }
 
-    Ok((gl_program, data_locations))
+    // Return the shader program
+    // and the uniform locations.
+    Ok((gl_program, uniform_locations))
 }
 
 // Creates an array of f32 floats with
@@ -864,6 +860,7 @@ fn link_program(
     gl_context: &WebGlRenderingContext,
     vert_shader: &WebGlShader,
     frag_shader: &WebGlShader,
+    before_link: Option<impl Fn(&WebGlRenderingContext, &WebGlProgram) -> ()>,
 ) -> Result<WebGlProgram, String> {
     // Create a program with the
     // provided WebGL context.
@@ -874,6 +871,11 @@ fn link_program(
     // and fragment shaders to the program.
     gl_context.attach_shader(&program, vert_shader);
     gl_context.attach_shader(&program, frag_shader);
+    // Call the provided function
+    // before linking the program.
+    if let Some(before_link) = before_link {
+        before_link(&gl_context, &program);
+    }
     // Link the program to the
     // provided WebGL context.
     gl_context.link_program(&program);
