@@ -12,7 +12,7 @@ pub type AssetDefinitions = HashMap<u32,Result<AssetDefinition, JsValue>>;
 
 /// The html element id
 /// of the canvas element.
-const CANVAS_ID: &str = "canvas";
+static mut CANVAS_ID: &str = "canvas";
 
 const MAX_QUAD_COUNT: i32 = 1000;
 const INDCIES_PER_QUAD: i32 = 6;
@@ -68,20 +68,24 @@ void main() {
     
     vec2 texcoord = v_texcoord;
 
-    // This method utliizes bilinear sampling
-    // to apply per-texel anti-aliasing, which
-    // will help to prevent image distortions,
+    // The following method utliizes bilinear
+    // sampling to apply per-texel anti-aliasing,
+    // which will help to prevent image distortions,
     // while keeping the texels sharp enough.
 
     // Calculate the ratio between
     // the pixel and texel sizes.
     vec2 pixPerTex = abs(v_scale) * abs(u_zoom);
+
     // Calculate the offset of the pixel
     // from the center of the texel.
+
     vec2 pixoffset = clamp(fract(v_texcoord) * pixPerTex, 0.0, 0.5) - clamp((1.0 - fract(v_texcoord)) * pixPerTex, 0.0, 0.5);
+
     // Because we don't want to devide by zero,
     // make sure the texture size isn't zero.
     if (v_texsize != vec2(0.0,0.0)) {
+
         // We will apply the offset to the texture coordinates
         texcoord = (floor(v_texcoord) + 0.5 + pixoffset) / v_texsize;
     }
@@ -111,7 +115,11 @@ const ATTRIBUTE_MATRIX: [(&str, i32, i32); 6] = [
 ];
 
 const UNIFORM_LIST: [&str; 5] = [
-    "u_resolution", "u_camera", "u_zoom", "u_cam_color", "u_textures"
+    "u_resolution",
+    "u_camera",
+    "u_zoom",
+    "u_cam_color",
+    "u_textures",
 ];
 
 /// This enum will help
@@ -247,20 +255,26 @@ pub struct WebGlRenderer {
 }
 
 impl WebGlRenderer {
-    //
+    /// This function will create a new
+    /// webgl renderer and return it. 
+    /// 
+    /// The renderer includes a webgl context, a shader program,\
+    /// a vertex buffer and an index buffer among other things,\
+    /// which will be used to render the game.
     pub fn new(game: &element::Game) -> Result<Self, JsValue> {
-        //
+        // Activate the canvas webgl context.
         let gl_context = activate_context(
         game.canvas_width, game.canvas_height)?;
-        //
+        // Create the shader program
         let (gl_program, 
         uniform_locations) = 
             create_program(&gl_context)?;
-        // 
+        // Create the vertex buffer
         let vertex_buffer = gl_context
             .create_buffer()
             .ok_or("failed to create buffer")?;
-        //
+        // Bind the vertex buffer
+        // to the WebGL context.
         gl_context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&vertex_buffer));
         // Use the shader program
         // in the rendering context.
@@ -278,26 +292,26 @@ impl WebGlRenderer {
         .get_parameter(WebGlRenderingContext::MAX_TEXTURE_IMAGE_UNITS)
         .unwrap().as_f64().unwrap() as i32;
 
-        //
+        // Set the uniform 'u_textures' to an array of all
+        // the texture units we might use in the fragment shader.
         if let Some(location) = uniform_locations.get("u_textures") {
-            //
             gl_context.uniform1iv_with_i32_array(Some(location),
             (0..max_texture_units).collect::<Vec<i32>>().as_slice());
-
         } else { return Err("Couldn't find uniform 'u_textures'".into()); }
         
-        //
+        // Allocate the vertex buffer's memory
         gl_context.buffer_data_with_i32(
             WebGlRenderingContext::ARRAY_BUFFER,
             MAX_QUAD_COUNT * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * 4,
             WebGlRenderingContext::DYNAMIC_DRAW,
         );
 
-        //
+        // Create the index buffer
         let index_buffer = gl_context
             .create_buffer()
             .ok_or("failed to create buffer")?;
-        //
+        // Bind the index buffer
+        // to the WebGL context.
         gl_context.bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&index_buffer));
 
 
@@ -306,7 +320,7 @@ impl WebGlRenderer {
             // Copy data into the Vec<u16> 
             // from the slice which includes
             // the indcies which represent 
-            // the order of the vertices' rendering.
+            // the order of the vertices'rendering.
             indcies.extend_from_slice(&[
                 (0 + VERTICES_PER_QUAD * i) as u16,
                 (1 + VERTICES_PER_QUAD * i) as u16,
@@ -326,6 +340,8 @@ impl WebGlRenderer {
         // As a result, after `Uint16Array::view` we have to be very careful not to
         // do any memory allocations before it's dropped.
         unsafe {
+            // Allocate the index buffer's memory,
+            // and copy the indcies into it.
             let indcies_array = js_sys::Uint16Array::view(indcies.as_slice());
             gl_context.buffer_data_with_array_buffer_view(
                 WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
@@ -360,19 +376,28 @@ impl WebGlRenderer {
             WebGlRenderingContext::UNSIGNED_BYTE,
             Some(&[255,255,255,255])
         )?;
-        //
+        // Allocate memory for the texture slots
+        // vector and add the white texture to it.
         let mut texture_slots: Vec<u32> = vec![0];
         texture_slots.reserve_exact((max_texture_units-1) as usize);
 
-        //
+        // Allocate memory for the vertex vector
         let mut vertex_vec: Vec<f32> = Vec::new();
         vertex_vec.reserve_exact((MAX_QUAD_COUNT * VERTICES_PER_QUAD * FLOATS_PER_VERTEX) as usize);
 
-        //
+        // Return the webgl renderer.
         Ok(Self{gl_context, gl_program, uniform_locations, vertex_buffer, index_buffer,
         vertex_vec, texture_slots, max_texture_units})
     }
 
+    /// This function will render the
+    /// scene using the provided game,\
+    /// scene and object properties, and
+    /// the provided asset definitions.
+    /// 
+    /// This function will also use the
+    /// provided elapsed time to animate\
+    /// the sprites of the scene's objects.
     pub fn render_scene(&mut self, game: &element::Game, scene_props: &element::Scene,
     object_stack: &Vec<engine_api::ElementHandler>, asset_defs: &AssetDefinitions, elapsed: f64)
      -> Result<(), JsValue> {
@@ -388,37 +413,24 @@ impl WebGlRenderer {
         self.gl_context.enable(WebGlRenderingContext::BLEND);
         self.gl_context.blend_func(WebGlRenderingContext::ONE, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
 
-        //
+        // Set the uniform values
         if let Some(location) = self.uniform_locations.get("u_camera") {
-            //
-            self.gl_context.uniform2f(Some(location), scene_props.camera.position.x.floor(), scene_props.camera.position.y.floor());
-
+            self.gl_context.uniform2f(Some(location),
+            scene_props.camera.position.x.floor(), scene_props.camera.position.y.floor());
         } else { return Err("Couldn't find uniform 'u_camera'".into()); }
-
-        //
         if let Some(location) = self.uniform_locations.get("u_zoom") {
-            //
             self.gl_context.uniform1f(Some(location), scene_props.camera.zoom);
-
         } else { return Err("Couldn't find uniform 'u_zoom'".into()); }
-
-        //
         if let Some(location) = self.uniform_locations.get("u_cam_color") {
-            //
             self.gl_context.uniform4f(Some(location), from_0_225_to_0_1(scene_props.camera.color.r),
             from_0_225_to_0_1(scene_props.camera.color.g),from_0_225_to_0_1(scene_props.camera.color.b),
             from_0_225_to_0_1(scene_props.camera.color.a));
-
         } else { return Err("Couldn't find uniform 'u_cam_color'".into()); }
-
-        //
         if let Some(location) = self.uniform_locations.get("u_resolution") {
-            //
             self.gl_context.uniform2f(Some(location), game.canvas_width as f32, game.canvas_height as f32);
-
         } else { return Err("Couldn't find uniform 'u_resolution'".into()); }
 
-        //
+        // resize the canvas if needed
         {
             // Convert the canvas element into an HTMLCanvasElement object.
             let canvas: web_sys::HtmlCanvasElement = self.gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
@@ -427,12 +439,17 @@ impl WebGlRenderer {
             // at regardless of how CSS displays it.
             canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
             canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
-        } //
+        } // `canvas` drops here.
 
-        //
+        // Inform the webgl context of the canvas resize,
+        // so that it can render the scene at the correct size.
         self.gl_context.viewport(0, 0, game.canvas_width as i32, game.canvas_height as i32);
 
-        //
+        // This set of variables will store
+        // data for different sprites in
+        // each iteration of the loop, and
+        // will be used to define the quads
+        // which will make them show up on screen.
         let mut unit_id: f32;
         let mut tex_width: f32;
         let mut tex_height: f32;
@@ -441,15 +458,19 @@ impl WebGlRenderer {
         let mut texcoord_1: [f32; 2] = [0.0, 0.0];
         let mut texcoord_2: [f32; 2] = [0.0, 0.0];
         let mut origin_minus_offset: [f32; 2] = [0.0, 0.0];
-        //
+        // Iterate over the scene's object
+        // instances in the order of the
+        // layers they are in and render them.
         for &index in scene_props.layers[0..scene_props.layers_len].iter()
         .flat_map(|layer| { layer.instances.iter() }) {
-            //
+            // If the vertex vector is full,
             if (self.vertex_vec.len() as i32) / (FLOATS_PER_VERTEX * VERTICES_PER_QUAD * MAX_QUAD_COUNT) >= 1 {
-                //
+                // flush all the data from the vertex vector
+                // into the vertex buffer, draw the scene,
+                // and clear the texture slots vector.
                 self.flush();
             }
-            //
+            // Get the object from the object stack.
             if let Some(object) = object_stack.get(index as usize) {
                 // Get a mutable borrow of the object,
                 // which will later switch to the sprite of the object.
@@ -460,10 +481,10 @@ impl WebGlRenderer {
                 .expect("write lock should succeed.");
 
                 // Here the object will switch to a sprite.
-                // This needs to be done because the sprite is
-                // owned by the object, and borrowing it at the
-                // same time with the mutable borrow of the object
-                // will violate the borrowing rules.
+                // This needs to be done because the sprite's
+                // propertys are owned by the object, and borrowing
+                // them at the same time with the mutable borrow of
+                // the object will violate the borrowing rules.
                 if object_or_sprite.sprites.len > 0 {
                     // Get the object's current sprite asset's id.
                     let cur_sprite_asset_id = object_or_sprite.sprites.cur_asset;
@@ -471,11 +492,12 @@ impl WebGlRenderer {
                     let object_or_sprite = object_or_sprite.sprites.members
                     .get_mut(cur_sprite_asset_id)
                     .expect("the cur_asset index should exist in the members array of an AssetList.");
-                    //
+                    // Get a borrow (immutable) to the
+                    // asset definition of the sprite.
                     if let Some(def) = asset_defs.get(&object_or_sprite.id) {
-                        //
                         let texture_asset = def.as_ref()?;
-                        //
+                        // Get the asset data of the sprite,
+                        // which is a `WebGlTexture`.
                         let gl_texture: &WebGlTexture;
                         match &texture_asset.asset_data {
                             AssetData::ImageData { width, height, texture } => {
@@ -485,43 +507,66 @@ impl WebGlRenderer {
                             }
                             //_ => { return Err("The asset data of an image asset wasn't image data.".into()); }
                         }
-
-                        //
-                        let fps = dynamic_to_number(&texture_asset.config["fps"])
-                        .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
                         
-                        //
+                        // This variable will become
+                        // true if the sprite has an
+                        // animation with the same name
+                        // as specified in the sprite's
+                        // `cur_animation` property.
                         let mut found_anim = false;
-                        //
+                        // Iterate over the sprite's
+                        // animations and find the
+                        // one with the same name as
+                        // specified in the sprite's
+                        // `cur_animation` property.
                         for anim in &texture_asset.config["animations"]
                         .read_lock::<Vec<rhai::Dynamic>>().expect(concat!("Every sprite's config should have an",
                         " 'animations' array, which contains object-like members.")) as &Vec<rhai::Dynamic> {
-                            //
                             let anim: &rhai::Map = &anim.read_lock::<rhai::Map>().expect(concat!("Every member of the 'animations'",
                             " array in a sprite's config should be an object-like member."));
-                            //
+
                             if &anim["name"].read_lock::<rhai::ImmutableString>().expect(
                             concat!("Every member of the 'animations' array in a sprite's config should",
                             " have a 'name' property with a string.")) as &str != object_or_sprite.cur_animation {
                                 continue;
                             }
-                            //
+                            // If the animation was found,
+                            // set the `found_anim` variable
+                            // to true and start getting all
+                            // the necessary information for
+                            // rendering the sprite.
                             found_anim = true;
-                            //
+
+                            // Get the sprite's animation
+                            // frame rate from its config.
+                            let fps = dynamic_to_number(&texture_asset.config["fps"])
+                            .expect("Every sprite's config should have a 'fps' property with an integer number.") as i32;
+
+                            // Get the animation's frames
                             let frames = &anim["frames"]
                             .read_lock::<Vec<rhai::Dynamic>>().expect(concat!("Every",
                             " member of the 'animations' array in a sprite's config should",
                             " have a 'frames' array, which contains object-like members.")) as &Vec<rhai::Dynamic>;
-                            //
+                            // If the animation is not finished,
                             if !object_or_sprite.is_animation_finished {
-                                //
-                                object_or_sprite.animation_time += elapsed;
+                                // Add the elapsed time to the
+                                // animation time of the sprite.
+                                object_or_sprite.animation_time += elapsed; 
+                                // Set the current frame of the
+                                // sprite's animation according
+                                // to the animation time and the
+                                // animation's frame rate.
                                 object_or_sprite.cur_frame = ((fps as f64) * object_or_sprite.animation_time * 0.001).floor() as u32;
-                                //
+                                // If the current frame is out of
+                                // the animation's frames range,
                                 if object_or_sprite.cur_frame >= frames.len() as u32 {
-                                    //
+                                    // Set the current frame to the
+                                    // last frame of the animation.
                                     object_or_sprite.cur_frame = (frames.len() - 1) as u32;
-                                    //
+                                    // Mark the animation as finished,
+                                    // or calibrate the animation time
+                                    // and current frame if the animation
+                                    // should be repeated.
                                     if !object_or_sprite.repeat {
                                         object_or_sprite.is_animation_finished = true;
                                     } else {
@@ -530,34 +575,53 @@ impl WebGlRenderer {
                                     }
                                 }
                             }
-                            //
+                            // Get the current frame's properties
                             let current_frame: &rhai::Map = &frames[object_or_sprite.cur_frame as usize]
                             .read_lock::<rhai::Map>().expect("Every frame should be an object-like member.");
-                            //
+                            // Get the current frame's area
+                            // coordinates on the sprite's texture.
                             let area: &rhai::Map = &current_frame["area"].read_lock::<rhai::Map>()
                             .expect("Every frame should have a 'area' object-like property");
-                            //
+                            // Convert the area coordinates
+                            // into valid webgl texture coordinates.
+
+                            // The first area point is
+                            // relative to the top left
+                            // corner of the texture.
                             texcoord_1 = [
                                 dynamic_to_number(&area["x1"])
                                 .expect("x1 should be a number.") / tex_width, 
                                 dynamic_to_number(&area["y1"])
                                 .expect("y1 should be a number.") / tex_height
                             ];
-                            //
+                            // The second area point is
+                            // relative to the bottom right
+                            // corner of the texture.
                             texcoord_2 = [
                                 1.0 - (dynamic_to_number(&area["x2"])
                                 .expect("x2 should be a number.") / tex_width),
                                 1.0 - (dynamic_to_number(&area["y2"])
                                 .expect("y2 should be a number.") / tex_height)
                             ];
-                            //
+
+                            // Calculate the width and height
+                            // of the quad which will be used
+                            // to render the sprite.
+
+                            // Subtract the area x coordinates
+                            // of the two points from the
+                            // texture's width to get the
+                            // width of the quad.
                             quad_width = tex_width - (
                                 dynamic_to_number(&area["x1"])
                                 .expect("x1 should be a number.") +
                                 dynamic_to_number(&area["x2"])
                                 .expect("x2 should be a number.")
                             );
-                            //
+                            // Subtract the area y coordinates
+                            // of the two points from the
+                            // texture's height to get the
+                            // height of the quad.
                             quad_height = tex_height - (
                                 dynamic_to_number(&area["y1"])
                                 .expect("y1 should be a number.") +
@@ -565,14 +629,18 @@ impl WebGlRenderer {
                                 .expect("y2 should be a number.")
                             );
                             
-                            //
+                            // Get the offset of the current
+                            // frame from the sprite's config.
                             let offset: &rhai::Map = &current_frame["offset"].read_lock::<rhai::Map>()
                             .expect("Every frame should have a 'offset' object-like property");
-                            //
+                            // Get the origin point of the
+                            // sprite from its config.
                             let origin = &texture_asset.config["origin"]
                             .read_lock::<rhai::Map>().expect(concat!("Every sprite's config should",
                             " have a 'origin' object-like property")) as &rhai::Map;
-                            //
+                            // Calculate the final origin
+                            // point of the sprite, considering
+                            // the offset of the current frame.
                             origin_minus_offset = [
                                 dynamic_to_number(&origin["x"])
                                 .expect("origin.x should be a number") -
@@ -583,59 +651,78 @@ impl WebGlRenderer {
                                 dynamic_to_number(&offset["y"])
                                 .expect("offset.y should be a number")
                             ];
-                            //
+                            // Break the loop
+                            // and start trying
+                            // to render the sprite.
                             break;
                         }
 
-                        //
+                        // If the animation wasn't found,
                         if !found_anim {
-                            //
+                            // Skip this object
                             continue;
                         }
 
-                        //
+                        // If the sprite's texture is already
+                        // in the texture slots vector,
                         if let Some((idx, _)) = self.texture_slots.iter()
-                        .enumerate().find(|&slot| { object_or_sprite.id == *slot.1 }) {
-                            //
+                        .enumerate().find(|&(_, &slot)| { object_or_sprite.id == slot }) {
+                            // The texture unit at that index
+                            // contains the sprite's texture, so
+                            // we should use that unit to render
+                            // the sprite.
                             unit_id = idx as f32;
                         } else if self.texture_slots.len() < (self.max_texture_units as usize) {
-                            //
+                            // If the sprite's texture is not
+                            // in the texture slots vector, but
+                            // there's still room for it, bind
+                            // the texture to the first free
+                            // texture unit, add the texture's
+                            // id to the texture slots vector,
+                            // and use that unit to render the sprite.
                             self.gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (self.texture_slots.len() as u32));
-                            //
                             self.gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
-                            //
                             self.texture_slots.push(object_or_sprite.id);
-                            //
                             unit_id = (self.texture_slots.len() as f32)-1_f32;
                         } else {
-                            //
+                            // If there's no room for the sprite's
+                            // texture in the texture slots vector,
+                            // flush all the data from the vertex vector
+                            // into the vertex buffer, draw the scene,
+                            // and clear the texture slots vector.
                             self.flush();
-                            //
+                            // Bind the texture to the first
+                            // texture unit, add the texture's
+                            // id to the texture slots vector,
+                            // and use that unit to render the sprite.
                             self.gl_context.active_texture(WebGlRenderingContext::TEXTURE0 + (self.texture_slots.len() as u32));
-                            //
                             self.gl_context.bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(gl_texture));
-                            //
                             self.texture_slots.push(object_or_sprite.id);
-                            //
                             unit_id = (self.texture_slots.len() as f32)-1_f32;
                         }
                     } else if object_or_sprite.id == 0 {
-                        // we will render a colored quad
+                        // If the asset definition of the sprite
+                        // couldn't be found, but the specified
+                        // sprite id is 0, render a colored quad
                         // using our white texture.
                         unit_id = 0.0; tex_width = 1.0;
                         tex_height = 1.0; quad_width = 1.0;
                         quad_height = 1.0; texcoord_1 = [0.0, 0.0];
                         texcoord_2 = [0.0, 0.0]; origin_minus_offset = [0.0, 0.0];
                     } else {
-                        // we will skip this object
+                        // If the sprite's id isn't
+                        // 0, skip this object.
                         continue;
                     }
-                } // Here the sprite switches back to being an object.
-                else {
-                // we will skip this object
-                continue; 
-                }
-                //
+                } else {
+                    // If the object doesn't
+                    // have any sprites, skip it
+                    continue; 
+                }// Here the sprite switches back to being an object.
+
+                // Generate the quad which will be used
+                // to render the sprite, and add it to
+                // the vertex vector.
                 self.vertex_vec.extend_from_slice(&generate_textured_quad(object_or_sprite.position.x.floor() - 
                 (origin_minus_offset[0] * object_or_sprite.scale.x), object_or_sprite.position.y.floor() - 
                 (origin_minus_offset[1] * object_or_sprite.scale.y), [from_0_225_to_0_1(object_or_sprite.color.r),
@@ -646,10 +733,13 @@ impl WebGlRenderer {
                 unit_id));
             }
         }
-        //
+        // Flush all the data that's left in the
+        // vertex vector into the vertex buffer,
+        // draw the scene, and clear the texture
+        // slots vector.
         self.flush();
-
-        // The Rendering is Done!
+        // The rendering proccess
+        // for a single frame ends here.
         Ok(())
     }
 
@@ -698,11 +788,21 @@ impl WebGlRenderer {
 /// canvas element in the page,
 /// set its width and height,
 /// and return its WebGL context.
+/// If the canvas element was already
+/// used, it will return an error.
 fn activate_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsValue> {
+    // Don't allow the canvas webgl
+    // context to be used more than once.
+    if unsafe { CANVAS_ID.is_empty() } {
+        return Err("The canvas webgl context was already used.".into());
+    }
     // Get the page's document.
     let document = web_sys::window().unwrap().document().unwrap();
     // Get to canvas from the document.
-    let canvas = document.get_element_by_id(CANVAS_ID).unwrap();
+    let canvas = document.get_element_by_id(unsafe{ CANVAS_ID }).unwrap();
+    // Sets the canvas id to an empty string,
+    // so that it can't be used again.
+    unsafe { CANVAS_ID = ""; }
     // Convert the canvas element into an HTMLCanvasElement object.
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
     // Set the desired width and height of the canvas,
