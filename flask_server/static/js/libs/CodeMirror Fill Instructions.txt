@@ -1,0 +1,18 @@
+You need to download codemirror 5.65.13 and rhai playground
+source codes in order to make this editor work.
+(codemirror: https://github.com/codemirror/codemirror5/releases/tag/5.65.13)
+(rhai playground: https://github.com/rhaiscript/playground)
+
+From codemirror's source code, take "src\codemirror.js"
+and "lib\codemirror.css" and put them inside "static\js\libs\codemirror-5.65.13\lib".
+Then the "theme" and "addon" folders with their contents
+and copy them into "static\js\libs\codemirror-5.65.13".
+
+From rhai playground's source code, copy "js\wasm_loader.js"
+and put it inside "static\js\mode\rhai-playground". Then,
+compile the playground's source code using wasm-pack 
+(with the command "wasm-pack build --target web")
+and copy the generated "pkg\web_wasm.js" and
+"pkg\web_wasm_bg.wasm" files into "static\js\mode\rhai-playground".
+
+Everything else should already be in place.
