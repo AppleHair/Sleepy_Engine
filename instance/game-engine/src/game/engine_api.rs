@@ -396,6 +396,131 @@ impl ElementHandler {
     }
 }
 
+//
+pub struct GameElementSet {
+    pub state_manager: ElementHandler,
+    pub cur_scene: ElementHandler,
+    pub object_stack: Rc<RefCell<Vec<ElementHandler>>>,
+}
+
+impl GameElementSet {
+    //
+    pub fn call_fn_on_all(&self, name: &str, args: impl rhai::FuncArgs + Clone,
+    engine: &Engine) -> Result<(), String> {
+        // Call the function on the state manager instance.
+        self.state_manager.resources.borrow_mut().call_fn(engine, name, args.clone())?;
+        //
+        self.cur_scene.resources.borrow_mut().call_fn(engine, name, args.clone())?;
+        //
+        let mut i = 0_usize;
+        loop {
+            //
+            {
+                //
+                let scene_map_borrow = self.cur_scene.properties.borrow();
+                let scene_map_borrow = scene_map_borrow
+                .read_lock::<element::Scene>().expect("read_lock cast should succeed");
+                //
+                if i >= scene_map_borrow.objects_len+scene_map_borrow.runtimes_len {
+                    break;
+                }
+                //
+                if ! scene_map_borrow.layers[0..scene_map_borrow.layers_len]
+                .iter().flat_map(|layer| { layer.instances.iter()})
+                .any(|&index| { index == i as u32 }) {
+                    //
+                    i += 1;
+                    continue;
+                }
+            }//
+
+            //
+            let mut element_res_clone: Option<Rc<RefCell<ElementResources>>> = None;
+            {
+                //
+                let object_stack_borrow = self.object_stack.borrow();
+                //
+                if let Some(element) = object_stack_borrow.get(i) {
+                    //
+                    element_res_clone = Some(Rc::clone(&element.resources));
+                }
+            }//
+
+            //
+            if let Some(element) = element_res_clone {
+                //
+                if let Ok(mut borrow) = element.try_borrow_mut() {
+                    //
+                    borrow.call_fn(engine, name, args.clone())?;
+                }
+            }
+            //
+            i += 1;
+        }
+        //
+        Ok(())
+    }
+
+    //
+    pub fn switch_scene(&self, scene_id: u32, engine: &Engine,
+    element_defs: &ElementDefinitions) -> Result<(), String> {
+        //
+        self.cur_scene.recycle(
+            element_defs.get(&scene_id).unwrap().as_ref()?,
+            None
+        )?;
+        //
+        self.cur_scene.resources.borrow_mut().run_script(&engine)?;
+        //
+        let instances = self.cur_scene.resources.borrow().definition
+        .config["object-instances"].clone().into_typed_array::<rhai::Map>().expect(concat!("Every object's",
+        " config should contain a 'object-instances' array, which should only have object-like members."));
+        //
+        let mut object_stack_borrow = self.object_stack.borrow_mut();
+        //
+        let scene_props_borrow = Rc::clone(&self.cur_scene.properties);
+        //
+        for (idx, map, rowid, layer) in instances
+        .iter().enumerate().map(|(inst_index, inst)| {(
+            //
+            inst_index, inst,
+            dynamic_to_number(&inst["id"])
+            .expect(concat!("Every instance in the 'object-instances' array",
+            " of an object's config should contain an integer 'id' attribute.")) as u32,
+            dynamic_to_number(&inst["layer"])
+            .expect(concat!("Every instance in the 'object-instances' array",
+            " of an object's config should contain an integer 'layer' attribute.")),
+        )}) {
+            //
+            {
+                let mut scene_props_borrow = scene_props_borrow.borrow_mut();
+                let mut scene_props_borrow = scene_props_borrow
+                .write_lock::<element::Scene>().expect("write_lock cast should succeed");
+                //
+                scene_props_borrow.add_instance(idx as rhai::INT, layer as rhai::INT);
+            } //
+            //
+            if idx < object_stack_borrow.len() {
+                //
+                object_stack_borrow[idx].recycle(
+                element_defs.get(&rowid).unwrap().as_ref()?,
+                Some(element::ObjectInitInfo::new(idx as u32, map)))?;
+                //
+                object_stack_borrow[idx].resources.borrow_mut().run_script(&engine)?;
+            }
+            //
+            object_stack_borrow.push(ElementHandler::new(
+                element_defs.get(&rowid).unwrap().as_ref()?,
+                Some(element::ObjectInitInfo::new(idx as u32, map))
+            )?);
+            //
+            object_stack_borrow.last().unwrap().resources.borrow_mut().run_script(&engine)?;
+        }
+        //
+        Ok(())
+    }
+}
+
 /// Creates the API for the game engine,
 /// and returns it's integrated components.
 /// 
@@ -463,8 +588,8 @@ impl ElementHandler {
 /// }
 /// best_example(Object.position.x);
 /// ```
-pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>) -> Result<(Engine,
-ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<KeyStates>>), String> {
+pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>)
+ -> Result<(Rc<Engine>, Rc<GameElementSet>, Rc<RefCell<KeyStates>>), String> {
     // Create a rhai engine, into which all
     // the API features will be registered.
     let mut engine = Engine::new_raw();
@@ -1187,5 +1312,5 @@ ElementHandler, ElementHandler, Rc<RefCell<Vec<ElementHandler>>>, Rc<RefCell<Key
     // which are related to the API
     // and will need to be maintained
     // throughout the game's operation.
-    Ok((engine, state_manager, cur_scene, object_stack, key_states))
+    Ok((Rc::new(engine), Rc::new(GameElementSet {state_manager, cur_scene, object_stack}), key_states))
 }

@@ -20,6 +20,67 @@ extern "C" {
     ) -> i32;
 }
 
+// Rhai dynamic values are evaluated
+// as integers or floats separately
+// and they don't do any automatic casting
+// between the two types of numbers.
+// This behavior is not very convenient,
+// because it requires you to check if 
+// the value is a float or an integer 
+// every time you want to extract a number
+// from a script or an evaluated JSON file.
+// Therefore, I created this function, which 
+// will convert a dynamic value to a f32 if it's
+// eather an integer(i32) or a float(f32), and 
+// will return an error if it's not eather of
+// the two. After that, you can cast the result
+// into any other number type you want, by using
+// the 'as' keyword, like this: 
+// 'let x: u8 = dynamic_to_number(&dynamic)? as u8;'.
+pub fn dynamic_to_number(dynam: &rhai::Dynamic) -> Result<f32, &str> {
+    if dynam.is_int() { 
+        return Ok(dynam.as_int()? as f32);
+    }
+    Ok(dynam.as_float()? as f32)
+}
+
+//
+fn load_assets(engine: &Engine, asset_defs: &mut renderer::AssetDefinitions,
+gl_context: &web_sys::WebGlRenderingContext) {
+    for asset in data::assets_to_load().iter() {
+        //
+        let int_id = js_sys::Reflect::get_u32(&asset, 0)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u32;
+        //
+        let int_type = js_sys::Reflect::get_u32(&asset, 1)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u8;
+        //
+        asset_defs.insert(int_id, renderer::AssetDefinition::new(&engine,
+        TableRow::Asset(int_id, int_type), gl_context));
+    }
+}
+
+//
+fn load_elements(engine: &Engine, element_defs: &mut engine_api::ElementDefinitions, init: bool) {
+    for element in data::elements_to_load().iter() {
+        //
+        let int_id = js_sys::Reflect::get_u32(&element, 0)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u32;
+        //
+        let int_type = js_sys::Reflect::get_u32(&element, 1)
+        .expect("The returned JSValue should be a array with two numbers.").as_f64()
+        .expect("The returned JSValue should be a array with two numbers.") as u8;
+        //
+        if element_defs.contains_key(&int_id) && init { continue; }
+        //
+        element_defs.insert(int_id, engine_api::ElementDefinition::new(&engine,
+        TableRow::Element(int_id, int_type)));
+    }
+}
+
 //
 #[derive(Clone, Copy)]
 pub enum TableRow {
@@ -137,345 +198,198 @@ impl KeyStateTracker {
 }
 
 //
-fn call_fn_on_all(name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine,
-state_manager: &Rc<RefCell<engine_api::ElementResources>>, scene: &engine_api::ElementHandler,
-object_stack: &Rc<RefCell<Vec<engine_api::ElementHandler>>>) -> Result<(), String> {
-    // Call the function on the state manager instance.
-    state_manager.borrow_mut().call_fn(engine, name, args.clone())?;
-    //
-    scene.resources.borrow_mut().call_fn(engine, name, args.clone())?;
-    //
-    let mut i = 0_usize;
-    loop {
-        //
-        {
-            //
-            let scene_map_borrow = scene.properties.borrow();
-            let scene_map_borrow = scene_map_borrow
-            .read_lock::<engine_api::element::Scene>().expect("read_lock cast should succeed");
-            //
-            if i >= scene_map_borrow.objects_len+scene_map_borrow.runtimes_len {
-                break;
-            }
-            //
-            if ! scene_map_borrow.layers[0..scene_map_borrow.layers_len]
-            .iter().flat_map(|layer| { layer.instances.iter()})
-            .any(|&index| { index == i as u32 }) {
-                //
-                i += 1;
-                continue;
-            }
-        }//
-
-        //
-        let mut element_res_clone: Option<Rc<RefCell<engine_api::ElementResources>>> = None;
-        {
-            //
-            let object_stack_borrow = object_stack.borrow();
-            //
-            if let Some(element) = object_stack_borrow.get(i) {
-                //
-                element_res_clone = Some(Rc::clone(&element.resources));
-            }
-        }//
-
-        //
-        if let Some(element) = element_res_clone {
-            //
-            if let Ok(mut borrow) = element.try_borrow_mut() {
-                //
-                borrow.call_fn(engine, name, args.clone())?;
-            }
-        }
-        //
-        i += 1;
-    }
-    //
-    Ok(())
+pub struct Game {
+    pub engine_api: Rc<rhai::Engine>,
+    pub game_elements: Rc<engine_api::GameElementSet>,
+    pub key_tracker: Rc<KeyStateTracker>,
+    webgl_renderer: Rc<RefCell<renderer::WebGlRenderer>>,
+    element_defs: Rc<RefCell<engine_api::ElementDefinitions>>,
+    asset_defs: Rc<RefCell<renderer::AssetDefinitions>>,
+    main_loop_started: bool,
+    draw_loop_started: bool,
 }
 
-//
-fn switch_scene(scene_id: u32, engine: &Engine, scene: &engine_api::ElementHandler,
-object_stack: &Rc<RefCell<Vec<engine_api::ElementHandler>>>,
-element_defs: &engine_api::ElementDefinitions) -> Result<(), String> {
+impl Game {
     //
-    scene.recycle(
-        element_defs.get(&scene_id).unwrap().as_ref()?,
-        None
-    )?;
-    //
-    scene.resources.borrow_mut().run_script(&engine)?;
-    //
-    let instances = scene.resources.borrow().definition
-    .config["object-instances"].clone().into_typed_array::<rhai::Map>().expect(concat!("Every object's",
-    " config should contain a 'object-instances' array, which should only have object-like members."));
-    //
-    let mut object_stack_borrow = object_stack.borrow_mut();
-    //
-    let scene_props_borrow = Rc::clone(&scene.properties);
-    //
-    for (idx, map, rowid, layer) in instances
-    .iter().enumerate().map(|(inst_index, inst)| {(
-        //
-        inst_index, inst,
-        dynamic_to_number(&inst["id"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an integer 'id' attribute.")) as u32,
-        dynamic_to_number(&inst["layer"])
-        .expect(concat!("Every instance in the 'object-instances' array",
-        " of an object's config should contain an integer 'layer' attribute.")),
-    )}) {
-        //
-        {
-            let mut scene_props_borrow = scene_props_borrow.borrow_mut();
-            let mut scene_props_borrow = scene_props_borrow
-            .write_lock::<engine_api::element::Scene>().expect("write_lock cast should succeed");
-            //
-            scene_props_borrow.add_instance(idx as rhai::INT, layer as rhai::INT);
-        } //
-        //
-        if idx < object_stack_borrow.len() {
-            //
-            object_stack_borrow[idx].recycle(
-            element_defs.get(&rowid).unwrap().as_ref()?,
-            Some(engine_api::element::ObjectInitInfo::new(idx as u32, map)))?;
-            //
-            object_stack_borrow[idx].resources.borrow_mut().run_script(&engine)?;
-        }
-        //
-        object_stack_borrow.push(engine_api::ElementHandler::new(
-            element_defs.get(&rowid).unwrap().as_ref()?,
-            Some(engine_api::element::ObjectInitInfo::new(idx as u32, map))
-        )?);
-        //
-        object_stack_borrow.last().unwrap().resources.borrow_mut().run_script(&engine)?;
-    }
-    //
-    Ok(())
-}
+    pub fn new() -> Result<Self, JsValue> {
+        // Create the element definitions hash map.
+        let element_defs: Rc<RefCell<engine_api::ElementDefinitions>>
+            = Rc::new(RefCell::new(HashMap::new()));
+        // Create the asset definitions hash map.
+        let asset_defs: Rc<RefCell<renderer::AssetDefinitions>>
+            = Rc::new(RefCell::new(HashMap::new()));
 
-// Rhai dynamic values are evaluated
-// as integers or floats separately
-// and they don't do any automatic casting
-// between the two types of numbers.
-// This behavior is not very convenient,
-// because it requires you to check if 
-// the value is a float or an integer 
-// every time you want to extract a number
-// from a script or an evaluated JSON file.
-// Therefore, I created this function, which 
-// will convert a dynamic value to a f32 if it's
-// eather an integer(i32) or a float(f32), and 
-// will return an error if it's not eather of
-// the two. After that, you can cast the result
-// into any other number type you want, by using
-// the 'as' keyword, like this: 
-// 'let x: u8 = dynamic_to_number(&dynamic)? as u8;'.
-pub fn dynamic_to_number(dynam: &rhai::Dynamic) -> Result<f32, &str> {
-    if dynam.is_int() { 
-        return Ok(dynam.as_int()? as f32);
-    }
-    Ok(dynam.as_float()? as f32)
-}
-
-//
-fn load_assets(engine: &Engine, asset_defs: &mut renderer::AssetDefinitions,
-gl_context: &web_sys::WebGlRenderingContext) {
-    for asset in data::assets_to_load().iter() {
+        // Create the API 'Engine', and the state manager instance.
+        let (engine, game_elements,
+        key_states) = engine_api::create_api(&element_defs)?;
         //
-        let int_id = js_sys::Reflect::get_u32(&asset, 0)
-        .expect("The returned JSValue should be a array with two numbers.").as_f64()
-        .expect("The returned JSValue should be a array with two numbers.") as u32;
+        load_elements(&engine, &mut element_defs.borrow_mut(), true);
         //
-        let int_type = js_sys::Reflect::get_u32(&asset, 1)
-        .expect("The returned JSValue should be a array with two numbers.").as_f64()
-        .expect("The returned JSValue should be a array with two numbers.") as u8;
+        let key_tracker = Rc::new(KeyStateTracker::new(key_states)?);
         //
-        asset_defs.insert(int_id, renderer::AssetDefinition::new(&engine,
-        TableRow::Asset(int_id, int_type), gl_context));
-    }
-}
-
-//
-fn load_elements(engine: &Engine, element_defs: &mut engine_api::ElementDefinitions, init: bool) {
-    for element in data::elements_to_load().iter() {
+        game_elements.call_fn_on_all("init", (), &engine)?;
         //
-        let int_id = js_sys::Reflect::get_u32(&element, 0)
-        .expect("The returned JSValue should be a array with two numbers.").as_f64()
-        .expect("The returned JSValue should be a array with two numbers.") as u32;
-        //
-        let int_type = js_sys::Reflect::get_u32(&element, 1)
-        .expect("The returned JSValue should be a array with two numbers.").as_f64()
-        .expect("The returned JSValue should be a array with two numbers.") as u8;
-        //
-        if element_defs.contains_key(&int_id) && init { continue; }
-        //
-        element_defs.insert(int_id, engine_api::ElementDefinition::new(&engine,
-        TableRow::Element(int_id, int_type)));
-    }
-}
-
-//
-pub fn run_game() -> Result<(), JsValue>
-{
-    // Create the element definitions hash map.
-    let element_defs: Rc<RefCell<engine_api::ElementDefinitions>>
-         = Rc::new(RefCell::new(HashMap::new()));
-    // Create the asset definitions hash map.
-    let mut asset_defs: renderer::AssetDefinitions = HashMap::new();
-
-    // Create the API 'Engine', and the state manager instance.
-    let (engine, state_manager, 
-    cur_scene, object_stack,
-    key_states) = engine_api::create_api(&element_defs)?;
-    //
-    load_elements(&engine, &mut element_defs.borrow_mut(), true);
-
-    //
-    let key_tracker = KeyStateTracker::new(key_states)?;
-
-    //
-    call_fn_on_all("init", (), &engine,
-    &state_manager.resources, &cur_scene, &object_stack)?;
-
-    //
-    let mut webgl_renderer = renderer::WebGlRenderer::new(
-        &state_manager.properties.borrow()
+        let webgl_renderer = Rc::new(RefCell::new(renderer::WebGlRenderer::new(
+        &game_elements.state_manager.properties.borrow()
         .read_lock::<engine_api::element::Game>()
         .expect("read_lock cast should succeed")
-    )?;
+        )?));
+        //
+        load_assets(&engine, &mut asset_defs.borrow_mut(), &webgl_renderer.borrow().gl_context);
+        //
+        Ok(Self {
+            engine_api: engine,
+            game_elements,
+            key_tracker,
+            webgl_renderer,
+            element_defs,
+            asset_defs,
+            main_loop_started: false,
+            draw_loop_started: false,
+        })
+    }
 
     //
-    load_assets(&engine, &mut asset_defs, &webgl_renderer.gl_context);
-    
-    //
-    let draw_loop = Rc::new(RefCell::new(
-    None::<Closure::<dyn FnMut(f64) -> Result<(), JsValue>>>));
-    //
-    let draw_init = Rc::clone(&draw_loop);
-    //
-    let mut last_draw = window()
-    .unwrap().performance()
-    .unwrap().now();
-    //
-    let cur_scene_props = Rc::clone(&cur_scene.properties);
-    //
-    let state_manager_props = Rc::clone(&state_manager.properties);
-    //
-    let renderer_object_stack = Rc::clone(&object_stack);
-    //
-    let json_engine = Engine::new_raw();
-    //
-    *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
-    move |draw_time: f64| -> Result<(), JsValue> {
+    pub fn start_draw_loop(&mut self) -> Result<(), JsValue> {
         //
-        let elapsed = draw_time - last_draw;
-        last_draw = draw_time;
+        if self.draw_loop_started { return Ok(()); }
+        //
+        let draw_loop = Rc::new(RefCell::new(
+        None::<Closure::<dyn FnMut(f64) -> Result<(), JsValue>>>));
+        //
+        let draw_init = Rc::clone(&draw_loop);
+        //
+        let mut last_draw = window()
+        .unwrap().performance()
+        .unwrap().now();
+        //
+        let game_elements = Rc::clone(&self.game_elements);
+        let engine_api = Rc::clone(&self.engine_api);
+        let webgl_renderer = Rc::clone(&self.webgl_renderer);
+        let asset_defs = Rc::clone(&self.asset_defs);
+        //
+        *draw_init.borrow_mut() = Some(Closure::<dyn FnMut(f64) -> Result<(), JsValue>>::new(
+        move |draw_time: f64| -> Result<(), JsValue> {
+            //
+            let elapsed = draw_time - last_draw;
+            last_draw = draw_time;
 
-        //
-        load_assets(&json_engine,
-        &mut asset_defs, &webgl_renderer.gl_context);
+            //
+            load_assets(&engine_api,
+            &mut asset_defs.borrow_mut(), &webgl_renderer.borrow().gl_context);
 
-        //
-        webgl_renderer.render_scene(
-            &state_manager_props.borrow()
-            .read_lock::<engine_api::element::Game>()
-            .expect("read_lock cast should succeed"),
-            &cur_scene_props.borrow()
-            .read_lock::<engine_api::element::Scene>()
-            .expect("read_lock cast should succeed"),
-            &renderer_object_stack.borrow(),
-            &asset_defs, elapsed
-        )?;
+            //
+            webgl_renderer.borrow_mut().render_scene(
+                &game_elements.state_manager.properties
+                .borrow().read_lock::<engine_api::element::Game>()
+                .expect("read_lock cast should succeed"),
+                &game_elements.cur_scene.properties
+                .borrow().read_lock::<engine_api::element::Scene>()
+                .expect("read_lock cast should succeed"),
+                &game_elements.object_stack.borrow(),
+                &asset_defs.borrow(), elapsed
+            )?;
+            //
+            window().unwrap().request_animation_frame(
+                draw_loop
+                    .borrow().as_ref().unwrap()
+                    .as_ref().unchecked_ref()
+            )?;
+            //
+            Ok(())
+        }));
         //
         window().unwrap().request_animation_frame(
-            draw_loop
+            draw_init
                 .borrow().as_ref().unwrap()
                 .as_ref().unchecked_ref()
         )?;
         //
+        self.draw_loop_started = true;
+        //
         Ok(())
-    }));
+    }
 
     //
-    let update_loop = Rc::new(RefCell::new(
-    None::<Closure::<dyn FnMut() -> Result<(), JsValue>>>));
-    //
-    let update_init = Rc::clone(&update_loop);
-    //
-    let frame_rate_init = state_manager.properties.borrow()
-    .read_lock::<engine_api::element::Game>()
-    .expect("read_lock cast should succeed").fps as u32;
-    //
-    let mut last_update = window().unwrap().performance().unwrap().now();
-    //
-    *update_init.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
-    move || -> Result<(), JsValue> {
+    pub fn start_main_loop(&mut self) -> Result<(), JsValue> {
         //
-        let update_time = window().unwrap().performance().unwrap().now();
-        let elapsed = update_time - last_update;
-        last_update = update_time;
+        if self.main_loop_started { return Ok(()); }
         //
-        call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &engine,
-        &state_manager.resources, &cur_scene, &object_stack)?;
+        let update_loop = Rc::new(RefCell::new(
+            None::<Closure::<dyn FnMut() -> Result<(), JsValue>>>
+        ));
         //
-        key_tracker.calibrate();
+        let update_init = Rc::clone(&update_loop);
         //
-        let row_copy = cur_scene.resources.borrow().definition.row;
+        let mut last_update = window().unwrap().performance().unwrap().now();
         //
-        if let TableRow::Element(id, 2) = row_copy {
+        let game_elements = Rc::clone(&self.game_elements);
+        let engine_api = Rc::clone(&self.engine_api);
+        let element_defs = Rc::clone(&self.element_defs);
+        let key_tracker = Rc::clone(&self.key_tracker);
+        //
+        *update_init.borrow_mut() = Some(Closure::<dyn FnMut() -> Result<(), JsValue>>::new(
+        move || -> Result<(), JsValue> {
             //
-            let mut cur_scene_id = state_manager.properties.borrow()
-            .read_lock::<engine_api::element::Game>()
-            .expect("read_lock cast should succeed").cur_scene;
+            let update_time = window().unwrap().performance().unwrap().now();
+            let elapsed = update_time - last_update;
+            last_update = update_time;
             //
-            let mut prv_scene_id = id;
+            game_elements.call_fn_on_all("update", (elapsed as rhai::FLOAT, ), &engine_api)?;
             //
-            while cur_scene_id != prv_scene_id {
+            key_tracker.calibrate();
+            //
+            let row_copy = game_elements.cur_scene.resources.borrow().definition.row;
+            //
+            if let TableRow::Element(id, 2) = row_copy {
                 //
-                switch_scene(cur_scene_id, &engine,
-                &cur_scene, &object_stack, &element_defs.borrow())?;
-                //
-                call_fn_on_all("init", (), &engine,
-                &state_manager.resources, &cur_scene, &object_stack)?;
-                //
-                prv_scene_id = cur_scene_id;
-                cur_scene_id = state_manager.properties.borrow()
+                let mut cur_scene_id = game_elements.state_manager.properties.borrow()
                 .read_lock::<engine_api::element::Game>()
                 .expect("read_lock cast should succeed").cur_scene;
+                //
+                let mut prv_scene_id = id;
+                //
+                while cur_scene_id != prv_scene_id {
+                    //
+                    game_elements.switch_scene(cur_scene_id,
+                    &engine_api, &element_defs.borrow())?;
+                    //
+                    game_elements.call_fn_on_all("init", (), &engine_api)?;
+                    //
+                    prv_scene_id = cur_scene_id;
+                    cur_scene_id = game_elements.state_manager.properties
+                    .borrow().read_lock::<engine_api::element::Game>()
+                    .expect("read_lock cast should succeed").cur_scene;
+                }
             }
-        }
-
-        //
-        load_elements(&engine, &mut element_defs.borrow_mut(), false);
-
+    
+            //
+            load_elements(&engine_api, &mut element_defs.borrow_mut(), false);
+    
+            //
+            set_timeout_with_callback_and_f64(
+                update_loop
+                    .borrow().as_ref().unwrap()
+                    .as_ref().unchecked_ref(),
+                1000_f64 / (game_elements.state_manager
+                .properties.borrow().read_lock::<engine_api::element::Game>()
+                .expect("read_lock cast should succeed").fps as f64)
+            );
+            //
+            Ok(())
+        }));
         //
         set_timeout_with_callback_and_f64(
-            update_loop
+            update_init
                 .borrow().as_ref().unwrap()
                 .as_ref().unchecked_ref(),
-            1000_f64 / (state_manager.properties.borrow()
-            .read_lock::<engine_api::element::Game>()
+            1000_f64 / (self.game_elements.state_manager
+            .properties.borrow().read_lock::<engine_api::element::Game>()
             .expect("read_lock cast should succeed").fps as f64)
         );
         //
+        self.main_loop_started = true;
+        //
         Ok(())
-    }));
-
-    //
-    window().unwrap().request_animation_frame(
-        draw_init
-            .borrow().as_ref().unwrap()
-            .as_ref().unchecked_ref()
-    )?;
-    //
-    set_timeout_with_callback_and_f64(
-        update_init
-            .borrow().as_ref().unwrap()
-            .as_ref().unchecked_ref(),
-        1000_f64 / (frame_rate_init as f64)
-    );
-
-    // Done!
-    Ok(())
+    }
 }
