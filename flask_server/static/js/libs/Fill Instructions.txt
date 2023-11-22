@@ -1,0 +1,6 @@
+You need to download codemirror 5.65.13 in order to make this editor work.
+(https://github.com/codemirror/codemirror5/releases/tag/5.65.13)
+
+From codemirror's source code, take "src\codemirror.js"
+and put it inside "static\js\libs\codemirror-5.65.13\lib".
+Everything else should already be in place.
