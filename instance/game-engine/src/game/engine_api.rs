@@ -396,7 +396,11 @@ impl ElementHandler {
     }
 }
 
-//
+/// A struct that will be used to
+/// store all the game's element\
+/// handlers, which will be used
+/// to access the game's elements\
+/// and their resources.
 pub struct GameElementSet {
     pub state_manager: ElementHandler,
     pub cur_scene: ElementHandler,
@@ -404,85 +408,122 @@ pub struct GameElementSet {
 }
 
 impl GameElementSet {
-    //
-    pub fn call_fn_on_all(&self, name: &str, args: impl rhai::FuncArgs + Clone,
-    engine: &Engine) -> Result<(), String> {
-        // Call the function on the state manager instance.
+    /// This is an extension of the
+    /// `call_fn` function of the\
+    /// `ElementHandler` struct,
+    /// which will call a function\
+    /// on all the element handlers
+    ///  in order.
+    /// 
+    /// The state manager's script
+    /// will be called first, then\
+    /// the current scene's script,
+    /// and then all the object\
+    /// instances' scripts in the
+    /// order they are placed in\
+    /// the object stack.
+    pub fn call_fn_on_all(&self, name: &str, args: impl rhai::FuncArgs + Clone, engine: &Engine)
+     -> Result<(), String> {
+        // Call the function on the state manager's script.
         self.state_manager.resources.borrow_mut().call_fn(engine, name, args.clone())?;
-        //
+        // Call the function on the current scenes's script.
         self.cur_scene.resources.borrow_mut().call_fn(engine, name, args.clone())?;
-        //
+
+        // Call the function on all the object instances' scripts,
+        // while skipping the instances that aren't placed in any
+        // layer in the scene and keeping track of the object stack's
+        // length, which might change during the loop.
         let mut i = 0_usize;
         loop {
-            //
             {
-                //
+                // Borrow the current scene's properties.
                 let scene_map_borrow = self.cur_scene.properties.borrow();
                 let scene_map_borrow = scene_map_borrow
                 .read_lock::<element::Scene>().expect("read_lock cast should succeed");
-                //
+                // Check if the current index is out of bounds.
                 if i >= scene_map_borrow.objects_len+scene_map_borrow.runtimes_len {
+                    // If it is, break the loop.
                     break;
                 }
-                //
+                // Check if the object instance is placed in any layer.
                 if ! scene_map_borrow.layers[0..scene_map_borrow.layers_len]
                 .iter().flat_map(|layer| { layer.instances.iter()})
                 .any(|&index| { index == i as u32 }) {
-                    //
+                    // If it isn't, skip the instance.
                     i += 1;
                     continue;
                 }
-            }//
+            }// `scene_map_borrow` drops here.
 
-            //
+            // Try to get a counted reference
+            // (interior-mutated) to the resources
+            // of the current object instance.
             let mut element_res_clone: Option<Rc<RefCell<ElementResources>>> = None;
             {
-                //
+                // Borrow the object stack.
                 let object_stack_borrow = self.object_stack.borrow();
-                //
                 if let Some(element) = object_stack_borrow.get(i) {
-                    //
                     element_res_clone = Some(Rc::clone(&element.resources));
                 }
-            }//
+            }// `object_stack_borrow` drops here.
 
-            //
+            // If the resources were found,
+            // use them to call the function
+            // on the object instance's script.
             if let Some(element) = element_res_clone {
-                //
                 if let Ok(mut borrow) = element.try_borrow_mut() {
-                    //
                     borrow.call_fn(engine, name, args.clone())?;
                 }
             }
-            //
+            // Move to the next index.
             i += 1;
         }
-        //
+        
         Ok(())
     }
 
-    //
+    /// This function is used to
+    /// replace the current scene\
+    /// with a new one.
+    /// 
+    /// It will recycle the current
+    /// scene's element handler and\
+    /// replace it with the new one,
+    /// and then it will do the same\
+    /// with all the object instances.
+    /// 
+    /// The recycling process will
+    /// help us avoid unnecessary\
+    /// memory allocations, and
+    /// preserve a dynamiclly growing\
+    /// memory pool throughout the
+    /// game's runtime.
     pub fn switch_scene(&self, scene_id: u32, engine: &Engine,
     element_defs: &ElementDefinitions) -> Result<(), String> {
-        //
+        // Recycle the current scene's element handler.
         self.cur_scene.recycle(
             element_defs.get(&scene_id).unwrap().as_ref()?,
             None
         )?;
-        //
+        // Run the current scene's script.
         self.cur_scene.resources.borrow_mut().run_script(&engine)?;
-        //
+        
+        // Borrow the object stack (mutable)
+        let mut object_stack_borrow = self.object_stack.borrow_mut();
+        // Get the "object-instances" list
+        // from the current scene's configuration.
         let instances = self.cur_scene.resources.borrow().definition
         .config["object-instances"].clone().into_typed_array::<rhai::Map>().expect(concat!("Every object's",
         " config should contain a 'object-instances' array, which should only have object-like members."));
-        //
-        let mut object_stack_borrow = self.object_stack.borrow_mut();
-        //
-        let scene_props_borrow = Rc::clone(&self.cur_scene.properties);
-        //
+        // Itrate over the instances list.
         for (idx, map, rowid, layer) in instances
         .iter().enumerate().map(|(inst_index, inst)| {(
-            //
+            // Devide the information into seperate variables:
+            // idx - the index of the instance in the list.
+            // map - the instance's map, which contains
+            //       all the instance's attributes.
+            // rowid - the instance's object rowid.
+            // layer - the instance's layer.
             inst_index, inst,
             dynamic_to_number(&inst["id"])
             .expect(concat!("Every instance in the 'object-instances' array",
@@ -491,32 +532,38 @@ impl GameElementSet {
             .expect(concat!("Every instance in the 'object-instances' array",
             " of an object's config should contain an integer 'layer' attribute.")),
         )}) {
-            //
+            // Borrow the current scene's properties in a seperate block.
             {
-                let mut scene_props_borrow = scene_props_borrow.borrow_mut();
+                let mut scene_props_borrow = self.cur_scene.properties.borrow_mut();
                 let mut scene_props_borrow = scene_props_borrow
                 .write_lock::<element::Scene>().expect("write_lock cast should succeed");
-                //
+                // Add the instance to it's matching layer in the current scene.
                 scene_props_borrow.add_instance(idx as rhai::INT, layer as rhai::INT);
-            } //
-            //
+            } // The borrow of the current scene's properties drops here.
+
+            // If the object instance's index can
+            // fit in the object stack, recycle
+            // the object handler at that index,
+            // and then replace it with a new one.
             if idx < object_stack_borrow.len() {
-                //
                 object_stack_borrow[idx].recycle(
                 element_defs.get(&rowid).unwrap().as_ref()?,
                 Some(element::ObjectInitInfo::new(idx as u32, map)))?;
-                //
+                // Run the object instance's script.
                 object_stack_borrow[idx].resources.borrow_mut().run_script(&engine)?;
             }
-            //
+            // If the object instance's index
+            // can't fit in the object stack,
+            // create a new object instance
+            // and push it to the object stack.
             object_stack_borrow.push(ElementHandler::new(
                 element_defs.get(&rowid).unwrap().as_ref()?,
                 Some(element::ObjectInitInfo::new(idx as u32, map))
             )?);
-            //
+            // Run the object instance's script.
             object_stack_borrow.last().unwrap().resources.borrow_mut().run_script(&engine)?;
         }
-        //
+
         Ok(())
     }
 }
@@ -564,8 +611,8 @@ impl GameElementSet {
 /// fn example() {
 ///     print(Object.position.x);
 /// }
-/// // example(); // will raise an error: "Object is not defined"
 /// example!(); // will print the x position of the object using the local API
+/// example(); // will raise an error: "Object is not defined" or something along those lines
 /// ```
 /// 
 /// The use of the ! syntax is not
@@ -581,12 +628,6 @@ impl GameElementSet {
 ///     // do something with the clone of the object...
 /// }
 /// better_example(Object);
-/// 
-/// fn best_example(x) {
-///     print(x);
-///     // do something with the x position of the object...
-/// }
-/// best_example(Object.position.x);
 /// ```
 pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>)
  -> Result<(Rc<Engine>, Rc<GameElementSet>, Rc<RefCell<KeyStates>>), String> {
@@ -983,7 +1024,7 @@ pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>)
     // Create the "object stack",
     // which is a vector of element
     // handlers that will be used as
-    // a dynamic pool of objects, meaning
+    // a growing pool of objects, meaning
     // that when the current scene will be
     // switched, the objects will be recycled,
     // and memory won't be reallocated.
