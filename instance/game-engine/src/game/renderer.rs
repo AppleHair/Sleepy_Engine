@@ -785,9 +785,9 @@ impl WebGlRenderer {
 }
 
 /// This function will find the
-/// canvas element in the page,
+/// canvas element in the page,\
 /// set its width and height,
-/// and return its WebGL context.
+/// and return its WebGL context.\
 /// If the canvas element was already
 /// used, it will return an error.
 fn activate_context(width: f32, height: f32) -> Result<WebGlRenderingContext, JsValue> {
@@ -831,11 +831,11 @@ fn activate_context(width: f32, height: f32) -> Result<WebGlRenderingContext, Js
 }
 
 /// This function will compile
-/// the vertex and fragment shaders
+/// the vertex and fragment shaders\
 /// and link them into a shader program.
-/// It will also bind the attribute locations
+/// It will also bind the attribute locations\
 /// to the shader program and look up the
-/// uniform locations. The shader program
+/// uniform locations. The shader program\
 /// and the uniform locations will be returned.
 fn create_program(gl_context: &WebGlRenderingContext)
  -> Result<(WebGlProgram,HashMap<String, web_sys::WebGlUniformLocation>), JsValue> {
@@ -877,11 +877,9 @@ fn create_program(gl_context: &WebGlRenderingContext)
     Ok((gl_program, uniform_locations))
 }
 
-// Creates an array of f32 floats with
-// the vertices which should represent a 
-// desired textured rectangle, while only using
-// 7 arguments: x, y, color, width, height, texpoint_1,
-// texpoint_2 and texture unit id.
+/// Creates an array of f32 floats with
+/// the vertices which should represent\
+/// a desired textured rectangle.
 fn generate_textured_quad(x: f32, y: f32, color: [f32; 4],
 width: f32, height: f32, texpoint_1: [f32; 2],
 texpoint_2: [f32; 2], tex_size: [f32; 2],
@@ -904,18 +902,18 @@ scale: [f32; 2], texunit_id: f32) -> [f32; (VERTICES_PER_QUAD * FLOATS_PER_VERTE
     ]
 }
 
-// Receives a byte and makes it
-// go from 0 to 1 instead of from
-// 0 to 255, for use with the WebGL context.
+/// Receives a byte and makes it
+/// go from 0 to 1 instead of from\
+/// 0 to 255, for use with the WebGL context.
 fn from_0_225_to_0_1(color: u8) -> f32 {
     return (color as f32) / 255_f32; 
 }
 
-// Compiles a shader and
-// returns a WebGlShader
-// object if the compilation
-// is successful. otherwise,
-// the error log is returned.
+/// Compiles a shader and
+/// returns a WebGlShader\
+/// object if the compilation
+/// is successful. otherwise,\
+/// the error log is returned.
 fn compile_shader(
     gl_context: &WebGlRenderingContext,
     shader_type: u32,
@@ -950,12 +948,12 @@ fn compile_shader(
     }
 }
 
-// Links a new program
-// to a WebGl context and
-// returns a WebGlProgram
-// object if the linking
-// is successful. otherwise,
-// the error log is returned.
+/// Links a new program
+/// to a WebGl context and\
+/// returns a WebGlProgram
+/// object if the linking\
+/// is successful. otherwise,
+/// the error log is returned.
 fn link_program(
     gl_context: &WebGlRenderingContext,
     vert_shader: &WebGlShader,
