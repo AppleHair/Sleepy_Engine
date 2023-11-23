@@ -743,9 +743,9 @@ impl WebGlRenderer {
         Ok(())
     }
 
-    // This function will be used to
-    // flush the vertex vector into the
-    // vertex buffer and draw the scene.
+    /// This function will be used to
+    /// flush the vertex vector into the
+    /// vertex buffer and draw the scene.
     fn flush(&mut self) {
         // Bind the vertex buffer
         // to the WebGL context.
