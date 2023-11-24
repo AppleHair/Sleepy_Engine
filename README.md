@@ -19,7 +19,7 @@ Go to https://www.rust-lang.org/tools/install and follow the instructions to ins
 cargo install wasm-pack
 ```
 ## 3) Fill Librarys Directory
-At "flask_server/static/js", there's an empty directory called "libs". Follow the instructions in the other read me file next to it to fill the directory with the necessary files.
+At "flask_server/static/js", there's an empty directory called "libs". Follow the instructions in the other read me file inside it to fill the directory with the necessary files.
 ## 4) Run "Setup_Python_Environment"(.bat or .bash)
 ## 5) Run The Server With "Run_Flask_App"(.bat or .bash)
 
