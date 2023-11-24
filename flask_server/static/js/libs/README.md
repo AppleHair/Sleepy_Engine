@@ -1,9 +1,11 @@
+## 1) Download the necessary files
 You need to download codemirror 5.65.13's source code,
-rhai playground's source code and SQL.js 1.8.0 "wasm-version" in order to make this editor work.
+rhai playground's source code and SQL.js 1.8.0 "wasm-version".
 (codemirror: https://github.com/codemirror/codemirror5/releases/tag/5.65.13)
 (rhai playground: https://github.com/rhaiscript/playground)
 (SQL.js: https://github.com/sql-js/sql.js/releases/tag/v1.8.0)
 
+## 2) Fill this directory according to the following instructions
 From codemirror's source code, take "src\codemirror.js"
 and "lib\codemirror.css" and put them inside "static\js\libs\codemirror-5.65.13\lib".
 Then the "theme" and "addon" folders with their contents
