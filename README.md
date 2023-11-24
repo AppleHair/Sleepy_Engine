@@ -21,7 +21,6 @@ cargo install wasm-pack
 ## 3) Fill Librarys Directory
 At "flask_server/static/js", there's an empty directory called "libs". Follow the instructions in the other read me file inside it to fill the directory with the necessary files.
 ## 4) Run "Setup_Python_Environment"(.bat or .bash)
-## 5) OPTIONAL: Run "Compile_n_Copy"
-(.bat or .bash) to compile the core and copy it to ../js/engine-core
+## 5) OPTIONAL: Run "Compile_n_Copy"(.bat or .bash) to compile the core and copy it to ../js/engine-core
 ## 6) Run The Server With "Run_Flask_App"(.bat or .bash)
 
