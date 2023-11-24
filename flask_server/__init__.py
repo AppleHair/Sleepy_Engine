@@ -6,11 +6,11 @@ CONFIG_FILE = """# Loading booleans
 LOAD_BASE_FILES=false
 LOAD_EXPORT_PACKAGE=false
 # Loading paths
-BASE_FILES_PATH='flask_server\static\\base-files\\'
-ENGINE_CORE_PATH='flask_server\static\js\engine-core\\'
+BASE_FILES_PATH='flask_server\\static\\base-files\\'
+ENGINE_CORE_PATH='flask_server\\static\\js\\engine-core\\'
 CORE_SOURCE_PATH='game-engine\\'
-EXPORT_PACKAGE_PATH='instance\Export Package.zip'
-JS_LIBRARYS_PATH='flask_server\static\js\libs\\'"""
+EXPORT_PACKAGE_PATH='instance\\Export Package.zip'
+JS_LIBRARYS_PATH='flask_server\\static\\js\\libs\\'"""
 
 def create_app(test_config=None):
     # create and configure the app
@@ -18,15 +18,15 @@ def create_app(test_config=None):
     # ensure the instance folder exists
     try:
         os.makedirs(app.instance_path)
-        open('instance\config.toml', 'w').write(CONFIG_FILE)
+        open('instance\\config.toml', 'w').write(CONFIG_FILE)
         app.config.from_mapping(
             LOAD_BASE_FILES=True,
             LOAD_EXPORT_PACKAGE=True,
-            BASE_FILES_PATH='flask_server\static\\base-files\\',
-            ENGINE_CORE_PATH='flask_server\static\js\engine-core\\',
+            BASE_FILES_PATH='flask_server\\static\\base-files\\',
+            ENGINE_CORE_PATH='flask_server\\static\\js\\engine-core\\',
             CORE_SOURCE_PATH='game-engine\\',
-            EXPORT_PACKAGE_PATH='instance\Export Package.zip',
-            JS_LIBRARYS_PATH='flask_server\static\js\libs\\',
+            EXPORT_PACKAGE_PATH='instance\\Export Package.zip',
+            JS_LIBRARYS_PATH='flask_server\\static\\js\\libs\\',
         )
     except OSError:
         app.config.from_file('config.toml', load=tomllib.load, text=False)

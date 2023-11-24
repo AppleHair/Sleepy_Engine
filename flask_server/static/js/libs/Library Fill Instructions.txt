@@ -1,7 +1,8 @@
-You need to download codemirror 5.65.13 and rhai playground
-source codes in order to make this editor work.
+You need to download codemirror 5.65.13's source code,
+rhai playground's source code and SQL.js 1.8.0 "wasm-version" in order to make this editor work.
 (codemirror: https://github.com/codemirror/codemirror5/releases/tag/5.65.13)
 (rhai playground: https://github.com/rhaiscript/playground)
+(SQL.js: https://github.com/sql-js/sql.js/releases/tag/v1.8.0)
 
 From codemirror's source code, take "src\codemirror.js"
 and "lib\codemirror.css" and put them inside "static\js\libs\codemirror-5.65.13\lib".
@@ -14,5 +15,8 @@ compile the playground's source code using wasm-pack
 (with the command "wasm-pack build --target web")
 and copy the generated "pkg\web_wasm.js" and
 "pkg\web_wasm_bg.wasm" files into "static\js\mode\rhai-playground".
+
+Finally, from SQL.js, Take the "sql-wasm.js" and "sql-wasm.wasm"
+files and put them inside "static\js\libs".
 
 Everything else should already be in place.
