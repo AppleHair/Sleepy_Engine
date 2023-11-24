@@ -1,4 +1,4 @@
-# Repository Content Description
+# Repository Structure
 This repository is built out of several code bases:
 ## 1) Flask server (flask_server directory)
 This is the server that runs the editor website. It's built using Python and Flask.
