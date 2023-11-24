@@ -2,10 +2,35 @@ import os, tempfile, sqlite3, base64, json, zipfile, tomllib
 
 from flask import Flask, render_template, render_template_string, send_file, current_app, request
 
+CONFIG_FILE = """# Loading booleans
+LOAD_BASE_FILES=false
+LOAD_EXPORT_PACKAGE=false
+# Loading paths
+BASE_FILES_PATH='flask_server\static\\base-files\\'
+ENGINE_CORE_PATH='flask_server\static\js\engine-core\\'
+CORE_SOURCE_PATH='game-engine\\'
+EXPORT_PACKAGE_PATH='instance\Export Package.zip'
+JS_LIBRARYS_PATH='flask_server\static\js\libs\\'"""
+
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
-    app.config.from_file('config.toml', load=tomllib.load, text=False)
+    # ensure the instance folder exists
+    try:
+        os.makedirs(app.instance_path)
+        open('instance\config.toml', 'w').write(CONFIG_FILE)
+        app.config.from_mapping(
+            LOAD_BASE_FILES=True,
+            LOAD_EXPORT_PACKAGE=True,
+            BASE_FILES_PATH='flask_server\static\\base-files\\',
+            ENGINE_CORE_PATH='flask_server\static\js\engine-core\\',
+            CORE_SOURCE_PATH='game-engine\\',
+            EXPORT_PACKAGE_PATH='instance\Export Package.zip',
+            JS_LIBRARYS_PATH='flask_server\static\js\libs\\',
+        )
+    except OSError:
+        app.config.from_file('config.toml', load=tomllib.load, text=False)
+        pass
 
     # template project files setup
 
@@ -32,7 +57,7 @@ def create_app(test_config=None):
             xprt_zip = zipfile.ZipFile(pre_xprt, 'x')
             pass
         
-        xprt_zip.write('instance\\load-game.js', 'load-game.js')
+        xprt_zip.write(app.config['CORE_SOURCE_PATH']+'load-game.js', 'load-game.js')
         xprt_zip.write(app.config['JS_LIBRARYS_PATH']+'sql-wasm.js', 'sql-wasm.js')
         xprt_zip.write(app.config['JS_LIBRARYS_PATH']+'sql-wasm.wasm', 'sql-wasm.wasm')
         xprt_zip.write(app.config['ENGINE_CORE_PATH']+'game_engine.js', 'game_engine.js')
