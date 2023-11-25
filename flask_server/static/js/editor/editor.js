@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////
-//          2D GAME ENGINE - WEB IDE APP            //
+//          2D GAME ENGINE - WEB EDITOR APP         //
 //////////////////////////////////////////////////////
 
 
@@ -9,7 +9,7 @@
 
 
 // We import the DOM modules' wrapper
-import documentInteractionSetup, * as DOM from "./DOMcontrol-wrap.js";
+import documentInteractionSetup, * as DOM from "./DOMcontrol.js";
 
 // We import the SQL Control module
 import initSQLite, * as SQLITE from "./SQLcontrol.js";
@@ -849,6 +849,64 @@ initSQLite().then((loaded) => {
                     }
                     return;
                 }
+            }
+        }, {
+           
+            
+
+            ///////////////////////////////////////////////////////////
+            //          Before Material Change functions             //
+
+
+            //
+            'config-input': (inputElement, prvValue) => {
+                //
+                let curValue = (inputElement.type == "number" || inputElement.type == "range") ?
+                    Number(inputElement.value) : inputElement.value;
+                //
+                if (inputElement.className == "element-user") {
+                    let type = 1;
+                    if (inputElement.name == "initial-scene") {
+                        type = 2;
+                    }
+                    let res = null;
+                    if (curValue > prvValue) {
+                        res = project.exec("SELECT rowid,name FROM element WHERE rowid>? AND type=?;", [prvValue,type])[0];
+                    } else {
+                        res = project.exec("SELECT rowid,name FROM element WHERE rowid<? AND type=?;", [prvValue,type])[0];
+                    }
+                    if (res !== undefined) {
+                        console.log(res.values[0]);
+                    }
+                    return (res !== undefined) ? res.values[0][0] : prvValue;
+                }
+                //
+                if (inputElement.className == "asset-user") {
+                    const assetlist = inputElement.parentNode.parentNode.parentNode.getAttribute("name");
+                    let type = 3;
+                    if (assetlist == "sprites") {
+                        type = 1;
+                    } else if (assetlist == "audios") {
+                        type = 2;
+                    }
+                    let res = null;
+                    if (curValue < prvValue) {
+                        res = project.exec("SELECT rowid,name FROM asset WHERE rowid<? AND type=?;", [prvValue,type])[0];
+                        res = (res === undefined && type == 1) ? {"values": [[0, 'white']]} : res;
+                    } else {
+                        res = project.exec("SELECT rowid,name FROM asset WHERE rowid>? AND type=?;", [prvValue,type])[0];
+                    }
+                    if (res !== undefined) {
+                        console.log(res.values[0]);
+                    }
+                    return (res !== undefined) ? res.values[0][0] : prvValue;
+                }
+                return curValue;
+            },
+
+            //
+            'config-minus': (li) => {
+                return true;
             }
         }
     );

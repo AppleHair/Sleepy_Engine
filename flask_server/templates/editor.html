@@ -119,7 +119,7 @@
                                 <div class="li-template">
                                     <div class="json-field">
                                         <label>ID:</label>
-                                        <input type="number" value="0"/>
+                                        <input type="number" value="0" class="asset-user"/>
                                     </div>
                                     <div class="minus-button"></div>
                                 </div>
@@ -131,7 +131,7 @@
                                 <div class="li-template">
                                     <div class="json-field">
                                         <label>ID:</label>
-                                        <input type="number" value="0"/>
+                                        <input type="number" value="0" class="asset-user"/>
                                     </div>
                                     <div class="minus-button"></div>
                                 </div>
@@ -143,7 +143,7 @@
                                 <div class="li-template">
                                     <div class="json-field">
                                         <label>ID:</label>
-                                        <input type="number" value="0"/>
+                                        <input type="number" value="0" class="asset-user"/>
                                     </div>
                                     <div class="minus-button"></div>
                                 </div>
@@ -172,7 +172,7 @@
                                 </div>
                                 <div class="json-field">
                                     <label>Alpha:</label>
-                                    <input type="number" name="alpha"/>
+                                    <input type="range" name="alpha" min="0" max="255"/>
                                 </div>
                             </div>
                             <ol name="object-instances" class="json-array">
@@ -181,11 +181,11 @@
                                     <div class="json-object">
                                         <div class="json-field">
                                             <label>ID: </label>
-                                            <input type="number" name="id" value="0"/>
+                                            <input type="number" name="id" value="0" class="element-user"/>
                                         </div>
                                         <div class="json-field">
                                             <label>Layer: </label>
-                                            <input type="number" name="layer" value="-1"/>
+                                            <input type="number" name="layer" value="-1" class="layer-user"/>
                                         </div>
                                         <div class="json-field">
                                             <label>X: </label>
@@ -209,7 +209,7 @@
                                         </div>
                                         <div class="json-field">
                                             <label>Alpha:</label>
-                                            <input type="number" name="alpha" value="255"/>
+                                            <input type="range" name="alpha" min="0" max="255" value="255"/>
                                         </div>
                                     </div>
                                     <div class="minus-button"></div>
@@ -275,7 +275,7 @@
                             </div>
                             <div class="json-field">
                                 <label>Initial Scene</label>
-                                <input type="number" name="initial-scene"/>
+                                <input type="number" name="initial-scene" class="element-user"/>
                             </div>
                             <div class="json-field" id="game-icon">
                                 <label id="game-icon-label" for="game-icon-input">Game Icon<img/></label>

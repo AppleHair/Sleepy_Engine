@@ -4,6 +4,7 @@
 
 // MDN web docs - Document Object Model:
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
+// https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API
 
 // 
 // (more info in the "Script handling" section below)
@@ -26,6 +27,12 @@ let onChangeTo = {
 }
 
 //
+let beforeChange = {
+    'config-input': null,
+    'config-minus': null
+}
+
+//
 const modeComponents = {
     'sprite': ['config', 'preview'],
     'audio': ['preview'],
@@ -43,10 +50,11 @@ const toConfigButton = document.querySelector("#toConfig-button");
 const toScriptButton = document.querySelector("#toScript-button");
 
 //
-function materialSetup(switchFn = {}, changeFn = {}) {
+function materialSetup(switchFn = {}, changeFn = {}, beforeChangeFn = {}) {
     //
     onSwitchOf = switchFn;
     onChangeTo = changeFn;
+    beforeChange = beforeChangeFn;
     //
     configSetup();
     scriptSetup();
@@ -81,7 +89,7 @@ function switchMaterial() {
     if (prvMode == 'script') {
         //
         scriptBlob = 0;
-        rhaiScript.setValue('');
+        rhaiScript.swapDoc(codemirrorDocMap.get(scriptBlob));
         //
         rhaiScript.refresh();
         //
@@ -128,8 +136,19 @@ function switchMode(mode, table, rowid) {
     if (mode == 'script' && table !== undefined && rowid !== undefined) {
         //
         const scriptInfo = onSwitchOf['script'](table, rowid);
-        rhaiScript.setValue(scriptInfo.text);
         scriptBlob = scriptInfo.rowid;
+        if (codemirrorDocMap.get(scriptBlob) === undefined) {
+            codemirrorDocMap.set(0,rhaiScript.getDoc().copy(true));
+            rhaiScript.setValue(scriptInfo.text);
+            rhaiScript.clearHistory();
+            codemirrorDocMap.set(scriptBlob, rhaiScript.getDoc());
+        } else {
+            rhaiScript.swapDoc(codemirrorDocMap.get(scriptBlob));
+            if (rhaiScript.getValue() != scriptInfo.text) {
+                rhaiScript.setValue(scriptInfo.text);
+            }
+        }
+        
         //
         materialsection.dataset['mode'] = mode;
         //
@@ -171,7 +190,11 @@ function resetMaterial(mode) {
     configInfo.form = '';
     configInfo.blob = 0;
     //
-    rhaiScript.setValue('');
+    if (mode == 'script') {
+        scriptBlob = 0;
+        rhaiScript.swapDoc(codemirrorDocMap.get(scriptBlob));
+    }
+    codemirrorDocMap.clear();
     //
     rhaiScript.refresh();
 }
@@ -231,9 +254,11 @@ function configSetup() {
         //
         const input = event.target;
         //
-        getJSONScope(input)[input.getAttribute("name")] = (input.type == "number") ? Number(input.value) : input.value;
+        const value = beforeChange['config-input'](input, getJSONScope(input)[input.getAttribute("name")]);
         //
-        const classToCheck = input.parentNode.className;
+        input.value = value;
+        //
+        getJSONScope(input)[input.getAttribute("name")] = (input.type == "number" || input.type == "range") ? Number(input.value) : input.value;
         //
         onChangeTo['config'](configInfo);
     });
@@ -251,7 +276,7 @@ function configSetup() {
             //
             const item = addItemToConfigArray(button.parentNode, getJSONScope(button).length);
         //
-        } else {
+        } else if (beforeChange['config-minus'](button.parentNode)) {
             const li = button.parentNode;
             //
             const liname = li.querySelector(":scope [name]").getAttribute("name");
@@ -399,7 +424,7 @@ function addItemToConfigArray(jsonArray, index, update = true) {
         //
         if (method == "field") {
             //
-            scope[key] = (htmlElement.type == "number") ? Number(htmlElement.value) : htmlElement.value;
+            scope[key] = (htmlElement.type == "number" || htmlElement.type == "range") ? Number(htmlElement.value) : htmlElement.value;
         }
         //
         if (method == "object") {
@@ -476,6 +501,8 @@ const scriptForm = document.getElementById("rhai-script");
 //
 let scriptBlob = 0;
 
+const codemirrorDocMap = new Map();
+
 // 
 const rhaiScript = CodeMirror(scriptForm, {
     value: "",
@@ -495,14 +522,14 @@ const rhaiScript = CodeMirror(scriptForm, {
         explode: "()[]{}",
     },
     scrollbarStyle: "native"
-});
+})
 
 //
 function scriptSetup() {
     rhaiScript.on("change", () => {
         //
         onChangeTo['script'](rhaiScript.getValue(), scriptBlob);
-        
+        codemirrorDocMap.set(scriptBlob, rhaiScript.getDoc());
     });
 }
 

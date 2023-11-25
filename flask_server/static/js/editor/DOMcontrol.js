@@ -1,6 +1,6 @@
-//////////////////////////////////////////////////
-//          DOM Control Wrapper Module          //
-//////////////////////////////////////////////////
+//////////////////////////////////////////
+//          DOM Control Module          //
+//////////////////////////////////////////
 
 // This module and all the others use the HTML DOM
 // to access, change and control the behavior of
@@ -13,6 +13,7 @@
 
 // MDN web docs - Document Object Model (if you really need it):
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
+// https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API
 
 
 
@@ -48,9 +49,9 @@ import { addItem, removeItem, selectItem,
 // third contains callbacks for when the material
 // mode is switched, aka the user switches from
 // one editor tab to another, and the fourth contains
-// callbacks for whenthe contents of the displayed
+// callbacks for when the contents of the displayed
 // material are changed, aka the user edits the game.
-function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}, changeFn = {}) {
+function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}, changeFn = {}, beforeChangeFn = {}) {
 
     //
     document.addEventListener("click", (event) => {
@@ -224,7 +225,7 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
     actionMenusSetup(dropDownFn, contextFn);
 
     //
-    materialSetup(switchFn, changeFn);
+    materialSetup(switchFn, changeFn, beforeChangeFn);
 }
 
 

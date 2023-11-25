@@ -4,6 +4,7 @@
 
 // MDN web docs - Document Object Model:
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
+// https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API
 
 
 // This is a pointer to the pop-up HTML element
