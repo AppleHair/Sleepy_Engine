@@ -411,7 +411,7 @@ impl WebGlRenderer {
         self.gl_context.clear(WebGlRenderingContext::COLOR_BUFFER_BIT);
         // Set the blending method the alpha of the images will control
         self.gl_context.enable(WebGlRenderingContext::BLEND);
-        self.gl_context.blend_func(WebGlRenderingContext::ONE, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
+        self.gl_context.blend_func(WebGlRenderingContext::SRC_ALPHA, WebGlRenderingContext::ONE_MINUS_SRC_ALPHA);
 
         // Set the uniform values
         if let Some(location) = self.uniform_locations.get("u_camera") {
