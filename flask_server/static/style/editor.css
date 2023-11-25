@@ -216,20 +216,6 @@ header {
     border-radius: 0 0 8px 8px;
 }
 
-#preDrive:not(#preDrive:hover) {
-    color: rgb(148, 251, 255);
-}
-
-#preDrive::after {
-    content: '';
-    margin-left: 0.5rem;
-    background-image: url('https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_24dp.png');
-    background-repeat: no-repeat;
-    background-size: 100%;
-    width: 1.5rem;
-    height: 1.5rem;
-}
-
 .workspace {
     flex-grow: 1;
     display: flex;

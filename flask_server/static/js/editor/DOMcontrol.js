@@ -75,6 +75,7 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
             //
             if (tab !== null) {
                 selectTab(tab);
+                switchMaterial();
             }
         }
     });

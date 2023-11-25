@@ -29,7 +29,8 @@ let onChangeTo = {
 //
 let beforeChange = {
     'config-input': null,
-    'config-minus': null
+    'config-minus': null,
+    'config-plus': null
 }
 
 //
@@ -272,11 +273,11 @@ function configSetup() {
         //
         const button = event.target;
         //
-        if (button.className == "plus-button") {
+        if (button.className == "plus-button" && beforeChange['config-plus'](button.parentNode)) {
             //
             const item = addItemToConfigArray(button.parentNode, getJSONScope(button).length);
         //
-        } else if (beforeChange['config-minus'](button.parentNode)) {
+        } else if (button.className == "minus-button" && beforeChange['config-minus'](button.parentNode)) {
             const li = button.parentNode;
             //
             const liname = li.querySelector(":scope [name]").getAttribute("name");
@@ -293,6 +294,16 @@ function configSetup() {
                 //
                 item.setAttribute("name", parseInt(item.getAttribute("name")) - 1);
             });
+            //
+            if (jsonArray.getAttribute("name") == "layers") {
+                document.querySelectorAll('.layer-user:not(.li-template *)').forEach((user) => {
+                    if (parseInt(user.value) <= parseInt(liname)) {
+                        return;
+                    }
+                    user.value = parseInt(user.value) - 1;
+                    getJSONScope(user)[user.getAttribute("name")] = user.value;
+                });
+            }
             //
             getJSONScope(li).splice(parseInt(liname), 1);
             //
@@ -423,6 +434,10 @@ function addItemToConfigArray(jsonArray, index, update = true) {
 
         //
         if (method == "field") {
+            //
+            const value = beforeChange['config-input'](htmlElement, -1);
+            //
+            htmlElement.value = value;
             //
             scope[key] = (htmlElement.type == "number" || htmlElement.type == "range") ? Number(htmlElement.value) : htmlElement.value;
         }

@@ -327,7 +327,13 @@ function itemRename(item) {
 // by the user which tried to delete the
 // item, and otherwise, it'll return null
 function itemDeletionValidation(table, rowid, type) {
-    return null;
+    let stop = false;
+    // document.querySelectorAll(`.${table}-user:not(.li-template *)`).forEach((user) => {
+    //     stop = Number(user.value) == Number(rowid) || stop;
+    // });
+    return stop ? `Failed Requirement:
+The ${type} ${table} you just tried to delete is still being used in this project.
+please remove its use from the project before you delete it.` : null;
 }
 
 
@@ -864,16 +870,32 @@ initSQLite().then((loaded) => {
                 let curValue = (inputElement.type == "number" || inputElement.type == "range") ?
                     Number(inputElement.value) : inputElement.value;
                 //
-                if (inputElement.className == "element-user") {
+                if (inputElement.className == "element-user" || inputElement.className == "asset-user") {
                     let type = 1;
-                    if (inputElement.name == "initial-scene") {
-                        type = 2;
+                    let table = "element";
+                    //
+                    if (inputElement.className == "element-user") {
+                        if (inputElement.name == "initial-scene") {
+                            type = 2;
+                        }
+                    }
+                    //
+                    if (inputElement.className == "asset-user") {
+                        table = "asset";
+                        const assetlist = inputElement.parentNode.parentNode.parentNode.getAttribute("name");
+                        type = 3;
+                        if (assetlist == "sprites") {
+                            type = 1;
+                        } else if (assetlist == "audios") {
+                            type = 2;
+                        }
                     }
                     let res = null;
-                    if (curValue > prvValue) {
-                        res = project.exec("SELECT rowid,name FROM element WHERE rowid>? AND type=?;", [prvValue,type])[0];
+                    if (curValue < prvValue) {
+                        res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid<? AND type=?;`, [prvValue,type])[0];
+                        res = (res === undefined && table == 'asset' && type == 1) ? {"values": [[0, 'whites']]} : res;
                     } else {
-                        res = project.exec("SELECT rowid,name FROM element WHERE rowid<? AND type=?;", [prvValue,type])[0];
+                        res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid>? AND type=?;`, [prvValue,type])[0];
                     }
                     if (res !== undefined) {
                         console.log(res.values[0]);
@@ -881,31 +903,58 @@ initSQLite().then((loaded) => {
                     return (res !== undefined) ? res.values[0][0] : prvValue;
                 }
                 //
-                if (inputElement.className == "asset-user") {
-                    const assetlist = inputElement.parentNode.parentNode.parentNode.getAttribute("name");
-                    let type = 3;
-                    if (assetlist == "sprites") {
-                        type = 1;
-                    } else if (assetlist == "audios") {
-                        type = 2;
+                if (inputElement.className == "layer-user") {
+                    if (curValue <= -1) {
+                        console.log([-1, "None"]);
+                        return -1;
                     }
-                    let res = null;
-                    if (curValue < prvValue) {
-                        res = project.exec("SELECT rowid,name FROM asset WHERE rowid<? AND type=?;", [prvValue,type])[0];
-                        res = (res === undefined && type == 1) ? {"values": [[0, 'white']]} : res;
-                    } else {
-                        res = project.exec("SELECT rowid,name FROM asset WHERE rowid>? AND type=?;", [prvValue,type])[0];
+                    const layersList = document.querySelector("#scene-config > [name='layers']");
+                    let maxLayer = 0;
+                    let name = "";
+                    let maxName = "";
+                    layersList.querySelectorAll(":scope > li [name]").forEach((layer) => {
+                        if (curValue == Number(layer.getAttribute("name"))) {
+                            name = layer.value;
+                        }
+                        if (maxLayer <= Number(layer.getAttribute("name"))) {
+                            maxLayer =  Number(layer.getAttribute("name"));
+                            maxName = layer.value;
+                        }
+                    });
+                    if (maxLayer < curValue) {
+                        console.log([maxLayer, maxName]);
+                        return maxLayer;
                     }
-                    if (res !== undefined) {
-                        console.log(res.values[0]);
-                    }
-                    return (res !== undefined) ? res.values[0][0] : prvValue;
+                    console.log([curValue, name]);
                 }
                 return curValue;
             },
 
             //
             'config-minus': (li) => {
+                //
+                if (li.parentNode.getAttribute("name") == "layers") {
+                    let name = li.querySelector(":scope [name]").getAttribute("name");
+                    let res = true;
+                    document.querySelectorAll('.layer-user:not(.li-template *)').forEach((user) => {
+                        res = user.value != name && res;
+                    });
+                    return res;
+                }
+                return gameTestWindow == undefined;
+            },
+            //
+            'config-plus': (list) => {
+                if ((list.getAttribute("name") == "object-instances" &&
+                project.exec(`SELECT rowid FROM element WHERE type=?;`, [1])[0] === undefined) ||
+                (list.getAttribute("name") == "sprites" &&
+                project.exec(`SELECT rowid FROM asset WHERE type=?;`, [1])[0] === undefined) ||
+                (list.getAttribute("name") == "audios" &&
+                project.exec(`SELECT rowid FROM asset WHERE type=?;`, [2])[0] === undefined) ||
+                (list.getAttribute("name") == "fonts" &&
+                project.exec(`SELECT rowid FROM asset WHERE type=?;`, [3])[0] === undefined)) {
+                    return false;
+                }
                 return true;
             }
         }
