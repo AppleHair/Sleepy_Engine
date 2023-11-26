@@ -2,11 +2,12 @@
 //          2D GAME ENGINE - WEB EDITOR APP         //
 //////////////////////////////////////////////////////
 
-
+// This file is the entry point of the editor's JavaScript codebase.
+// Here many of the editor's primary behaviors are defined, and the
+// editor's interaction with the server and the project file is done.
 
 //////////////////////////////
 //          Imports         //
-
 
 // We import the DOM modules' wrapper
 import documentInteractionSetup, * as DOM from "./DOMcontrol.js";
@@ -14,67 +15,72 @@ import documentInteractionSetup, * as DOM from "./DOMcontrol.js";
 // We import the SQL Control module
 import initSQLite, * as SQLITE from "./SQLcontrol.js";
 
-
-
 /////////////////////////////////////////
 //           Repeatedly Used           //
 
-//
+// the current game test window
 let gameTestWindow = undefined;
 
-//
+// Lists of element and asset rowids
+// that need to be loaded or updated
+// in the game test window.
 let assetsToLoad = [];
-//
 let elementsToLoad = [];
 
 self.setupTestWindow = function(new_window) {
-    //
+    // Get all the asset rowids
+    // and add them to the assetsToLoad
+    // array, which will make the game
+    // test load all the assets when it
+    // starts, and update them when they
+    // get changed in the editor.
     let allAssets = [];
-    //
     SQLITE.forEachInTable(project, "asset", (row) => {
         allAssets.push([row["rowid"], row["type"]]);
     });
-    //
     assetsToLoad = allAssets;
 
-    //
+    // The same thing applies to elements
     let allElements = [];
-    //
     SQLITE.forEachInTable(project, "element", (row) => {
         allElements.push([row["rowid"], row["type"]]);
     });
-    //
     elementsToLoad = allElements;
 
-    //
-    new_window.self.getMetadataIcon = function() {
-        return getBlob(3);
-    };
-    //
+    // Gives the data blob of the game's icon
+    // new_window.self.getMetadataIcon = function() {
+    //     return getBlob(3);
+    // };
+    // Gives the script text of the state manager
     new_window.self.getMetadataScript = function() {
         return getBlob(2, true);
     };
-    //
+    // Gives the data blob of an
+    // asset with the given rowid
     new_window.self.getAssetData = function(rowid) {
         return getBlob(SQLITE.getRow(project, "asset", rowid).data);
     };
-    //
+    // Gives the script text of an
+    // element with the given rowid
     new_window.self.getElementScript = function(rowid) {
         return getBlob(SQLITE.getRow(project, "element", rowid).script, true);
     };
-    //
+    // Gives the config text of the state manager
     new_window.self.getMetadataConfig = function() {
         return getBlob(1, true);
     };
-    //
+    // Gives the config text of an
+    // asset with the given rowid
     new_window.self.getAssetConfig = function(rowid) {
         return getBlob(SQLITE.getRow(project, "asset", rowid).config, true);
     };
-    //
+    // Gives the config text of an
+    // element with the given rowid
     new_window.self.getElementConfig = function(rowid) {
         return getBlob(SQLITE.getRow(project, "element", rowid).config, true);
     };
-    //
+    // Gives the rowid of the first
+    // element with the given name
     new_window.self.getElementID = function(name) {
         let stmt = project.prepare(`SELECT rowid FROM element WHERE name=?;`, [name]);
         stmt.step();
@@ -82,7 +88,8 @@ self.setupTestWindow = function(new_window) {
         stmt.free();
         return res[0];
     };
-    //
+    // Gives the rowid of the first
+    // asset with the given name
     new_window.self.getAssetID = function(name) {
         let stmt = project.prepare(`SELECT rowid FROM asset WHERE name=?;`, [name]);
         stmt.step();
@@ -90,69 +97,85 @@ self.setupTestWindow = function(new_window) {
         stmt.free();
         return res[0];
     };
-    //
+    // Gives the name of an
+    // element with the given rowid
     new_window.self.getElementName = function(rowid) {
         const result = SQLITE.getRow(project, "element", rowid).name;
         return ((result === undefined) ? "" : result);
     };
-    //
+    // Gives the name of an
+    // asset with the given rowid
     new_window.self.getAssetName = function(rowid) {
         const result = SQLITE.getRow(project, "asset", rowid).name;
         return ((result === undefined) ? "" : result);
     };
-    //
+    // Gives the type number of an
+    // element with the given rowid
     new_window.self.getElementType = function(rowid) {
         return SQLITE.getRow(project, "element", rowid).type;
     };
-    //
-    new_window.self.getAssetType = function(rowid) {
-        return SQLITE.getRow(project, "asset", rowid).type;
-    };
-    //
+    // Gives the type number of an
+    // asset with the given rowid
+    // new_window.self.getAssetType = function(rowid) {
+    //     return SQLITE.getRow(project, "asset", rowid).type;
+    // };
+    // Gives a list of all the asset rowids
+    // of assets that need to be loaded or
+    // updated in the game test window.
     new_window.self.assetsToLoad = function() {
         let toLoad = assetsToLoad;
         assetsToLoad = [];
         return toLoad;
     };
-    //
+    // Gives a list of all the element rowids
+    // of elements that need to be loaded or
+    // updated in the game test window.
     new_window.self.elementsToLoad = function() {
         let toLoad = elementsToLoad;
         elementsToLoad = [];
         return toLoad;
     };
 
-    //
+    // if the game test window gets closed
+    // or refreshed, we set the gameTestWindow
+    // variable to undefined
     new_window.onbeforeunload = () => {
-        //
         if (gameTestWindow !== undefined) {
-            //
             gameTestWindow = undefined;
         }
     }
 
+    // when the game test window loads
+    // we set its title and icon to the
+    // project's title and icon
     new_window.onload = (e) => {
         e.target.title = projectName;
         e.target.querySelector("#game-icon").setAttribute("href", document.querySelector("#game-icon-label > img").src);
     };
-
+    // the setup is done, so we set
+    // the gameTestWindow variable to
+    // the new window
     gameTestWindow = new_window;
 }
 
-//
+// if the editor gets closed
+// and the game test is open,
+// close the game test too
 onpagehide = (e) => {
-    //
     if (gameTestWindow !== undefined && !e.persisted) {
-        //
         gameTestWindow.close();
     }
 };
 
-//
+// Encodes test into binary
 const textEncoder = new TextEncoder();
-//
+// Decodes binary into text
 const textDeoder = new TextDecoder();
 
-//
+// This function receives a rowid
+// and returns the blob data of the
+// blob with that rowid from the project file.
+// to can also choose to get the blob as text.
 function getBlob(rowid, asText = false) {
     const blob = SQLITE.getRow(project, "blobs", rowid).data;
     return ((asText) ? textDeoder.decode(blob) : blob);
@@ -163,9 +186,10 @@ function getBlob(rowid, asText = false) {
 // and overrides previous data in the
 // document if there is any.
 function loadEditor() {
-    //
+    // if the game test is open,
+    // close it before loading the
+    // new project file
     if (gameTestWindow !== undefined) {
-        //
         gameTestWindow.close();
     }
     // We empty the explorer item list
@@ -187,34 +211,43 @@ function loadEditor() {
         SQLITE.forEachInTable(project, table, (row) => DOM.addItem(table, row, types));
     }
 
-    //
+    // we load the new icon into the editor
     loadGameIcon(new Blob([SQLITE.getRow(project, "blobs", 3)['data']]));
-    //
+    // when the user clicks on the icon
+    // label (which turns out to be the
+    // image in practice), we set the value
+    // of the icon input to an empty string
+    // to make sure any new icon the user
+    // picks will override the current one,
+    // even if it's using the same file (forces
+    // the browser to replace the icon image).
     document.querySelector("#game-icon-label").onclick = () => {
         document.querySelector("#game-icon-input").value = '';
     };
-    //
+    // when the user picks a new icon
+    // for the game, we load it into
+    // the editor and the project file
     document.querySelector("#game-icon-input").oninput = (event) => {
-        //
         event.target.files[0].arrayBuffer().then((result) => {
-            //
             SQLITE.updateRowValue(project, "blobs", 3,
                 'data', new Uint8Array(result));
-            //
             loadGameIcon(event.target.files[0]);
         });
     }
 }
 
-//
+// This function will take a blob
+// which should contain an icon file,
+// and load it into the editor as the
+// game's icon.
 function loadGameIcon(blob) {
-    //
+    // get the game icon image HTML element
     const gameIconImg = document.querySelector("#game-icon-label > img");
-    //
+    // we create a new URL for the icon
+    // and replace the current icon with it
     if (gameIconImg.src !== undefined) {
         window.URL.revokeObjectURL(gameIconImg.src);
     }
-    //
     gameIconImg.src = window.URL.createObjectURL(blob);
 }
 
@@ -327,20 +360,77 @@ function itemRename(item) {
 // by the user which tried to delete the
 // item, and otherwise, it'll return null
 function itemDeletionValidation(table, rowid, type) {
-    let stop = false;
-    // document.querySelectorAll(`.${table}-user:not(.li-template *)`).forEach((user) => {
-    //     stop = Number(user.value) == Number(rowid) || stop;
-    // });
-    return stop ? `Failed Requirement:
-The ${type} ${table} you just tried to delete is still being used in this project.
+    // This value will have aditional information
+    // we'll add to the message if we find
+    // a problem with the item
+    let info = "";
+    // This value will tell us if a problem
+    // was found with the item
+    let invalid = false;
+    // if the item is a scene element
+    if (type == "scene") {
+        // get the state manager's config
+        let state = JSON.parse(textDeoder.decode(SQLITE.getRow(project, "blobs", 1)['data']));
+        // if the scene for deletion is the initial scene
+        if (state['initial-scene'] == rowid) {
+            // its deletion is invalid
+            invalid = true;
+            info = "it's the initial scene of the game";
+        }
+    }
+    // if the item is an object element
+    if (type == "object") {
+        // keep track of the scenes
+        // this object is being used in
+        let scenes = [];
+        for (let scene of project.exec("SELECT name,config FROM element WHERE type=?;", [2])[0].values) {
+            let config = JSON.parse(textDeoder.decode(SQLITE.getRow(project, "blobs", scene[1])['data']));
+            for (let inst of config['object-instances']) {
+                if (inst['id'] == rowid) {
+                    scenes.push(scene[0]);
+                    break;
+                }
+            }
+        }
+        // if the object is being used in any scene
+        if (scenes.length > 0) {
+            // its deletion is invalid
+            invalid = true;
+            info = `it's being used in the following scenes: ${scenes.join(", ")}`;
+        }
+    }
+    // if the item is an asset
+    if (table == "asset") {
+        // keep track of the objects
+        // this asset is being used in
+        let objects = [];
+        for (let object of project.exec("SELECT name,config FROM element WHERE type=?;", [1])[0].values) {
+            let config = JSON.parse(textDeoder.decode(SQLITE.getRow(project, "blobs", object[1])['data']));
+            for (let assetRowId of config[`${type}s`]) {
+                if (assetRowId == rowid) {
+                    objects.push(object[0]);
+                    break;
+                }
+            }
+        }
+        // if the asset is being used in any object
+        if (objects.length > 0) {
+            // its deletion is invalid
+            invalid = true;
+            info = `it's being used in the following objects: ${objects.join(", ")}`;
+        }
+    }
+    // if the item's deletion is invalid
+    // we return a message for the user
+    // which tried to delete it, and
+    // otherwise, we return null
+    return invalid ? `Failed Requirement:
+The ${type} ${table} you just tried to delete is still being used in this project. (${info})
 please remove its use from the project before you delete it.` : null;
 }
 
-
-
 //////////////////////////////////////////////////////////
 //          Database file related definitions           //
-
 
 // This database stores data
 // related to the types of items
@@ -362,7 +452,7 @@ new SQLITE.ServerDBRequest(
     // We give it this function
     (db) => {
         // We assign the db
-        // pointer to typesDB.
+        // reference to typesDB.
         typesDB = db;
         // We create the types map
         // using the typesDB database.
@@ -393,16 +483,13 @@ new SQLITE.ServerDBRequest(
     // We give it this function
     (db) => {
         // We assign the db
-        // pointer to project.
+        // reference to project.
         project = db;
     }
 );
 
-
-
 //////////////////////////////////////
 //          Project Loading         //
-
 
 // We initialize SQLite, which
 // loads all the server databases
@@ -425,12 +512,9 @@ initSQLite().then((loaded) => {
     // interaction behavior, and
     // define many action functions
     documentInteractionSetup({
-            
-
 
             ////////////////////////////////////////////////
             //          Drop Down Menu functions          //
-            
 
             // This function will let the
             // user load his own project
@@ -491,19 +575,23 @@ initSQLite().then((loaded) => {
                 // We revoke the URL after the download.
                 URL.revokeObjectURL(a.href);
             },
-            //
+            // This function will let the user
+            // open a new game test window, which
+            // will replace the current one if it's
+            // already open.
             'test-game': () => {
-                //
+                // close the current game
+                // test window if it's open
                 if (gameTestWindow !== undefined) {
-                    //
                     gameTestWindow.close();
-                    //
                     gameTestWindow = undefined;
                 }
-                //
+                // open a new game test window
                 window.open("/game-test", "GAME TEST");
             },
-            //
+            // This function will let the user
+            // export his game to an HTML Archive
+            // (a zip with an index.html inside).
             'export-game': async () => {
                 // We get the document's save "a" HTML element
                 const a = document.querySelector("#export-save");
@@ -528,11 +616,8 @@ initSQLite().then((loaded) => {
             }
         }, {
 
-
-
             //////////////////////////////////////////////
             //          Context Menu functions          //
-
 
             // This function lets the user
             // create a new folder in a certain
@@ -763,70 +848,73 @@ initSQLite().then((loaded) => {
             }
         }, {
 
-
-
             //////////////////////////////////////////////////
             //          Material Switch functions           //
 
-
-            //
+            // This function will be called
+            // when the user switches the
+            // material to a config of an item.
+            // Its job is to load the config of
+            // the item from the project file
+            // and let the material section use
+            // it to display the item's config
+            // to the user.
             'config': (table, rowid) => {
-                //
+                // get the rowid of the config in the 'blobs' table
                 const blobid = (table == 'metadata') ? 1 : SQLITE.getRow(project, table, rowid)['config'];
-                //
+                // get the config in text from the 'blobs' table
                 const text = textDeoder.decode(SQLITE.getRow(project, "blobs", blobid)['data']);
-                //
+                // parse the config text into a JSON object
+                // and return it with the blob rowid
                 return {JSON: JSON.parse(text), blobID: blobid};
             },
 
-            //
+            // This function does the same
+            // thing as the previous one, but
+            // for the script of an item.
             'script': (table, rowid) => {
-                //
                 let blobid = (table == 'metadata') ? 2 : SQLITE.getRow(project, table, rowid)['script'];
-                //
                 const text = textDeoder.decode(SQLITE.getRow(project, "blobs", blobid)['data']);
-                //
+                // because it's a script, we
+                // return the text itself
+                // without parsing it
                 return {text: text, rowid: blobid};
             }
         }, {
 
-
-
             //////////////////////////////////////////////////
             //          Material Change functions           //
 
-
-            //
+            // This function will be called
+            // when the user changes a value
+            // in the config of an item.
             'config': (configInfo) => {
-                //
+                // get the rowid of the config in the 'blobs' table
                 const blobid = configInfo.blob;
-                //
+                // get the edited config in text
                 const blob = textEncoder.encode(JSON.stringify(configInfo.JSON));
-                //
+                // update the config in the 'blobs' table
                 SQLITE.updateRowValue(project, "blobs", blobid, "data", blob);
-                //
+                // get the table and rowid of the config's
+                // associated item and add it to the list
+                // of items that need to be updated in the
+                // game test window, if they aren't already
+                // in the list
                 const curTab = document.querySelector("#tabSelected");
-                //
                 if (curTab.dataset['table'] == "metadata") {
                     return;
                 }
-                //
                 if (curTab.dataset['table'] == "element") {
-                    //
                     let toLoad = [Number(curTab.dataset['tableId']),
                     SQLITE.getRow(project, "element", Number(curTab.dataset['tableId']))['type']];
-                    //
                     if (elementsToLoad.indexOf(toLoad) == -1) {
                         elementsToLoad.push(toLoad);
                     }
                     return;
                 }
-                //
                 if (curTab.dataset['table'] == "asset") {
-                    //
                     let toLoad = [Number(curTab.dataset['tableId']),
                     SQLITE.getRow(project, "asset", Number(curTab.dataset['tableId']))['type']];
-                    //
                     if (assetsToLoad.indexOf(toLoad) == -1) {
                         assetsToLoad.push(toLoad);
                     }
@@ -834,22 +922,24 @@ initSQLite().then((loaded) => {
                 }
             },
 
-            //
+            // This function does the same
+            // thing as the previous one, but
+            // for the script of an item.
             'script': (text, blobid) => {
-                //
+                // update the script in the 'blobs' table
                 SQLITE.updateRowValue(project, "blobs", blobid, "data", textEncoder.encode(text));
-                //
+                // get the table and rowid of the script's
+                // associated element and add it to the list
+                // of elements that need to be updated in the
+                // game test window, if they aren't already
+                // in the list
                 const curTab = document.querySelector("#tabSelected");
-                //
                 if (curTab.dataset['table'] == "metadata") {
                     return;
                 }
-                //
                 if (curTab.dataset['table'] == "element") {
-                    //
                     let toLoad = [Number(curTab.dataset['tableId']),
                     SQLITE.getRow(project, "element", Number(curTab.dataset['tableId']))['type']];
-                    //
                     if (elementsToLoad.indexOf(toLoad) == -1) {
                         elementsToLoad.push(toLoad);
                     }
@@ -858,28 +948,32 @@ initSQLite().then((loaded) => {
             }
         }, {
            
-            
-
             ///////////////////////////////////////////////////////////
             //          Before Material Change functions             //
 
-
-            //
+            // This function will be called
+            // "before" the user changes a value
+            // in the config of an item. It will
+            // get the current value of the specific
+            // input element that the user edited and
+            // the previous value that's in the config.
+            // the purpose of this function is to filter
+            // the user's input and make sure it's valid.
             'config-input': (inputElement, prvValue) => {
-                //
+                // get the changed value from the input element
                 let curValue = (inputElement.type == "number" || inputElement.type == "range") ?
                     Number(inputElement.value) : inputElement.value;
-                //
+                // if the input is an element or asset rowid,
+                // we need to make sure the rowid is valid
                 if (inputElement.className == "element-user" || inputElement.className == "asset-user") {
+                    // determine the table and type of the rowid
                     let type = 1;
                     let table = "element";
-                    //
                     if (inputElement.className == "element-user") {
                         if (inputElement.name == "initial-scene") {
                             type = 2;
                         }
                     }
-                    //
                     if (inputElement.className == "asset-user") {
                         table = "asset";
                         const assetlist = inputElement.parentNode.parentNode.parentNode.getAttribute("name");
@@ -890,6 +984,9 @@ initSQLite().then((loaded) => {
                             type = 2;
                         }
                     }
+                    // check for the closest valid rowid
+                    // in relation to the previous value
+                    // and from the direction of the change
                     let res = null;
                     if (curValue < prvValue) {
                         res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid<? AND type=?;`, [prvValue,type])[0];
@@ -898,41 +995,66 @@ initSQLite().then((loaded) => {
                         res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid>? AND type=?;`, [prvValue,type])[0];
                     }
                     if (res !== undefined) {
+                        // for now, the name and rowid/index
+                        // will be printed to the console
+                        // every time the user changes the
+                        // rowid/index of an element, asset
+                        // or layer. this will help them
+                        // identify the rowid/index they're
+                        // looking for.
                         console.log(res.values[0]);
                     }
                     return (res !== undefined) ? res.values[0][0] : prvValue;
                 }
-                //
+                // if the input is a layer index,
+                // we need to make sure the index is in bounds
                 if (inputElement.className == "layer-user") {
+                    // if the current value is -1
+                    // or smaller, we return -1
                     if (curValue <= -1) {
                         console.log([-1, "None"]);
                         return -1;
                     }
-                    const layersList = document.querySelector("#scene-config > [name='layers']");
-                    let maxLayer = 0;
+                    // find the layers list and iterate on it.
+                    // In the iteration, we'll find the last
+                    // layer index and name, and the layer
+                    // index and name associalted with the
+                    // current value. 
+                    const layersList = document.querySelector("#scene-config > [name='layers']").
+                        querySelectorAll(":scope > li [name]");
                     let name = "";
-                    let maxName = "";
-                    layersList.querySelectorAll(":scope > li [name]").forEach((layer) => {
+                    let lastName = "";
+                    layersList.forEach((layer) => {
                         if (curValue == Number(layer.getAttribute("name"))) {
                             name = layer.value;
                         }
-                        if (maxLayer <= Number(layer.getAttribute("name"))) {
-                            maxLayer =  Number(layer.getAttribute("name"));
-                            maxName = layer.value;
+                        if (layersList.length-1 == Number(layer.getAttribute("name"))) {
+                            lastName = layer.value;
                         }
                     });
-                    if (maxLayer < curValue) {
-                        console.log([maxLayer, maxName]);
-                        return maxLayer;
+                    // if the current value is bigger
+                    // than the last layer index, we
+                    // return the last layer index
+                    if (layersList.length-1 < curValue) {
+                        console.log([layersList.length-1, lastName]);
+                        return layersList.length-1;
                     }
+                    // otherwise, we return the current value
                     console.log([curValue, name]);
                 }
                 return curValue;
             },
 
-            //
+            // This function will be called
+            // "before" the user removes a member
+            // from a list in the config of an item.
+            // This function will determine if the
+            // user is allowed to remove the member
+            // from the list.
             'config-minus': (li) => {
-                //
+                // Make sure the user can't remove
+                // a layer which is being used by
+                // an object instance
                 if (li.parentNode.getAttribute("name") == "layers") {
                     let name = li.querySelector(":scope [name]").getAttribute("name");
                     let res = true;
@@ -941,10 +1063,21 @@ initSQLite().then((loaded) => {
                     });
                     return res;
                 }
-                return gameTestWindow == undefined;
+                // Make sure the user can't remove
+                // anything in any asset's config if
+                // the game test window is open
+                return gameTestWindow === undefined || !li.matches("#sprite-config *");
             },
-            //
+            // This function will be called
+            // "before" the user adds a member
+            // to a list in the config of an item.
+            // This function will determine if the
+            // user is allowed to add the member
+            // to the list.
             'config-plus': (list) => {
+                // make sure the user can add an
+                // element or asset to a config only if such
+                // element or asset exists in the project
                 if ((list.getAttribute("name") == "object-instances" &&
                 project.exec(`SELECT rowid FROM element WHERE type=?;`, [1])[0] === undefined) ||
                 (list.getAttribute("name") == "sprites" &&

@@ -6,7 +6,6 @@
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
 // https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API
 
-
 // When a action menu is opened,
 // the boolean which corresponeds
 // with its type will be set to true.
@@ -18,7 +17,7 @@
 let inContextMenu = false;
 let inDropDownMenu = false;
 
-// This is a pointer to the context menu HTML element
+// This is a reference to the context menu HTML element
 const contextMenu = document.querySelector("body > .action-menu");
 // This is a node list of every option 
 // the context menu provides for any item
@@ -109,7 +108,7 @@ function closeActionMenus() {
 // documentInteractionSetup, which
 // gives it its option functions.
 function dropDownMenuSetup(optionsFn = {}) {
-    // We get a pointer to the menu bar HTML element
+    // We get a reference to the menu bar HTML element
     const menubar = document.querySelector(".menu-bar");
 
     // This function will make

@@ -172,10 +172,10 @@ function getTable(db, table) {
 
 // This function receives a database
 // object and a table name. It returns
-// the length of the received table,
+// the column length of the received table,
 // and by that I mean the amount of columns
 // in the table, not including the rowid column.
-function getTableLength(db, table) {
+function getColumnLength(db, table) {
     let stmt = db.prepare(`SELECT * FROM ${table} LIMIT 1;`);
     stmt.step();
     let res = stmt.getColumnNames();
@@ -247,12 +247,12 @@ function getMap(db, table, keycolumn, valuecolumn) {
 // needs to have a INTEGER PRIMARY KEY AUTOINCREMENT
 // column as a requirement for using this function.
 function addRow(db, table, values) {
-    // if the length of the table
+    // if the column length of the table
     // doesn't match the length of 
     // the values array, we return null.
     // (the '+ 1' in the end is for the 
     // INTEGER PRIMARY KEY AUTOINCREMENT column)
-    if (getTableLength(db, table) != values.length + 1) {
+    if (getColumnLength(db, table) != values.length + 1) {
         return null;
     }
     // We use the length of

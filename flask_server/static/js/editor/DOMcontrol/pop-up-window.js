@@ -6,27 +6,25 @@
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
 // https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API
 
-
-// This is a pointer to the pop-up HTML element
+// This is a reference to the pop-up HTML element
 const popup = document.querySelector(".page-wrapper > .pop-up");
 
-
-// This is a pointer to the pop-up window HTML element
+// This is a reference to the pop-up window HTML element
 const popupWin = popup.querySelector(":scope > .window");
-// This is a pointer to the window's message p HTML element
+// This is a reference to the window's message p HTML element
 const popupMessage = popupWin.querySelector(":scope > p");
 
 // This is an object which contains
-// pointers to different input fields
+// references to different input fields
 // in the pop-up window
 const popupInput = {
-    // This is a pointer to the name input HTML element
+    // This is a reference to the name input HTML element
     'name': popupWin.querySelector(":scope #name"),
-    // This is a pointer to the color input HTML element
+    // This is a reference to the color input HTML element
     'color': popupWin.querySelector(":scope #color"),
-    // This is a pointer to the type select HTML element
+    // This is a reference to the type select HTML element
     'type': popupWin.querySelector(":scope #type"),
-    // This is a pointer to the data input HTML element
+    // This is a reference to the data input HTML element
     'data': popupWin.querySelector(":scope #data")
 }
 // This is an object which contains
@@ -38,7 +36,7 @@ const popupDefaultValues = {
     'data': ''
 }
 
-// These are pointers to the 
+// These are references to the 
 // confirm and cancal HTML
 // HTML elements of the pop-up window
 const popupConfirm = popupWin.querySelector(":scope #confirm");
@@ -130,7 +128,7 @@ function openInputWindow(message, inputs, onConfirm, types, row) {
     // We itrate on the received
     // input field names
     for (let input of inputs) {
-        // We get the pointer to the input
+        // We get the reference to the input
         // field with the received name
         input = popupInput[input];
         // if theres no input field
@@ -217,7 +215,7 @@ function openInputWindow(message, inputs, onConfirm, types, row) {
         // We itrate on the received
         // input field names
         for (let input of inputs) {
-            // We get the pointer to the input
+            // We get the reference to the input
             // field with the received name
             input = popupInput[input];
             // if theres no input field

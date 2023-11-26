@@ -4,7 +4,11 @@ use std::panic;
 use wasm_bindgen::prelude::*;
 use console_error_panic_hook;
 
+/// Defines the methods which
+/// let you load data from the
+/// project/gamedata file.
 mod data;
+/// Defines the game engine.S
 mod game;
 
 #[wasm_bindgen(start)]

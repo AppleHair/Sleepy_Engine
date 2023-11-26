@@ -6,11 +6,8 @@
 // https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model
 // https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API
 
-
-
 //////////////////////////////////////
 //          Item functions          //
-
 
 // This function receives a table name,
 // a row object, a types map and a optional
@@ -123,7 +120,7 @@ function addItem(table, row, types, open = false) {
         revealItem(item);
     }
 
-    // we return a pointer to the
+    // we return a reference to the
     // new item in the DOM.
     return item;
 }
@@ -294,11 +291,8 @@ function toggleFolderState(folder) {
     folder.dataset['folderState'] = "open";
 }
 
-
-
 //////////////////////////////////////
 //          Tab functions           //
-
 
 // This function receives an item
 // HTML element and creates a tab HTML
@@ -352,7 +346,7 @@ function addTab(item) {
     // the item's type name.
     tab.dataset['type'] = item.dataset['type'];
 
-    // we return a pointer to 
+    // we return a reference to 
     // the new tab in the DOM.
     return tab;
 }
@@ -432,14 +426,11 @@ function selectTab(tab, scroll = true) {
     return true;
 }
 
-
-
 //////////////////////////////////////////
 //          Item-Tab functions          //
 
-
 // This function receives an item
-// and tries to return a pointer
+// and tries to return a reference
 // to its corresponding tab.
 function fromItemToTab(item) {
     // if the item is a folder
@@ -455,7 +446,7 @@ function fromItemToTab(item) {
 }
 
 // This function receives a tab
-// and tries to return a pointer
+// and tries to return a reference
 // to its corresponding item.
 function fromTabToItem(tab) {
     // if the tab is from the metadata table

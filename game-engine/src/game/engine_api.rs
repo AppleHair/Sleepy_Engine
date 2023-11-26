@@ -7,7 +7,9 @@ use rhai::{Engine, Scope, AST, Map, EvalAltResult, Dynamic,
 
 use crate::{data, game::{TableRow, dynamic_to_number}};
 
+/// Defines local Per-element APIs
 pub mod element;
+/// Defines asset APIs for different asset types
 pub mod asset;
 
 pub type ElementDefinitions = HashMap<u32,Result<Rc<ElementDefinition>, String>>;

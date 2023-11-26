@@ -7,7 +7,10 @@ use rhai::Engine;
 
 use crate::data;
 
+/// Defines the game engine's API,
+/// And all of it's associated types.
 mod engine_api;
+/// Defines the game's renderer.
 mod renderer;
 
 #[wasm_bindgen]
