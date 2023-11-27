@@ -8,7 +8,7 @@ use console_error_panic_hook;
 /// let you load data from the
 /// project/gamedata file.
 mod data;
-/// Defines the game engine.S
+/// Defines the game engine.
 mod game;
 
 #[wasm_bindgen(start)]
