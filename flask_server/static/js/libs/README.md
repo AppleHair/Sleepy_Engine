@@ -8,13 +8,13 @@ rhai playground's source code and SQL.js 1.8.0 "wasm-version".
 ## 2) Fill this directory according to the following instructions
 From codemirror's source code, take "src\codemirror.js"
 and "lib\codemirror.css" and put them inside "static\js\libs\codemirror-5.65.13\lib".
-Then the "theme" and "addon" folders with their contents
+Then take the "theme" and "addon" folders with their contents
 and copy them into "static\js\libs\codemirror-5.65.13".
 
 From rhai playground's source code, copy "js\wasm_loader.js"
 and put it inside "static\js\mode\rhai-playground". Then,
 compile the playground's source code using wasm-pack 
-(with the command "wasm-pack build --target web")
+(with the command ```wasm-pack build --target web```)
 and copy the generated "pkg\web_wasm.js" and
 "pkg\web_wasm_bg.wasm" files into "static\js\mode\rhai-playground".
 
