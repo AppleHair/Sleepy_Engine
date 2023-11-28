@@ -990,7 +990,7 @@ initSQLite().then((loaded) => {
                     let res = null;
                     if (curValue < prvValue) {
                         res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid<? AND type=?;`, [prvValue,type])[0];
-                        res = (res === undefined && table == 'asset' && type == 1) ? {"values": [[0, 'whites']]} : res;
+                        res = (res === undefined && table == 'asset' && type == 1) ? {"values": [[0, 'clean']]} : res;
                     } else {
                         res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid>? AND type=?;`, [prvValue,type])[0];
                     }
