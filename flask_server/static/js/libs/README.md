@@ -20,5 +20,3 @@ and copy the generated "pkg\web_wasm.js" and
 
 Finally, from SQL.js, Take the "sql-wasm.js" and "sql-wasm.wasm"
 files and put them inside "static\js\libs".
-
-Everything else should already be in place.
