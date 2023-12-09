@@ -781,11 +781,16 @@ pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>)
     // properties of the current scene,
     // for use in the variable resolver.
     let api_scene_props = Rc::clone(&cur_scene.properties);
+    // Share a counted reference to the
+    // properties of the state manager ('Game'),
+    // for use in the variable resolver.
+    let api_game_props = Rc::clone(&state_manager.properties);
 
     // Register a variable resolver.
     // This will allow the scripts to
-    // read the state table and the
-    // current scene's properties.
+    // read the state table, the 
+    // current scene's properties and
+    // the state manager's properties ('Game').
     engine.on_var(move |name, _, context| {
         match name {
             // If the name of the
@@ -814,6 +819,19 @@ pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>)
                     // Otherwise, return a clone
                     // of the value of the scene properties
                     Ok(Some(api_scene_props.borrow().flatten_clone()))
+                }
+            },
+            "Game" => {
+                if context.scope().contains(name) {
+                    // If the variable exists
+                    // in the scope already
+                    // (which means it's the
+                    // state manager's scope)
+                    Ok(None)
+                } else {
+                    // Otherwise, return a clone
+                    // of the value of the state manager's properties ('Game')
+                    Ok(Some(api_game_props.borrow().flatten_clone()))
                 }
             },
             // Otherwise, continue with the normal variable resolution process.
