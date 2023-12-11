@@ -73,7 +73,7 @@ impl Sprite {
     }
 
     pub fn set_repeat(&mut self, value: bool) { self.repeat = value; }
-
+    pub fn set_is_animation_finished(&mut self, value: bool) { self.is_animation_finished = value; }
 
     /// This setter will prevent
     /// you from setting the current
