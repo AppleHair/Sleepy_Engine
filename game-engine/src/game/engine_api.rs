@@ -995,18 +995,20 @@ pub fn create_api(element_defs: &Rc<RefCell<ElementDefinitions>>)
     });
 
     // Uses web-sys to get the client
-    // width and height of the browser.
+    // width and height of the whole page.
     engine.register_fn("get_client_width", || -> rhai::FLOAT {
-        web_sys::window().expect("window cast should succeed")
-        .document().expect("document cast should succeed")
+        let window = web_sys::window().expect("window cast should succeed");
+        // returns the page's client width in real (non-CSS) pixels
+        (window.document().expect("document cast should succeed")
         .document_element().expect("document_element cast should succeed")
-        .client_width() as rhai::FLOAT
+        .get_bounding_client_rect().width() * window.device_pixel_ratio()).round() as rhai::FLOAT
     });
     engine.register_fn("get_client_height", || -> rhai::FLOAT {
-        web_sys::window().expect("window cast should succeed")
-        .document().expect("document cast should succeed")
+        let window = web_sys::window().expect("window cast should succeed");
+        // returns the page's client height in real (non-CSS) pixels
+        (window.document().expect("document cast should succeed")
         .document_element().expect("document_element cast should succeed")
-        .client_height() as rhai::FLOAT
+        .get_bounding_client_rect().height() * window.device_pixel_ratio()).round() as rhai::FLOAT
     });
 
     // For some weird reason, the rhai standard

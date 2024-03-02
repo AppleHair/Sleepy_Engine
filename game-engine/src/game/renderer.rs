@@ -434,12 +434,20 @@ impl WebGlRenderer {
         {
             // Convert the canvas element into an HTMLCanvasElement object.
             let canvas: web_sys::HtmlCanvasElement = self.gl_context.canvas().unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+            // get the ratio between a CSS pixel and a real pixel.
+            let device_pixel_ratio = web_sys::window()
+            .expect("window cast should succeed").device_pixel_ratio() as f32;
+            // Convert from our real canvas size to the CSS size
+            // in order to display the scene at the correct size.
+            let canvas_css_width = game.canvas_width / device_pixel_ratio;
+            let canvas_css_height = game.canvas_height / device_pixel_ratio;
+            canvas.set_attribute("style", &format!("width: {}px; height: {}px;", canvas_css_width, canvas_css_height))?;
             // Set the desired width and height of the canvas,
             // which is the size the canvas will be rendered
             // at regardless of how CSS displays it.
             canvas.set_attribute("width", &format!("{}", game.canvas_width))?;
             canvas.set_attribute("height", &format!("{}", game.canvas_height))?;
-        } // `canvas` drops here.
+        } // `canvas`, `device_pixel_ratio`, `canvas_css_width` and `canvas_css_height` drop here.
 
         // Inform the webgl context of the canvas resize,
         // so that it can render the scene at the correct size.
