@@ -190,6 +190,10 @@ impl KeyStateTracker {
         move |event: web_sys::KeyboardEvent| {
             // Ignores key repeats.
             if event.repeat() { return; }
+            if let Some(key_state) = event_key_states.borrow().get(&event.code()) {
+                // If the key is held, it will not be pressed.
+                if key_state.is_held { return; }
+            }
             // Updates the key state table,
             // and adds the key to the vector
             // of keys whose state just changed.
@@ -203,6 +207,10 @@ impl KeyStateTracker {
         move |event: web_sys::KeyboardEvent| {
             // Ignores key repeats.
             if event.repeat() { return; }
+            if let Some(key_state) = event_key_states.borrow().get(&event.code()) {
+                // If the key is not held, it will not be released.
+                if !key_state.is_held { return; }
+            } else { return; }
             // Updates the key state table,
             // and adds the key to the vector
             // of keys whose state just changed.
@@ -213,9 +221,9 @@ impl KeyStateTracker {
         // Adds the keydown and keyup closures
         // to the document's appropriate
         // event listeners.
-        window().unwrap().document().unwrap()
+        window().unwrap()
         .add_event_listener_with_callback("keydown", onkeydown.as_ref().unchecked_ref())?;
-        window().unwrap().document().unwrap()
+        window().unwrap()
         .add_event_listener_with_callback("keyup", onkeyup.as_ref().unchecked_ref())?;
 
         // Returns the new `KeyStateTracker` instance.
