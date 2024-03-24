@@ -544,6 +544,7 @@ header {
     width: var(--config-width);
     overflow: hidden auto;
     color: white;
+    scrollbar-width: none;
     align-content: flex-start;
     justify-content: space-evenly;
 }
@@ -564,6 +565,10 @@ header {
     height: 2rem;
 }
 
+.config input[type="range"] {
+    width: 10ch;
+}
+
 .config > ol {
     list-style-type: none;
     margin: 1rem 0;
@@ -573,7 +578,7 @@ header {
 .config label {
     width: 100%;
     text-align: center;
-    padding: 0.3rem 0;
+    padding: 0.3rem 0.2rem;
 }
 
 .config > .json-field > label, .config .json-object > label, .config .json-array > label {
@@ -582,7 +587,9 @@ header {
 }
 
 .config .json-field {
-    display: inline-block;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
     margin: 0 0.3rem;
 }
 
@@ -602,16 +609,18 @@ header {
     max-width: 100%;
 }
 
-.config > .json-field, .config .json-object {
+.config > .json-field, .config .json-object, .config .json-array {
     display: flex;
     flex-flow: row wrap;
+    align-items: center;
+}
+
+.config > .json-field, .config .json-object {
     justify-content: center;
 }
 
 .config .json-array {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    justify-content: space-around;
     list-style-type: decimal;
     padding-left: 2ch;
     --li-margin: 0.5rem;
@@ -619,6 +628,7 @@ header {
 
 .config .json-array[name="version"] {
     list-style-type: none;
+    flex-flow: column nowrap;
 }
 
 .config .json-array > li {
@@ -695,7 +705,7 @@ header {
 .config > .json-field, .config > .json-object, .config > .json-array  {
     --config-width: inherit;
     box-sizing: border-box;
-    width: var(--config-width);
+    width: 100%;
     outline: white;
     border-width: 0;
     outline-width: 0.1rem;
@@ -789,6 +799,11 @@ header {
     resize: none;
     flex-grow: 1;
 }
+
+.material-section[data-mode="state"] > #state-config.config > * {
+    width: var(--config-width);
+}
+
 .material-section[data-mode="project"] > #project-config.config {
     display: flex !important;
     resize: none;
