@@ -209,5 +209,5 @@ function documentInteractionSetup(dropDownFn = {}, contextFn = {}, switchFn = {}
 // We export the things we want the
 // importing script to be able to use.
 
-export { addItem, removeItem, openMessageWindow, openInputWindow, switchMaterial, resetMaterial };
+export { addItem, removeItem, fromItemToTab, openMessageWindow, openInputWindow, switchMaterial, resetMaterial };
 export default documentInteractionSetup;

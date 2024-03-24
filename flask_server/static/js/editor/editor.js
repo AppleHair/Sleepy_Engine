@@ -277,6 +277,11 @@ function itemDeletion(item) {
         () => {
             // we remove the item and receive the results
             const result = DOM.removeItem(item,itemDeletionValidation);
+            // We also switch the
+            // material so if the current
+            // tab contained the deleted item,
+            // it will be replaced with another tab
+            DOM.switchMaterial();
             // if any message was received
             // we alert the user with it
             for (let message of result.messages) {
@@ -347,6 +352,17 @@ function itemRename(item) {
             // We set the innerText of
             // the item to the new name
             item.querySelector(":scope span").innerText = results[0];
+            // we get the item's tab if it exists
+            const tab = DOM.fromItemToTab(item);
+            if (tab === null) {
+                return;
+            }
+            // We set the name attribute
+            // of the tab to the new name
+            tab.setAttribute("name", results[0]);
+            // We set the innerText of
+            // the tab to the new name
+            tab.querySelector(":scope span").innerText = results[0];
         }, 
         undefined, SQLITE.getRow(project,item.className,item.dataset['tableId'])
     );
