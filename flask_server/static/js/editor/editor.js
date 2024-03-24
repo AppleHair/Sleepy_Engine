@@ -988,9 +988,15 @@ initSQLite().then((loaded) => {
                     // in relation to the previous value
                     // and from the direction of the change
                     let res = null;
-                    if (curValue < prvValue) {
+                    if (curValue == prvValue) {
+                        res = undefined;
+                    } else if (curValue < prvValue) {
                         res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid<? AND type=?;`, [prvValue,type])[0];
-                        res = (res === undefined && table == 'asset' && type == 1) ? {"values": [[0, 'clean']]} : res;
+                        if (res === undefined && table == 'asset' && type == 1) {
+                            res = {"values": [[0, 'clean']]}
+                        } else if (res !== undefined) {
+                            res.values[0] = res.values[res.values.length-1];
+                        }
                     } else {
                         res = project.exec(`SELECT rowid,name FROM ${table} WHERE rowid>? AND type=?;`, [prvValue,type])[0];
                     }
