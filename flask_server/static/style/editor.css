@@ -629,6 +629,8 @@ header {
 .config .json-array[name="version"] {
     list-style-type: none;
     flex-flow: column nowrap;
+    overflow: clip;
+    padding-left: 0;
 }
 
 .config .json-array > li {
@@ -636,6 +638,10 @@ header {
     border: 0.1rem solid white;
     margin: 0 var(--li-margin);
     margin-top: var(--li-margin);
+}
+
+.config .json-array[name="version"] > li:last-child {
+    margin-bottom: var(--li-margin);
 }
 
 .config .json-array > .plus-button, .config .json-array .minus-button {
