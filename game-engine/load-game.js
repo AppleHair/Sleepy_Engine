@@ -25,13 +25,14 @@ document.addEventListener("contextmenu", (event) => event.preventDefault(), true
 document.addEventListener("keydown", (event) => event.preventDefault(), true);
 document.addEventListener("keyup", (event) => event.preventDefault(), true);
 
-// This function receives a database
-// object, a table name, and a callback
-// function. Using these arguments, it
-// iterates on each row in the requested
-// table, and calls the callback function
-// every iteration, giving it the row's object
-// as the first argument.
+/**
+ * This function iterates on each row in the 
+ * requested table, and calls the callback\
+ * function every iteration, giving it the
+ * row's object as the first argument.
+ * @param {String} table the table name
+ * @param {Function} callback the callback function
+ */ 
 function forEachInTable(table, callback) {
     gameData.each(`SELECT rowid, * FROM ${table};`, [], callback);
 }
