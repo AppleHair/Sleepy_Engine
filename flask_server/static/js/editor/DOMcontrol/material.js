@@ -9,7 +9,7 @@
 // This module is responsible for providing
 // a codemirror mode for the rhai scripting language
 // (used in rhai playground demo: https://rhai.rs/playground/stable/)
-import { wasm, wasmLoadPromise } from "../../libs/codemirror-5.65.13/mode/rhai-playground/wasm_loader.js";
+import { wasm, wasmLoadPromise } from "../../libs/codemirror5/mode/rhai-playground/wasm_loader.js";
 
 // This is a reference to the material section HTML element
 const materialsection = document.querySelector(".editor > .material-section");

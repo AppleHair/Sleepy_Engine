@@ -10,10 +10,10 @@ This is the main code of the editor. It's built using JavaScript and interacts w
 This is the core of the game engine, where all the systems and API components get implemented. It's built using Rust and compiles to WebAssembly. It's used by the "game-test" page and the game export, which is made by the server, to run the game in the browser.
 # Setting Up The Environment
 Before running the server, you need to set up the environment. To do so, follow these steps in order:
-## 1) Install Python (3.12)
-Go to https://www.python.org/downloads/ and Install The Python 3.12 on your machine.
+## 1) Install Python 3
+Go to https://www.python.org/downloads/ and Install Python 3 on your machine.
 
-NOTE: Make sure to check the box that says "Add Python 3.12 to PATH"
+NOTE: Make sure to check the box that says "Add Python 3 to PATH"
 ## 2) Install Rust and wasm-pack
 Go to https://www.rust-lang.org/tools/install and follow the instructions to install Rust on your machine. After installing Rust, run the following command in your terminal to install wasm-pack:
 ```
@@ -23,5 +23,7 @@ cargo install wasm-pack
 At "flask_server/static/js", there's an empty directory called "libs". Follow the instructions in the other read me file inside it to fill the directory with the necessary files.
 ## 4) Run "Setup_Python_Environment"(.bat or .bash)
 ## 5) OPTIONAL: Run "Compile_n_Copy"(.bat or .bash) to compile the core and copy it to ../js/engine-core
+> [!NOTE]
+> The engine core currently doesn't compile due to compatibility issues.
 ## 6) Run The Server With "Run_Flask_App"(.bat or .bash)
 
