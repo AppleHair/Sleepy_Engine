@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> This repo is now mainly hosted on [Codeberg](https://codeberg.org/AppleHair/Sleepy_Engine)
+
 [Test "Game"](https://www.newgrounds.com/portal/view/project/5114044)
 
 # Repository Structure (in a nutshell)
